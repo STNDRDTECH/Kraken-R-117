@@ -1,7 +1,7 @@
 # Kraken-R Constitution
 
 **Status:** candidate-only foundation  
-**Version:** 1.2
+**Version:** 1.3
 **Effective boundary:** documentation, standalone validation, and bounded in-memory candidate-cycle execution
 
 ## Mission
@@ -20,11 +20,12 @@ runtime. Existing EventBuses, routers, ledgers, homeostasis controllers,
 executors, sandboxes, persistence stores, capability systems, and mutation
 actuators remain unchanged and authoritative for their current behavior.
 
-The `kraken_r` package is candidate-only. Its deterministic cycle and
-recorded-execution replay have no daemon entrypoint, runtime writer, event
-subscription, external executor, router, ledger, homeostasis controller, or
-mutation actuator. Loading, validating, or running them must not start ROGAL,
-contact an LLM, open live stores, or change `.rogal/` runtime state.
+The `kraken_r` package is candidate-only. Its deterministic cycle,
+recorded-execution replay, and bounded signal propagation have no daemon
+entrypoint, runtime writer, event subscription, external executor, router,
+ledger, homeostasis controller, or mutation actuator. Loading, validating, or
+running them must not start ROGAL, contact an LLM, open live stores, or change
+`.rogal/` runtime state.
 
 ## Canonical lifecycle
 
@@ -103,6 +104,26 @@ produce evidence but withhold learning. An unobserved execution produces no
 evidence and no learning. No declared claim or self-report is promoted to
 evidence.
 
+## Bounded candidate nervous-system slice
+
+Round 4 extends the existing canonical `Signal`/`Event` alias with optional
+task-state identity, task-state version, provenance, TTL, and creation-tick
+binding. The candidate signal network accepts only those bound, declared
+signals and processes them in a fresh in-memory run with deterministic ordering
+and hard limits for ticks, deliveries, and fan-out.
+
+Rules are static named edges. They can pass a message, explicitly amplify a
+message by a fixed factor, or inhibit one named candidate action topic. They do
+not learn, reinforce, persist, subscribe to a deployed dispatcher, call a
+handler, change routing weights, or become an alternate runtime authority.
+
+An uncertainty signal may therefore inhibit the candidate action before the
+fixture execution boundary. That causes an honest `not_observed` result and
+`insufficient_evidence`; it never manufactures `Evidence`, `GroundTruth`,
+settlement support, or a learning update. The enabled and ablated paths are
+replayable from immutable input records, and their first state divergence is
+the authorization state.
+
 ## Recorded-execution replay
 
 `kraken_r.replay` accepts one immutable `RecordedExecution` record and feeds it
@@ -111,11 +132,12 @@ read-only fixture adapter, not an event subscription or execution engine.
 
 Replay fails closed unless the record preserves its transaction, objective,
 authorized task-state version, action, execution, evidence, decision, and
-settlement identities. Its provenance must name those identities and the
-recorded observation boundary. Missing provenance, stale task-state versions,
-mismatched observed identities, unsupported status, and self-report-only
-success are rejected before a trace is produced. Only observed execution
-evidence can support settlement or learning.
+settlement identities, as well as its stop decision and any learning update.
+Its provenance must name those identities and the recorded observation
+boundary. Missing provenance, stale task-state versions, mismatched observed
+identities, status/outcome conflicts, and self-report-only success are rejected
+before a trace is produced. Only observed execution evidence can support
+settlement or learning.
 
 The replay adapter has no live inputs. It accepts only caller-provided
 in-memory records, writes nothing, and never imports ROGAL runtime machinery.

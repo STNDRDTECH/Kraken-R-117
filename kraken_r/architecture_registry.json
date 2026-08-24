@@ -1,7 +1,7 @@
 {
   "registry_kind": "kraken_r_architecture",
   "registry_id": "kraken-r-foundation",
-  "version": "1.2",
+  "version": "1.3",
   "last_reviewed": "2026-08-24",
   "authority_boundary": {
     "legacy_reference": "rogal_core.daemon.ROGALDaemon and rogal_core.autonomous_cycle.AutonomousCycle remain the deployed reference runtime.",
@@ -72,6 +72,22 @@
       "source_refs": [".gitignore", "docs/kraken_r/SALVAGE_DECISIONS.md"],
       "planned": false,
       "notes": "The deleted refinement traces remain in Git history and are intentionally not restored; legacy nervous-system mechanisms remain preserved and quarantined from candidate authority until their recorded blockers are resolved."
+    },
+    {
+      "mechanism_id": "kraken_r_bounded_nervous_system",
+      "category": "emergence_routing",
+      "name": "Bounded deterministic candidate signal propagation",
+      "intended_role": "Propagate canonical declared signals through fixed candidate-only rules with task-state/provenance binding, TTL, deduplication, finite budgets, and explicit inhibition or amplification.",
+      "current_status": "infrastructure",
+      "dependencies": ["kraken_r_constitutional_cycle"],
+      "authority": "kraken_candidate",
+      "evidence_grade": "implemented",
+      "evidence_refs": ["kraken_r/nervous_system.py", "kraken_r/cycle.py", "tests/test_kraken_r_nervous_system.py", "kraken_r/validate.py"],
+      "duplicates": [],
+      "disposition": "keep",
+      "source_refs": ["docs/kraken_r/CONSTITUTION.md", "docs/kraken_r/SALVAGE_DECISIONS.md"],
+      "planned": false,
+      "notes": "Pure in-memory candidate infrastructure. It extends the canonical Signal/Event alias rather than creating a second transport authority; signals are declared messages, never evidence or truth. Rules are static and deterministic: no learning, persistence, subscriptions, adaptive selection, or legacy imports."
     },
     {
       "mechanism_id": "legacy_daemon",

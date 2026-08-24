@@ -28,6 +28,7 @@ from .contracts import (
     Signal,
     TaskState,
 )
+from .nervous_system import PropagationTrace, SignalNetwork, SignalPropagationError
 
 
 class CycleInvariantError(ValueError):
@@ -76,6 +77,7 @@ class CycleTrace:
     learning_update: LearningUpdate | None
     stop_decision: Decision
     provenance: Mapping[str, Any] = field(default_factory=dict)
+    signal_trace: PropagationTrace | None = None
 
     def __post_init__(self) -> None:
         if not isinstance(self.transaction_id, str) or not self.transaction_id.strip():
@@ -117,6 +119,9 @@ class CycleTrace:
             ),
             "stop_decision": self.stop_decision.to_dict(),
             "provenance": dict(self.provenance),
+            "signal_trace": (
+                self.signal_trace.to_dict() if self.signal_trace is not None else None
+            ),
         }
 
 
@@ -129,6 +134,8 @@ class ConstitutionalCycle:
         *,
         mode: CycleMode | str = CycleMode.SUCCESS,
         action_authority: Authority | str | None = Authority.KRAKEN_CANDIDATE,
+        signals: tuple[Signal, ...] = (),
+        signal_network: SignalNetwork | None = None,
     ) -> CycleTrace:
         if not isinstance(objective, Objective):
             raise CycleInvariantError("cycle requires an Objective contract")
@@ -213,6 +220,26 @@ class ConstitutionalCycle:
         )
         states.append(state)
 
+        signal_trace: PropagationTrace | None = None
+        if signals or signal_network is not None:
+            try:
+                signal_trace = (signal_network or SignalNetwork()).propagate(
+                    signals,
+                    transaction_id=transaction_id,
+                    objective_id=objective.objective_id,
+                    task_state_id=state.state_id,
+                    task_state_version=state.version,
+                )
+            except SignalPropagationError as exc:
+                raise CycleInvariantError(
+                    f"candidate signal propagation was rejected: {exc}"
+                ) from exc
+        action_inhibited = (
+            signal_trace.inhibits("candidate.action.authorize")
+            if signal_trace is not None
+            else False
+        )
+
         action = Action(
             f"{prefix}-action",
             prefix,
@@ -224,12 +251,21 @@ class ConstitutionalCycle:
         )
         state = self._advance(
             state,
-            "authorized",
-            {"action_id": action.action_id, "authority": selected_authority.value},
+            "inhibited" if action_inhibited else "authorized",
+            {
+                "action_id": action.action_id,
+                "authority": selected_authority.value,
+                "signal_inhibited": action_inhibited,
+                "inhibiting_topics": (
+                    tuple(signal_trace.inhibited_topics) if signal_trace else ()
+                ),
+            },
         )
         states.append(state)
 
-        execution = self._execute_fixture(action, selected_mode)
+        execution = self._execute_fixture(
+            action, selected_mode, signal_trace=signal_trace
+        )
         state = self._advance(
             state,
             "observed",
@@ -352,6 +388,7 @@ class ConstitutionalCycle:
                 "source": "deterministic_fixture",
                 "observation_origin": "execution_result",
             },
+            signal_trace=signal_trace,
         )
         self._validate_trace(trace)
         return trace
@@ -378,9 +415,30 @@ class ConstitutionalCycle:
         return next_state
 
     @staticmethod
-    def _execute_fixture(action: Action, mode: CycleMode) -> ExecutionResult:
+    def _execute_fixture(
+        action: Action,
+        mode: CycleMode,
+        *,
+        signal_trace: PropagationTrace | None = None,
+    ) -> ExecutionResult:
         observations: dict[str, Any] = {"mode": mode.value}
-        if mode is CycleMode.SUCCESS:
+        if signal_trace is not None and signal_trace.inhibits(
+            "candidate.action.authorize"
+        ):
+            observations.update(
+                {
+                    "observed": False,
+                    "signal_inhibited": True,
+                    "inhibiting_topics": tuple(signal_trace.inhibited_topics),
+                    "inhibiting_signal_ids": tuple(
+                        step.signal_id
+                        for step in signal_trace.steps
+                        if step.disposition == "inhibited"
+                    ),
+                }
+            )
+            status, exit_code = "not_observed", None
+        elif mode is CycleMode.SUCCESS:
             observations.update({"observed": True, "criteria_met": True})
             status, exit_code = "completed", 0
         elif mode is CycleMode.FAILURE:
@@ -540,6 +598,27 @@ class ConstitutionalCycle:
             for evidence in trace.evidence
         ):
             raise CycleInvariantError("evidence is not grounded in observed execution")
+        if trace.signal_trace is not None:
+            if (
+                trace.signal_trace.transaction_id != trace.transaction_id
+                or trace.signal_trace.objective_id != trace.objective.objective_id
+                or trace.signal_trace.task_state_id != trace.states[3].state_id
+                or trace.signal_trace.task_state_version != trace.states[3].version
+            ):
+                raise CycleInvariantError(
+                    "signal propagation is not bound to the signaled task state"
+                )
+            if any(
+                evidence.evidence_id in trace.signal_trace.delivered_signal_ids
+                for evidence in trace.evidence
+            ):
+                raise CycleInvariantError("signals cannot become evidence")
+            if trace.signal_trace.inhibits("candidate.action.authorize") and (
+                trace.execution.observations.get("observed")
+            ):
+                raise CycleInvariantError(
+                    "an inhibited action cannot claim observed execution"
+                )
         observed_outcome = ConstitutionalCycle._observed_outcome(trace.execution)
         expected_decision = ConstitutionalCycle._decision_outcome(
             observed_outcome, trace.evidence
@@ -577,11 +656,34 @@ def run_constitutional_cycle(
     *,
     mode: CycleMode | str = CycleMode.SUCCESS,
     action_authority: Authority | str | None = Authority.KRAKEN_CANDIDATE,
+    signals: tuple[Signal, ...] = (),
+    signal_network: SignalNetwork | None = None,
 ) -> CycleTrace:
     """Run the bounded deterministic candidate cycle."""
 
     return ConstitutionalCycle().run(
-        objective, mode=mode, action_authority=action_authority
+        objective,
+        mode=mode,
+        action_authority=action_authority,
+        signals=signals,
+        signal_network=signal_network,
+    )
+
+
+def replay_constitutional_signal_path(
+    objective: Objective,
+    *,
+    mode: CycleMode | str = CycleMode.SUCCESS,
+    signals: tuple[Signal, ...] = (),
+    signal_network: SignalNetwork | None = None,
+) -> CycleTrace:
+    """Replay an immutable signal input through the bounded candidate cycle."""
+
+    return run_constitutional_cycle(
+        objective,
+        mode=mode,
+        signals=signals,
+        signal_network=signal_network,
     )
 
 
@@ -597,6 +699,7 @@ __all__ = [
     "CycleMode",
     "CycleTrace",
     "DeterministicCycle",
+    "replay_constitutional_signal_path",
     "run_constitutional_cycle",
     "run_cycle",
 ]

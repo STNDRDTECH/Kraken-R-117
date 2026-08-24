@@ -41,3 +41,30 @@ state, or call homeostasis/HOP machinery. Any future adaptation must first
 preserve event identity, task-state version, provenance, observed evidence,
 settlement linkage, deterministic ordering, and explicit stopping without
 creating a second authority.
+
+## Round-four bounded nervous-system decision
+
+Round 4 adapts only the following legacy *ideas*, not legacy code or authority:
+
+| Existing mechanism | Exact candidate adaptation | Why the source is not reused |
+| --- | --- | --- |
+| Emergence signal record | Canonical Kraken-R `Signal` now carries optional task-state, provenance, TTL, and tick binding for candidate propagation. | The legacy shape relies on wall-clock creation order and has incompatible ownership. |
+| Legacy tick-loop intent | A new fresh, deterministic in-memory propagation run has bounded ticks, deliveries, and fan-out. | The legacy loop does not consume or enforce its declared fan-out budget and has incompatible handler signatures. |
+| Legacy topic and dedup intent | Static named candidate topics, stable content deduplication, and explicit duplicate disposition are used. | Existing topic catalogs are retained as legacy vocabulary; their old dedup window is not a versioned TTL/provenance contract. |
+
+The following mechanisms remain preserved but **quarantined** from Kraken-R
+authority:
+
+| Mechanism | Round-four disposition |
+| --- | --- |
+| Both legacy dispatchers and the persistent replay buffer | Not imported, wrapped, subscribed to, or persisted by the candidate slice. |
+| Hebbian cascade router and all reinforcement paths | Disabled for candidate use: mutable learned weights, randomized suppression, global outcome credit, and persisted cross-run state break deterministic causal replay. |
+| Pathway tracker and learning integration | Observation-only legacy salvage candidate; no candidate promotion or route selection. |
+| Topology tracker and pressure field | Observation-only legacy salvage candidates; telemetry is neither a route selector nor evidence. |
+| HOP, homeostasis, alternate routers, and historical queues | Preserved as legacy/alternate mechanisms and not made candidate authorities. |
+
+The accepted Round 4 slice is `kraken_r/nervous_system.py`: static pass,
+amplify, and inhibit rules over canonical declared signals. It has no adaptive
+or Hebbian routing. Signal inhibition may change a candidate trajectory to
+`insufficient_evidence`, but a signal cannot claim or create evidence, truth,
+settlement support, or learning.

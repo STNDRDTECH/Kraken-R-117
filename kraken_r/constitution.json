@@ -1,10 +1,10 @@
 {
   "constitution_kind": "kraken_r_constitution",
-  "version": "1.2",
-  "mission": "Define and deterministically validate a candidate-only, domain-agnostic constitutional lifecycle, including read-only recorded-execution replay, without starting, replacing, or wiring a second ROGAL runtime.",
+  "version": "1.3",
+  "mission": "Define and deterministically validate a candidate-only, domain-agnostic constitutional lifecycle, including read-only recorded-execution replay and bounded signal propagation, without starting, replacing, or wiring a second ROGAL runtime.",
   "authority_boundary": {
     "legacy_reference": "ROGALDaemon and AutonomousCycle remain the deployed reference authority.",
-    "kraken_candidate": "Kraken-R contracts, deterministic in-memory cycle, and read-only recorded-execution replay are candidate infrastructure only; they have no authority over the deployed runtime.",
+    "kraken_candidate": "Kraken-R contracts, deterministic in-memory cycle, read-only recorded-execution replay, and bounded in-memory signal propagation are candidate infrastructure only; they have no authority over the deployed runtime.",
     "allowed_effects": ["documentation", "standalone_validation", "candidate_cycle_execution"],
     "forbidden_effects": ["runtime_wiring", "live_store_write", "event_subscription", "mutation_actuation"]
   },

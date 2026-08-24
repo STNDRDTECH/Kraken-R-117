@@ -10,7 +10,17 @@ from pathlib import Path
 from typing import Any, Mapping, Sequence
 
 from . import contracts
-from .cycle import CycleInvariantError, CycleMode, run_constitutional_cycle
+from .cycle import (
+    CycleInvariantError,
+    CycleMode,
+    replay_constitutional_signal_path,
+    run_constitutional_cycle,
+)
+from .nervous_system import (
+    SignalReplayRecord,
+    make_bound_signal,
+    replay_signal_propagation,
+)
 from .replay import (
     RecordedExecution,
     RecordedExecutionMode,
@@ -301,6 +311,14 @@ def validate_recorded_execution_replay() -> tuple[str, ...]:
     )
     invalid_records = {
         "missing provenance": replace(record, provenance={}),
+        "missing settlement provenance": replace(
+            record,
+            provenance={
+                key: value
+                for key, value in record.provenance.items()
+                if key != "settlement_id"
+            },
+        ),
         "stale state": replace(record, task_state_version=4),
         "mismatched observation": replace(
             record, observations={**record.observations, "action_id": "wrong-action"}
@@ -315,7 +333,13 @@ def validate_recorded_execution_replay() -> tuple[str, ...]:
             },
             evidence_ids=(),
             learning_update_id=None,
+            provenance={
+                **record.provenance,
+                "evidence_ids": (),
+                "learning_update_id": None,
+            },
         ),
+        "incoherent status": replace(record, status="failed"),
     }
     for label, invalid in invalid_records.items():
         try:
@@ -323,6 +347,55 @@ def validate_recorded_execution_replay() -> tuple[str, ...]:
         except ReplayValidationError:
             continue
         errors.append(f"{label}: replay record was accepted")
+    return tuple(errors)
+
+
+def validate_nervous_system() -> tuple[str, ...]:
+    """Exercise bounded candidate signal propagation and its evidence boundary."""
+
+    errors: list[str] = []
+    transaction_id = "validator-nervous-transaction"
+    objective = contracts.Objective(
+        "validator-nervous-objective",
+        "Validate bounded candidate signal propagation",
+        provenance={"transaction_id": transaction_id},
+    )
+    state_id = f"{objective.objective_id}-state-4"
+    uncertainty = make_bound_signal(
+        "validator-uncertainty",
+        "candidate.uncertainty",
+        transaction_id=transaction_id,
+        objective_id=objective.objective_id,
+        task_state_id=state_id,
+        task_state_version=4,
+    )
+    record = SignalReplayRecord(
+        transaction_id=transaction_id,
+        objective_id=objective.objective_id,
+        task_state_id=state_id,
+        task_state_version=4,
+        signals=(uncertainty,),
+    )
+    try:
+        propagation = replay_signal_propagation(record)
+        enabled = run_constitutional_cycle(objective, signals=(uncertainty,))
+        replayed = replay_constitutional_signal_path(
+            objective, signals=(uncertainty,)
+        )
+        ablated = run_constitutional_cycle(objective)
+    except (TypeError, ValueError) as exc:
+        return (f"candidate signal path failed: {exc}",)
+
+    if not propagation.inhibits("candidate.action.authorize"):
+        errors.append("uncertainty signal did not produce explicit inhibition")
+    if enabled.to_dict() != replayed.to_dict():
+        errors.append("candidate signal path is not deterministic under replay")
+    if enabled.states[4].phase != "inhibited" or ablated.states[4].phase != "authorized":
+        errors.append("enabled and ablated paths did not diverge at authorization")
+    if enabled.execution.status != "not_observed" or enabled.evidence:
+        errors.append("signal inhibition became observation evidence")
+    if ablated.decision.outcome != "success":
+        errors.append("ablated baseline did not retain the normal candidate outcome")
     return tuple(errors)
 
 
@@ -357,8 +430,15 @@ def main(argv: Sequence[str] | None = None) -> int:
     contract_errors = validate_contract_catalog()
     cycle_errors = validate_cycle_execution()
     replay_errors = validate_recorded_execution_replay()
+    nervous_system_errors = validate_nervous_system()
     report = {
-        "ok": registry_report.ok and not contract_errors and not cycle_errors and not replay_errors,
+        "ok": (
+            registry_report.ok
+            and not contract_errors
+            and not cycle_errors
+            and not replay_errors
+            and not nervous_system_errors
+        ),
         "contracts_ok": not contract_errors,
         "contract_errors": list(contract_errors),
         "cycle": {
@@ -371,6 +451,11 @@ def main(argv: Sequence[str] | None = None) -> int:
             "ok": not replay_errors,
             "errors": list(replay_errors),
             "modes": [mode.value for mode in RecordedExecutionMode],
+        },
+        "nervous_system": {
+            "ok": not nervous_system_errors,
+            "errors": list(nervous_system_errors),
+            "authority": "candidate_only",
         },
         "constitution": {
             "ok": True,

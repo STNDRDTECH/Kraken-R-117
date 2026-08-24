@@ -11,6 +11,8 @@ second runtime.
 - `kraken_r/validate.py` — standalone validator command.
 - `kraken_r/cycle.py` — deterministic, in-memory candidate lifecycle fixture.
 - `kraken_r/replay.py` — read-only recorded-execution replay adapter.
+- `kraken_r/nervous_system.py` — bounded deterministic propagation of canonical
+  declared signals; no runtime subscription, persistence, or adaptive routing.
 - `kraken_r/constitution.json` — machine-readable constitution metadata
   validated alongside the registry.
 - `kraken_r/architecture_registry.schema.json` — machine-readable JSON schema.
@@ -29,13 +31,15 @@ python -m kraken_r --json
 pytest -q \
   tests/test_kraken_r_foundation.py \
   tests/test_kraken_r_cycle.py \
-  tests/test_kraken_r_replay.py
+  tests/test_kraken_r_replay.py \
+  tests/test_kraken_r_nervous_system.py
 ```
 
 The command reads the bundled JSON, imports the isolated package, and executes
-the bounded success fixture in memory. The focused suite contains the accepted
-37-test baseline. It does not import `rogal_core`, start a workflow, contact an
-LLM, open a live store, or write runtime state.
+the bounded fixture matrix in memory. The focused suite retains the accepted
+Rounds 1–3 coverage and adds adversarial Round 4 signal coverage. It does not
+import `rogal_core`, start a workflow, contact an LLM, open a live store, or
+write runtime state.
 
 The cycle can also be exercised directly:
 
@@ -71,4 +75,28 @@ record = RecordedExecution.fixture(
 )
 trace = replay_recorded_execution(objective, record)
 assert trace.execution.execution_id == record.execution_id
+```
+
+Bounded signal propagation can only influence a candidate action before
+execution. It cannot create evidence:
+
+```python
+from kraken_r import Objective, make_bound_signal, run_constitutional_cycle
+
+objective = Objective(
+    "signal-demo",
+    "show an uncertainty signal inhibiting a candidate action",
+    provenance={"transaction_id": "signal-demo-tx"},
+)
+uncertainty = make_bound_signal(
+    "signal-demo-uncertainty",
+    "candidate.uncertainty",
+    transaction_id="signal-demo-tx",
+    objective_id=objective.objective_id,
+    task_state_id="signal-demo-state-4",
+    task_state_version=4,
+)
+trace = run_constitutional_cycle(objective, signals=(uncertainty,))
+assert trace.decision.outcome == "insufficient_evidence"
+assert trace.evidence == ()
 ```

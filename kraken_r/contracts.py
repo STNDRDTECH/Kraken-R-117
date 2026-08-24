@@ -8,6 +8,8 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field, fields, is_dataclass
 from enum import Enum
+import hashlib
+import json
 from types import MappingProxyType
 from typing import Any, Mapping, Optional
 
@@ -223,6 +225,11 @@ class Signal(_Contract):
     payload: Mapping[str, Any] = field(default_factory=dict)
     evidence_grade: EvidenceGrade = EvidenceGrade.DECLARED
     authority: Authority = Authority.KRAKEN_CANDIDATE
+    task_state_id: Optional[str] = None
+    task_state_version: Optional[int] = None
+    provenance: Mapping[str, Any] = field(default_factory=dict)
+    ttl: Optional[int] = None
+    created_tick: int = 0
 
     def __post_init__(self) -> None:
         _identifier(self.signal_id, "signal_id")
@@ -238,6 +245,32 @@ class Signal(_Contract):
         object.__setattr__(
             self, "authority", _enum_value(self.authority, Authority, "authority")
         )
+        if self.task_state_id is not None:
+            _identifier(self.task_state_id, "task_state_id")
+        if self.task_state_version is not None:
+            if self.task_state_id is None:
+                raise ContractValidationError(
+                    "task_state_version requires task_state_id"
+                )
+            if not isinstance(self.task_state_version, int) or self.task_state_version < 1:
+                raise ContractValidationError(
+                    "task_state_version must be a positive integer"
+                )
+        if self.ttl is not None and (
+            not isinstance(self.ttl, int) or self.ttl < 0
+        ):
+            raise ContractValidationError("ttl must be a non-negative integer")
+        if not isinstance(self.created_tick, int) or self.created_tick < 0:
+            raise ContractValidationError("created_tick must be a non-negative integer")
+        object.__setattr__(
+            self, "provenance", _frozen_mapping(self.provenance, "provenance")
+        )
+
+    def dedup_key(self) -> str:
+        """Return a stable identity for bounded delivery deduplication."""
+
+        raw = json.dumps(self.to_dict(), sort_keys=True, separators=(",", ":"))
+        return hashlib.sha256(raw.encode("utf-8")).hexdigest()[:24]
 
 
 # Event is a vocabulary alias, not a second event bus.
