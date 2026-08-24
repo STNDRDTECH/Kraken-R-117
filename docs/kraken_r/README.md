@@ -13,6 +13,8 @@ second runtime.
 - `kraken_r/replay.py` — read-only recorded-execution replay adapter.
 - `kraken_r/nervous_system.py` — bounded deterministic propagation of canonical
   declared signals; no runtime subscription, persistence, or adaptive routing.
+- `kraken_r/physiology.py` — immutable, deterministic advisory regulation over
+  explicit internal-condition snapshots; it can only inhibit a candidate action.
 - `kraken_r/constitution.json` — machine-readable constitution metadata
   validated alongside the registry.
 - `kraken_r/architecture_registry.schema.json` — machine-readable JSON schema.
@@ -32,14 +34,15 @@ pytest -q \
   tests/test_kraken_r_foundation.py \
   tests/test_kraken_r_cycle.py \
   tests/test_kraken_r_replay.py \
-  tests/test_kraken_r_nervous_system.py
+   tests/test_kraken_r_nervous_system.py \
+   tests/test_kraken_r_physiology.py
 ```
 
 The command reads the bundled JSON, imports the isolated package, and executes
 the bounded fixture matrix in memory. The focused suite retains the accepted
-Rounds 1–3 coverage and adds adversarial Round 4 signal coverage. It does not
-import `rogal_core`, start a workflow, contact an LLM, open a live store, or
-write runtime state.
+Rounds 1–3 coverage, adversarial Round 4 signal coverage, and Round 5
+physiology regime/ablation/replay coverage. It does not import `rogal_core`,
+start a workflow, contact an LLM, open a live store, or write runtime state.
 
 The cycle can also be exercised directly:
 
@@ -108,3 +111,33 @@ Candidate propagation requires explicit source/cause identities and an integer
 priority. Within a tick, higher priority delivers first; equal priorities sort
 by signal ID. A topic absent from the static rule graph is rejected before
 delivery.
+
+Bounded physiology is caller-provided internal condition data, not a live
+controller. It can only inhibit the already candidate-owned action before
+execution, never create evidence or choose a goal:
+
+```python
+from kraken_r import (
+    Objective,
+    PhysiologySnapshot,
+    run_constitutional_cycle,
+)
+
+objective = Objective(
+    "physiology-demo",
+    "show a safe candidate physiology stop",
+    provenance={"transaction_id": "physiology-demo-tx"},
+)
+snapshot = PhysiologySnapshot(
+    "physiology-demo-critical",
+    "physiology-demo-tx",
+    objective.objective_id,
+    "physiology-demo-state-4",
+    4,
+    contradiction_density=0.9,
+    protected_reserve=0.05,
+)
+trace = run_constitutional_cycle(objective, physiology=snapshot)
+assert trace.execution.status == "not_observed"
+assert trace.evidence == ()
+```

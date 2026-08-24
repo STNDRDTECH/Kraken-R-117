@@ -29,6 +29,12 @@ from .contracts import (
     TaskState,
 )
 from .nervous_system import PropagationTrace, SignalNetwork, SignalPropagationError
+from .physiology import (
+    PhysiologySnapshot,
+    PhysiologyTrace,
+    PhysiologyValidationError,
+    evaluate_physiology,
+)
 
 
 class CycleInvariantError(ValueError):
@@ -78,6 +84,7 @@ class CycleTrace:
     stop_decision: Decision
     provenance: Mapping[str, Any] = field(default_factory=dict)
     signal_trace: PropagationTrace | None = None
+    physiology_trace: PhysiologyTrace | None = None
 
     def __post_init__(self) -> None:
         if not isinstance(self.transaction_id, str) or not self.transaction_id.strip():
@@ -122,6 +129,11 @@ class CycleTrace:
             "signal_trace": (
                 self.signal_trace.to_dict() if self.signal_trace is not None else None
             ),
+            "physiology_trace": (
+                self.physiology_trace.to_dict()
+                if self.physiology_trace is not None
+                else None
+            ),
         }
 
 
@@ -136,6 +148,7 @@ class ConstitutionalCycle:
         action_authority: Authority | str | None = Authority.KRAKEN_CANDIDATE,
         signals: tuple[Signal, ...] = (),
         signal_network: SignalNetwork | None = None,
+        physiology: PhysiologySnapshot | None = None,
     ) -> CycleTrace:
         if not isinstance(objective, Objective):
             raise CycleInvariantError("cycle requires an Objective contract")
@@ -242,6 +255,23 @@ class ConstitutionalCycle:
             if signal_trace is not None
             else False
         )
+        physiology_trace: PhysiologyTrace | None = None
+        if physiology is not None:
+            try:
+                physiology_trace = evaluate_physiology(
+                    physiology,
+                    transaction_id=transaction_id,
+                    objective_id=objective.objective_id,
+                    task_state_id=state.state_id,
+                    task_state_version=state.version,
+                )
+            except PhysiologyValidationError as exc:
+                raise CycleInvariantError(
+                    f"candidate physiology was rejected: {exc}"
+                ) from exc
+            action_inhibited = (
+                action_inhibited or physiology_trace.decision.action_inhibited
+            )
 
         action = Action(
             f"{prefix}-action",
@@ -258,16 +288,33 @@ class ConstitutionalCycle:
             {
                 "action_id": action.action_id,
                 "authority": selected_authority.value,
-                "signal_inhibited": action_inhibited,
+                "signal_inhibited": (
+                    signal_trace.inhibits("candidate.action.authorize")
+                    if signal_trace is not None
+                    else False
+                ),
                 "inhibiting_topics": (
                     tuple(signal_trace.inhibited_topics) if signal_trace else ()
+                ),
+                "physiology_inhibited": (
+                    physiology_trace.decision.action_inhibited
+                    if physiology_trace is not None
+                    else False
+                ),
+                "operating_regime": (
+                    physiology_trace.decision.regime.value
+                    if physiology_trace is not None
+                    else None
                 ),
             },
         )
         states.append(state)
 
         execution = self._execute_fixture(
-            action, selected_mode, signal_trace=signal_trace
+            action,
+            selected_mode,
+            signal_trace=signal_trace,
+            physiology_trace=physiology_trace,
         )
         state = self._advance(
             state,
@@ -392,6 +439,7 @@ class ConstitutionalCycle:
                 "observation_origin": "execution_result",
             },
             signal_trace=signal_trace,
+            physiology_trace=physiology_trace,
         )
         self._validate_trace(trace)
         return trace
@@ -423,21 +471,39 @@ class ConstitutionalCycle:
         mode: CycleMode,
         *,
         signal_trace: PropagationTrace | None = None,
+        physiology_trace: PhysiologyTrace | None = None,
     ) -> ExecutionResult:
         observations: dict[str, Any] = {"mode": mode.value}
-        if signal_trace is not None and signal_trace.inhibits(
+        signal_inhibited = signal_trace is not None and signal_trace.inhibits(
             "candidate.action.authorize"
-        ):
+        )
+        physiology_inhibited = (
+            physiology_trace is not None
+            and physiology_trace.decision.action_inhibited
+        )
+        if signal_inhibited or physiology_inhibited:
             observations.update(
                 {
                     "observed": False,
-                    "signal_inhibited": True,
-                    "inhibiting_topics": tuple(signal_trace.inhibited_topics),
+                    "signal_inhibited": signal_inhibited,
+                    "physiology_inhibited": physiology_inhibited,
+                    "operating_regime": (
+                        physiology_trace.decision.regime.value
+                        if physiology_trace is not None
+                        else None
+                    ),
+                    "inhibiting_topics": (
+                        tuple(signal_trace.inhibited_topics)
+                        if signal_trace is not None
+                        else ()
+                    ),
                     "inhibiting_signal_ids": tuple(
                         step.signal_id
                         for step in signal_trace.steps
                         if step.disposition == "inhibited"
-                    ),
+                    )
+                    if signal_trace is not None
+                    else (),
                 }
             )
             status, exit_code = "not_observed", None
@@ -622,6 +688,31 @@ class ConstitutionalCycle:
                 raise CycleInvariantError(
                     "an inhibited action cannot claim observed execution"
                 )
+        if trace.physiology_trace is not None:
+            physiology = trace.physiology_trace
+            if (
+                physiology.transaction_id != trace.transaction_id
+                or physiology.objective_id != trace.objective.objective_id
+                or physiology.task_state_id != trace.states[3].state_id
+                or physiology.task_state_version != trace.states[3].version
+            ):
+                raise CycleInvariantError(
+                    "physiology is not bound to the signaled task state"
+                )
+            if physiology.decision.advisory_only is not True:
+                raise CycleInvariantError("physiology must remain advisory-only")
+            if physiology.decision.action_inhibited and (
+                trace.execution.observations.get("observed")
+            ):
+                raise CycleInvariantError(
+                    "a physiology-inhibited action cannot claim observed execution"
+                )
+            if physiology.decision.action_inhibited and (
+                trace.states[4].phase != "inhibited"
+            ):
+                raise CycleInvariantError(
+                    "physiology inhibition was not applied at candidate authorization"
+                )
         observed_outcome = ConstitutionalCycle._observed_outcome(trace.execution)
         expected_decision = ConstitutionalCycle._decision_outcome(
             observed_outcome, trace.evidence
@@ -661,6 +752,7 @@ def run_constitutional_cycle(
     action_authority: Authority | str | None = Authority.KRAKEN_CANDIDATE,
     signals: tuple[Signal, ...] = (),
     signal_network: SignalNetwork | None = None,
+    physiology: PhysiologySnapshot | None = None,
 ) -> CycleTrace:
     """Run the bounded deterministic candidate cycle."""
 
@@ -670,6 +762,7 @@ def run_constitutional_cycle(
         action_authority=action_authority,
         signals=signals,
         signal_network=signal_network,
+        physiology=physiology,
     )
 
 
@@ -679,6 +772,7 @@ def replay_constitutional_signal_path(
     mode: CycleMode | str = CycleMode.SUCCESS,
     signals: tuple[Signal, ...] = (),
     signal_network: SignalNetwork | None = None,
+    physiology: PhysiologySnapshot | None = None,
 ) -> CycleTrace:
     """Replay an immutable signal input through the bounded candidate cycle."""
 
@@ -687,6 +781,7 @@ def replay_constitutional_signal_path(
         mode=mode,
         signals=signals,
         signal_network=signal_network,
+        physiology=physiology,
     )
 
 

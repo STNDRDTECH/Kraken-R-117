@@ -68,3 +68,24 @@ amplify, and inhibit rules over canonical declared signals. It has no adaptive
 or Hebbian routing. Signal inhibition may change a candidate trajectory to
 `insufficient_evidence`, but a signal cannot claim or create evidence, truth,
 settlement support, or learning.
+
+## Round-five bounded physiology decision
+
+Round 5 adapts the following concepts as a new pure candidate evaluator, not
+as a reuse of legacy authority:
+
+| Preserved mechanism | Exact candidate adaptation | Why the source is not reused |
+| --- | --- | --- |
+| Pressure field | Five caller-provided normalized pressure dimensions and a fixed composite calculation. | The legacy field owns mutable history and can broadcast to a dispatcher. Candidate snapshots are immutable and never publish. |
+| Homeostasis modes | Four deterministic operating regimes plus explicit bounded hysteresis input. | Legacy controllers use live sensors, effectors, clocks, and feedback loops. Candidate physiology has no worker or autonomous loop. |
+| Contradiction and backlog handling | Fixed critical/recovery thresholds may conservatively inhibit an already authorized candidate action. | Legacy signals and queues have incompatible ownership and could become routing or lifecycle authority. |
+| Resource reserve protection | A normalized protected-reserve condition participates in conservative inhibition. | Candidate physiology neither allocates, reserves, spends, releases, nor settles resources. |
+| HOP and goal-pressure behavior | No direct adaptation. | Their mutable runtime/goal paths could silently select work or duplicate lifecycle authority. |
+
+The implementation accepts an immutable state-bound snapshot, returns an
+advisory regime decision, and has one permitted effect: candidate-action
+inhibition before fixture execution. It never emits a signal, subscribes to a
+dispatcher, persists a state, chooses a goal, creates evidence, settles a
+transaction, updates learning, or overrides the constitutional action
+authority. Same-record replay is deterministic, and a physiology-on versus
+physiology-off ablation may diverge only at candidate authorization.

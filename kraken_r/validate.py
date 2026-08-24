@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import argparse
+import ast
 from dataclasses import replace
 import json
 import sys
@@ -23,6 +24,14 @@ from .nervous_system import (
     SignalValidationError,
     make_bound_signal,
     replay_signal_propagation,
+)
+from .physiology import (
+    OperatingRegime,
+    PhysiologyReplayRecord,
+    PhysiologySnapshot,
+    PhysiologyValidationError,
+    RegulationEffect,
+    replay_physiology,
 )
 from .replay import (
     RecordedExecution,
@@ -53,6 +62,43 @@ CANONICAL_CONTRACTS = (
     "Lineage",
     "Regression",
 )
+
+
+def validate_legacy_runtime_boundary() -> tuple[str, ...]:
+    """Statically reject candidate imports or authority symbols from legacy runtime."""
+
+    errors: list[str] = []
+    candidate_dir = Path(__file__).resolve().parent
+    legacy_root = "rogal" + "_" + "core"
+    forbidden_names = {
+        "Event" + "Bus",
+        "ROGAL" + "Daemon",
+        "Autonomous" + "Cycle",
+        "SQL" + "ite",
+        "sub" + "process",
+        "sock" + "et",
+    }
+    for path in sorted(candidate_dir.glob("*.py")):
+        try:
+            tree = ast.parse(path.read_text(), filename=str(path))
+        except SyntaxError as exc:
+            errors.append(f"{path.name}: cannot parse candidate source: {exc.msg}")
+            continue
+        for node in ast.walk(tree):
+            if isinstance(node, ast.Import):
+                imported = (alias.name for alias in node.names)
+            elif isinstance(node, ast.ImportFrom):
+                imported = (node.module or "",)
+            else:
+                imported = ()
+            for name in imported:
+                if name == legacy_root or name.startswith(f"{legacy_root}."):
+                    errors.append(f"{path.name}: legacy runtime import is forbidden")
+            if isinstance(node, ast.Name) and node.id in forbidden_names:
+                errors.append(
+                    f"{path.name}: runtime authority symbol {node.id} is forbidden"
+                )
+    return tuple(sorted(set(errors)))
 PLANNED_CAPABILITIES = (
     "metaplasticity",
     "neuromodulation",
@@ -519,6 +565,99 @@ def validate_nervous_system() -> tuple[str, ...]:
     return tuple(errors)
 
 
+def validate_physiology() -> tuple[str, ...]:
+    """Exercise bounded advisory physiology without live runtime authority."""
+
+    errors: list[str] = []
+    transaction_id = "validator-physiology-transaction"
+    objective = contracts.Objective(
+        "validator-physiology-objective",
+        "Validate bounded candidate physiology",
+        provenance={"transaction_id": transaction_id},
+    )
+    state_id = f"{objective.objective_id}-state-4"
+    healthy = PhysiologySnapshot(
+        "validator-healthy",
+        transaction_id,
+        objective.objective_id,
+        state_id,
+        4,
+    )
+    critical = PhysiologySnapshot(
+        "validator-critical",
+        transaction_id,
+        objective.objective_id,
+        state_id,
+        4,
+        contradiction_density=0.85,
+        backlog_pressure=0.9,
+        resource_pressure=0.95,
+        protected_reserve=0.05,
+    )
+    try:
+        healthy_replay = replay_physiology(PhysiologyReplayRecord(healthy))
+        critical_replay = replay_physiology(PhysiologyReplayRecord(critical))
+        replay_repeat = replay_physiology(PhysiologyReplayRecord(critical))
+        enabled = run_constitutional_cycle(objective, physiology=critical)
+        replayed = replay_constitutional_signal_path(objective, physiology=critical)
+        ablated = run_constitutional_cycle(objective)
+    except (TypeError, ValueError) as exc:
+        return (f"candidate physiology failed: {exc}",)
+
+    if healthy_replay.decision.regime is not OperatingRegime.PRODUCTIVE:
+        errors.append("healthy physiology did not enter productive regime")
+    if critical_replay.decision.regime is not OperatingRegime.CRITICAL:
+        errors.append("critical physiology did not enter critical regime")
+    if critical_replay.decision.effect is not RegulationEffect.INHIBIT_ACTION:
+        errors.append("critical physiology did not inhibit the candidate action")
+    if critical_replay.to_dict() != replay_repeat.to_dict():
+        errors.append("physiology replay is not deterministic")
+    if enabled.to_dict() != replayed.to_dict():
+        errors.append("cycle physiology replay is not deterministic")
+    if enabled.states[4].phase != "inhibited" or ablated.states[4].phase != "authorized":
+        errors.append("physiology ablation did not diverge at authorization")
+    if enabled.execution.status != "not_observed" or enabled.evidence:
+        errors.append("physiology inhibition became observation evidence")
+    if (
+        enabled.physiology_trace is None
+        or enabled.physiology_trace.decision.advisory_only is not True
+        or enabled.learning_update is not None
+    ):
+        errors.append("physiology crossed its advisory evidence boundary")
+
+    for label, kwargs in (
+        ("pressure", {"memory_pressure": 1.01}),
+        ("cooldown", {"cooldown_remaining": 9}),
+    ):
+        try:
+            PhysiologySnapshot(
+                f"validator-malformed-{label}",
+                transaction_id,
+                objective.objective_id,
+                state_id,
+                4,
+                **kwargs,
+            )
+        except PhysiologyValidationError:
+            continue
+        errors.append(f"malformed physiology {label} was accepted")
+
+    stale = PhysiologySnapshot(
+        "validator-stale",
+        transaction_id,
+        objective.objective_id,
+        state_id,
+        3,
+    )
+    try:
+        run_constitutional_cycle(objective, physiology=stale)
+    except CycleInvariantError:
+        pass
+    else:
+        errors.append("stale physiology was accepted into execution")
+    return tuple(errors)
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         description="Validate the isolated, candidate-only Kraken-R foundation."
@@ -551,6 +690,8 @@ def main(argv: Sequence[str] | None = None) -> int:
     cycle_errors = validate_cycle_execution()
     replay_errors = validate_recorded_execution_replay()
     nervous_system_errors = validate_nervous_system()
+    physiology_errors = validate_physiology()
+    legacy_runtime_errors = validate_legacy_runtime_boundary()
     report = {
         "ok": (
             registry_report.ok
@@ -558,6 +699,8 @@ def main(argv: Sequence[str] | None = None) -> int:
             and not cycle_errors
             and not replay_errors
             and not nervous_system_errors
+            and not physiology_errors
+            and not legacy_runtime_errors
         ),
         "contracts_ok": not contract_errors,
         "contract_errors": list(contract_errors),
@@ -577,13 +720,21 @@ def main(argv: Sequence[str] | None = None) -> int:
             "errors": list(nervous_system_errors),
             "authority": "candidate_only",
         },
+        "physiology": {
+            "ok": not physiology_errors,
+            "errors": list(physiology_errors),
+            "authority": "advisory_candidate_only",
+        },
         "constitution": {
             "ok": True,
             "version": constitution["version"],
             "allowed_effects": constitution["authority_boundary"]["allowed_effects"],
         },
         "registry": registry_report.to_dict(),
-        "legacy_runtime_wiring": "absent",
+        "legacy_runtime_wiring": (
+            "absent" if not legacy_runtime_errors else "present"
+        ),
+        "legacy_runtime_errors": list(legacy_runtime_errors),
     }
     if args.as_json:
         print(json.dumps(report, indent=2, sort_keys=True))

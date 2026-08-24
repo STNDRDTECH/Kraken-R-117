@@ -1,11 +1,11 @@
 {
   "registry_kind": "kraken_r_architecture",
   "registry_id": "kraken-r-foundation",
-  "version": "1.4",
+  "version": "1.5",
   "last_reviewed": "2026-08-24",
   "authority_boundary": {
     "legacy_reference": "rogal_core.daemon.ROGALDaemon and rogal_core.autonomous_cycle.AutonomousCycle remain the deployed reference runtime.",
-    "kraken_candidate": "The deterministic Kraken-R cycle and read-only recorded-execution replay are executable candidate infrastructure only; they have no authority over the deployed runtime.",
+    "kraken_candidate": "The deterministic Kraken-R cycle, read-only recorded-execution replay, bounded in-memory signal propagation, and advisory bounded physiology are executable candidate infrastructure only; they have no authority over the deployed runtime.",
     "preservation": "Legacy, alternate, dormant, and forgotten mechanisms are classified and preserved, never deleted by this foundation."
   },
   "mechanisms": [
@@ -88,6 +88,22 @@
       "source_refs": ["docs/kraken_r/CONSTITUTION.md", "docs/kraken_r/SALVAGE_DECISIONS.md"],
       "planned": false,
       "notes": "Pure in-memory candidate infrastructure. It extends the canonical Signal/Event alias rather than creating a second transport authority; signals are declared messages, never evidence or truth. Candidate delivery requires explicit source, cause, and integer priority; equal-tick delivery orders higher priority first and then signal_id, while unknown topics reject before delivery. Rules are static and deterministic: no learning, persistence, subscriptions, adaptive selection, or legacy imports."
+    },
+    {
+      "mechanism_id": "kraken_r_bounded_physiology",
+      "category": "homeostasis_health",
+      "name": "Bounded advisory candidate physiology",
+      "intended_role": "Evaluate one explicit immutable internal-condition snapshot and conservatively inhibit a candidate action during recovery or critical operating regimes.",
+      "current_status": "infrastructure",
+      "dependencies": ["kraken_r_constitutional_cycle"],
+      "authority": "kraken_candidate",
+      "evidence_grade": "implemented",
+      "evidence_refs": ["kraken_r/physiology.py", "kraken_r/cycle.py", "tests/test_kraken_r_physiology.py", "kraken_r/validate.py"],
+      "duplicates": [],
+      "disposition": "keep",
+      "source_refs": ["docs/kraken_r/CONSTITUTION.md", "docs/kraken_r/SALVAGE_DECISIONS.md", "rogal_core/emergence/pressure_field.py", "rogal_core/health/homeostasis.py", "rogal_core/cognition/resources.py"],
+      "planned": false,
+      "notes": "Pure in-memory adapter of normalized pressure, threshold/hysteresis, contradiction/backlog, and protected-reserve concepts. It imports no legacy mechanism and has no live sensor, queue, router, evidence, settlement, learning, persistence, lifecycle, or goal-selection authority. Its only allowed effect is an explicit, replayable candidate-action inhibition before fixture execution."
     },
     {
       "mechanism_id": "legacy_daemon",

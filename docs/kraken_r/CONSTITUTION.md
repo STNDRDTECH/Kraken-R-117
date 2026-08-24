@@ -1,7 +1,7 @@
 # Kraken-R Constitution
 
 **Status:** candidate-only foundation  
-**Version:** 1.4
+**Version:** 1.5
 **Effective boundary:** documentation, standalone validation, and bounded in-memory candidate-cycle execution
 
 ## Mission
@@ -21,11 +21,11 @@ executors, sandboxes, persistence stores, capability systems, and mutation
 actuators remain unchanged and authoritative for their current behavior.
 
 The `kraken_r` package is candidate-only. Its deterministic cycle,
-recorded-execution replay, and bounded signal propagation have no daemon
-entrypoint, runtime writer, event subscription, external executor, router,
-ledger, homeostasis controller, or mutation actuator. Loading, validating, or
-running them must not start ROGAL, contact an LLM, open live stores, or change
-`.rogal/` runtime state.
+recorded-execution replay, bounded signal propagation, and bounded advisory
+physiology have no daemon entrypoint, runtime writer, event subscription,
+external executor, router, ledger, homeostasis controller, or mutation
+actuator. Loading, validating, or running them must not start ROGAL, contact an
+LLM, open live stores, or change `.rogal/` runtime state.
 
 ## Canonical lifecycle
 
@@ -145,3 +145,26 @@ settlement or learning.
 
 The replay adapter has no live inputs. It accepts only caller-provided
 in-memory records, writes nothing, and never imports ROGAL runtime machinery.
+
+## Bounded advisory physiology
+
+Round 5 adapts only four safe concepts: normalized multidimensional pressure,
+threshold and hysteresis behavior, contradiction/backlog regulation, and
+protected resource reserves. `kraken_r.physiology` accepts one immutable,
+caller-provided `PhysiologySnapshot` bound to the same transaction, objective,
+and signaled task-state version as the candidate cycle.
+
+The evaluator deterministically classifies the snapshot as `productive`,
+`cautious`, `recovery`, or `critical`. Its decision is advisory-only and has
+one permitted effect: it may conservatively inhibit the already candidate-owned
+action before fixture execution. A physiology inhibition produces an honest
+`not_observed` result and therefore `insufficient_evidence`; it cannot create
+evidence, ground truth, settlement support, a learning update, a new action,
+or a goal selection.
+
+There are no live sensors, feedback workers, queues, cooldown timers,
+subscriptions, or persisted regulator state. Hysteresis is explicit input
+(`prior_regime` plus a bounded `cooldown_remaining`), so replay consumes the
+same immutable record and produces the same trace. The legacy pressure field,
+HOP, homeostasis controllers, goal queue, and resource pools are neither
+imported nor called and remain preserved/quarantined references.
