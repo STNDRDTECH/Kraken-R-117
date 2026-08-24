@@ -85,6 +85,7 @@ class SignalStep:
     tick: int
     signal_id: str
     topic: str
+    priority: int
     rule_id: str | None
     effect: PropagationEffect | None
     disposition: str
@@ -185,6 +186,9 @@ def make_bound_signal(
     payload: Mapping[str, Any] | None = None,
     ttl: int = 2,
     created_tick: int = 0,
+    source: str = "candidate_signal_network",
+    cause: str | None = None,
+    priority: int = 0,
 ) -> Signal:
     """Construct one canonical Signal with the Round 4 binding envelope."""
 
@@ -208,6 +212,9 @@ def make_bound_signal(
         provenance=provenance,
         ttl=ttl,
         created_tick=created_tick,
+        source=source,
+        cause=signal_id if cause is None else cause,
+        priority=priority,
     )
 
 
@@ -239,6 +246,8 @@ class SignalNetwork:
         max_fanout: int = 8,
     ) -> None:
         self._rules = tuple(sorted(tuple(rules), key=lambda rule: rule.rule_id))
+        if any(not isinstance(rule, SignalRule) for rule in self._rules):
+            raise SignalPropagationError("signal rules must be SignalRule records")
         if max_ticks < 0 or max_deliveries < 1 or max_fanout < 1:
             raise SignalPropagationError("propagation budgets must be positive")
         self._max_ticks = max_ticks
@@ -269,11 +278,16 @@ class SignalNetwork:
             raise SignalValidationError(
                 "propagation accepts canonical Signal records only"
             )
-        queue: list[tuple[int, int, Signal]] = [
-            (start_tick, index, signal)
+        supported_topics = {
+            topic
+            for rule in self._rules
+            for topic in (rule.source_topic, rule.target_topic)
+        }
+        queue: list[tuple[int, int, str, int, Signal]] = [
+            (start_tick, -signal.priority, signal.signal_id, index, signal)
             for index, signal in enumerate(initial)
         ]
-        queue.sort(key=lambda item: (item[0], item[2].signal_id, item[1]))
+        queue.sort(key=lambda item: (item[0], item[1], item[2], item[3]))
         seen: set[str] = set()
         delivered: list[str] = []
         steps: list[SignalStep] = []
@@ -283,7 +297,7 @@ class SignalNetwork:
         expired: list[str] = []
 
         while queue:
-            tick, _, signal = queue.pop(0)
+            tick, _, _, _, signal = queue.pop(0)
             self._validate_signal(
                 signal,
                 transaction_id=transaction_id,
@@ -293,6 +307,10 @@ class SignalNetwork:
                 current_tick=tick,
                 start_tick=start_tick,
             )
+            if signal.topic not in supported_topics:
+                raise SignalValidationError(
+                    f"unsupported signal topic: {signal.topic}"
+                )
             try:
                 dedup_key = signal.dedup_key()
             except (TypeError, ValueError) as exc:
@@ -306,6 +324,7 @@ class SignalNetwork:
                         tick,
                         signal.signal_id,
                         signal.topic,
+                        signal.priority,
                         None,
                         None,
                         "duplicate",
@@ -335,6 +354,7 @@ class SignalNetwork:
                         tick,
                         signal.signal_id,
                         signal.topic,
+                        signal.priority,
                         None,
                         None,
                         "delivered",
@@ -350,6 +370,7 @@ class SignalNetwork:
                             tick,
                             signal.signal_id,
                             signal.topic,
+                            signal.priority,
                             rule.rule_id,
                             rule.effect,
                             "inhibited",
@@ -386,6 +407,9 @@ class SignalNetwork:
                     },
                     ttl=max(0, (signal.ttl or 0) - 1),
                     created_tick=tick + 1,
+                    source="kraken_r_signal_network",
+                    cause=signal.signal_id,
+                    priority=signal.priority,
                 )
                 if derived.created_tick > signal.created_tick + (signal.ttl or 0):
                     expired.append(derived.signal_id)
@@ -394,6 +418,7 @@ class SignalNetwork:
                             tick,
                             signal.signal_id,
                             signal.topic,
+                            signal.priority,
                             rule.rule_id,
                             rule.effect,
                             "expired",
@@ -401,13 +426,22 @@ class SignalNetwork:
                         )
                     )
                     continue
-                queue.append((derived.created_tick, len(queue), derived))
-                queue.sort(key=lambda item: (item[0], item[2].signal_id, item[1]))
+                queue.append(
+                    (
+                        derived.created_tick,
+                        -derived.priority,
+                        derived.signal_id,
+                        len(queue),
+                        derived,
+                    )
+                )
+                queue.sort(key=lambda item: (item[0], item[1], item[2], item[3]))
                 steps.append(
                     SignalStep(
                         tick,
                         signal.signal_id,
                         signal.topic,
+                        signal.priority,
                         rule.rule_id,
                         rule.effect,
                         "propagated",
@@ -452,6 +486,10 @@ class SignalNetwork:
         if signal.evidence_grade is not EvidenceGrade.DECLARED:
             raise SignalValidationError(
                 "signals are declared messages and cannot claim evidence"
+            )
+        if signal.source is None or signal.cause is None:
+            raise SignalValidationError(
+                "candidate signals require explicit source and cause identities"
             )
         if signal.task_state_id != task_state_id:
             raise SignalValidationError("signal task-state binding is stale or mismatched")

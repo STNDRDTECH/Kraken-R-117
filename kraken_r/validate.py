@@ -17,7 +17,10 @@ from .cycle import (
     run_constitutional_cycle,
 )
 from .nervous_system import (
+    SignalNetwork,
     SignalReplayRecord,
+    SignalRule,
+    SignalValidationError,
     make_bound_signal,
     replay_signal_propagation,
 )
@@ -396,6 +399,123 @@ def validate_nervous_system() -> tuple[str, ...]:
         errors.append("signal inhibition became observation evidence")
     if ablated.decision.outcome != "success":
         errors.append("ablated baseline did not retain the normal candidate outcome")
+
+    if uncertainty.source != "candidate_signal_network" or uncertainty.cause != uncertainty.signal_id:
+        errors.append("bound signal lacks explicit source/cause identity")
+    if not isinstance(uncertainty.priority, int) or isinstance(uncertainty.priority, bool):
+        errors.append("bound signal lacks an integer priority")
+
+    priority_network = SignalNetwork(
+        (SignalRule("priority-source", "candidate.priority", "candidate.sink"),)
+    )
+    low = make_bound_signal(
+        "validator-priority-low",
+        "candidate.priority",
+        transaction_id=transaction_id,
+        objective_id=objective.objective_id,
+        task_state_id=state_id,
+        task_state_version=4,
+        priority=1,
+    )
+    high = make_bound_signal(
+        "validator-priority-high",
+        "candidate.priority",
+        transaction_id=transaction_id,
+        objective_id=objective.objective_id,
+        task_state_id=state_id,
+        task_state_version=4,
+        priority=9,
+    )
+    priority_trace = replay_signal_propagation(
+        SignalReplayRecord(
+            transaction_id=transaction_id,
+            objective_id=objective.objective_id,
+            task_state_id=state_id,
+            task_state_version=4,
+            signals=(low, high),
+        ),
+        network=priority_network,
+    )
+    if priority_trace.delivered_signal_ids[:2] != (
+        "validator-priority-high",
+        "validator-priority-low",
+    ):
+        errors.append("priority ordering is not deterministic")
+    tie_b = make_bound_signal(
+        "validator-priority-b",
+        "candidate.priority",
+        transaction_id=transaction_id,
+        objective_id=objective.objective_id,
+        task_state_id=state_id,
+        task_state_version=4,
+        priority=5,
+    )
+    tie_a = make_bound_signal(
+        "validator-priority-a",
+        "candidate.priority",
+        transaction_id=transaction_id,
+        objective_id=objective.objective_id,
+        task_state_id=state_id,
+        task_state_version=4,
+        priority=5,
+    )
+    tie_trace = replay_signal_propagation(
+        SignalReplayRecord(
+            transaction_id=transaction_id,
+            objective_id=objective.objective_id,
+            task_state_id=state_id,
+            task_state_version=4,
+            signals=(tie_b, tie_a),
+        ),
+        network=priority_network,
+    )
+    if tie_trace.delivered_signal_ids[:2] != (
+        "validator-priority-a",
+        "validator-priority-b",
+    ):
+        errors.append("priority tie ordering is not deterministic")
+
+    unsupported = make_bound_signal(
+        "validator-unsupported",
+        "candidate.unsupported",
+        transaction_id=transaction_id,
+        objective_id=objective.objective_id,
+        task_state_id=state_id,
+        task_state_version=4,
+    )
+    try:
+        replay_signal_propagation(
+            SignalReplayRecord(
+                transaction_id=transaction_id,
+                objective_id=objective.objective_id,
+                task_state_id=state_id,
+                task_state_version=4,
+                signals=(unsupported,),
+            )
+        )
+    except SignalValidationError:
+        pass
+    else:
+        errors.append("unsupported topic was accepted")
+
+    for label, kwargs in (
+        ("source", {"source": ""}),
+        ("cause", {"cause": ""}),
+        ("priority", {"priority": 101}),
+    ):
+        try:
+            make_bound_signal(
+                f"validator-malformed-{label}",
+                "candidate.uncertainty",
+                transaction_id=transaction_id,
+                objective_id=objective.objective_id,
+                task_state_id=state_id,
+                task_state_version=4,
+                **kwargs,
+            )
+        except (TypeError, ValueError):
+            continue
+        errors.append(f"malformed {label} was accepted")
     return tuple(errors)
 
 

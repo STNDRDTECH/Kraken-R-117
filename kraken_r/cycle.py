@@ -210,6 +210,9 @@ class ConstitutionalCycle:
             "kraken_r_candidate",
             payload={"claim": "execute one bounded action"},
             evidence_grade=EvidenceGrade.DECLARED,
+            source="kraken_r_constitutional_cycle",
+            cause=f"{prefix}-objective",
+            priority=0,
         )
         # Event is a vocabulary alias, not a second event authority.
         event = signal

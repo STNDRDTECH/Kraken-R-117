@@ -95,8 +95,16 @@ uncertainty = make_bound_signal(
     objective_id=objective.objective_id,
     task_state_id="signal-demo-state-4",
     task_state_version=4,
+    source="demo-input",
+    cause="demo-uncertainty",
+    priority=5,
 )
 trace = run_constitutional_cycle(objective, signals=(uncertainty,))
 assert trace.decision.outcome == "insufficient_evidence"
 assert trace.evidence == ()
 ```
+
+Candidate propagation requires explicit source/cause identities and an integer
+priority. Within a tick, higher priority delivers first; equal priorities sort
+by signal ID. A topic absent from the static rule graph is rejected before
+delivery.

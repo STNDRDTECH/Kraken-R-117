@@ -230,6 +230,9 @@ class Signal(_Contract):
     provenance: Mapping[str, Any] = field(default_factory=dict)
     ttl: Optional[int] = None
     created_tick: int = 0
+    source: Optional[str] = None
+    cause: Optional[str] = None
+    priority: int = 0
 
     def __post_init__(self) -> None:
         _identifier(self.signal_id, "signal_id")
@@ -262,6 +265,18 @@ class Signal(_Contract):
             raise ContractValidationError("ttl must be a non-negative integer")
         if not isinstance(self.created_tick, int) or self.created_tick < 0:
             raise ContractValidationError("created_tick must be a non-negative integer")
+        if self.source is not None:
+            _identifier(self.source, "source")
+        if self.cause is not None:
+            _identifier(self.cause, "cause")
+        if (
+            isinstance(self.priority, bool)
+            or not isinstance(self.priority, int)
+            or not -100 <= self.priority <= 100
+        ):
+            raise ContractValidationError(
+                "priority must be an integer from -100 through 100"
+            )
         object.__setattr__(
             self, "provenance", _frozen_mapping(self.provenance, "provenance")
         )

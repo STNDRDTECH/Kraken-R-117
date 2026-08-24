@@ -1,7 +1,7 @@
 # Kraken-R Constitution
 
 **Status:** candidate-only foundation  
-**Version:** 1.3
+**Version:** 1.4
 **Effective boundary:** documentation, standalone validation, and bounded in-memory candidate-cycle execution
 
 ## Mission
@@ -107,10 +107,14 @@ evidence.
 ## Bounded candidate nervous-system slice
 
 Round 4 extends the existing canonical `Signal`/`Event` alias with optional
-task-state identity, task-state version, provenance, TTL, and creation-tick
-binding. The candidate signal network accepts only those bound, declared
-signals and processes them in a fresh in-memory run with deterministic ordering
-and hard limits for ticks, deliveries, and fan-out.
+task-state identity, task-state version, provenance, TTL, creation-tick,
+source, cause, and priority fields. Candidate propagation accepts only bound,
+declared signals with explicit source/cause identities and an integer priority.
+It processes each fresh in-memory run by tick, then higher priority, then stable
+signal ID order; equal priorities therefore replay identically. Any topic not
+named by the static rule graph is rejected before delivery rather than counted
+as an inert success. Hard limits remain in force for ticks, deliveries, and
+fan-out.
 
 Rules are static named edges. They can pass a message, explicitly amplify a
 message by a fixed factor, or inhibit one named candidate action topic. They do

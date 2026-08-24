@@ -174,6 +174,11 @@ class RecordedExecution:
             "task_state_version": 5,
             "action_id": action_id,
             "execution_id": execution_id,
+            "evidence_ids": evidence_ids,
+            "decision_id": decision_id,
+            "settlement_id": settlement_id,
+            "stop_decision_id": stop_decision_id,
+            "learning_update_id": learning_update_id,
         }
         return cls(
             transaction_id,
@@ -270,6 +275,9 @@ class RecordedExecutionReplay:
                 "transaction_id": record.transaction_id,
             },
             evidence_grade=EvidenceGrade.DECLARED,
+            source="kraken_r_recorded_replay",
+            cause=record.provenance["record_id"],
+            priority=0,
         )
         states.append(
             ConstitutionalCycle._advance(
@@ -442,7 +450,7 @@ class RecordedExecutionReplay:
             raise ReplayValidationError("objective provenance must name the replay transaction")
         if record.task_state_version != cls.AUTHORIZED_STATE_VERSION:
             raise ReplayValidationError("record references a stale task-state version")
-        required = {
+        observed_identity = {
             "record_id": f"{record.transaction_id}-record",
             "observation_origin": "recorded_execution",
             "transaction_id": record.transaction_id,
@@ -452,9 +460,18 @@ class RecordedExecutionReplay:
             "action_id": record.action_id,
             "execution_id": record.execution_id,
         }
-        for key, expected in required.items():
+        provenance_identity = {
+            **observed_identity,
+            "evidence_ids": record.evidence_ids,
+            "decision_id": record.decision_id,
+            "settlement_id": record.settlement_id,
+            "stop_decision_id": record.stop_decision_id,
+            "learning_update_id": record.learning_update_id,
+        }
+        for key, expected in provenance_identity.items():
             if record.provenance.get(key) != expected:
                 raise ReplayValidationError(f"missing or mismatched provenance: {key}")
+        for key, expected in observed_identity.items():
             if key not in {"record_id", "observation_origin"} and record.observations.get(key) != expected:
                 raise ReplayValidationError(f"mismatched recorded observation: {key}")
         observed = record.observations.get("observed")
@@ -477,6 +494,18 @@ class RecordedExecutionReplay:
             raise ReplayValidationError(
                 "observed record must contain criteria_met unless explicitly contradictory"
             )
+        if contradictory and record.status != "completed":
+            raise ReplayValidationError(
+                "contradictory observation must retain completed execution status"
+            )
+        if observed and not contradictory:
+            expected_status = (
+                "completed" if record.observations["criteria_met"] else "failed"
+            )
+            if record.status != expected_status:
+                raise ReplayValidationError(
+                    "recorded status conflicts with the observed outcome"
+                )
         expected_evidence_count = 0 if not observed else 2 if contradictory else 1
         if len(record.evidence_ids) != expected_evidence_count:
             raise ReplayValidationError("record evidence identities do not match observations")

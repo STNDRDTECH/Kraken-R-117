@@ -7,6 +7,7 @@ from dataclasses import replace
 import pytest
 
 from kraken_r import (
+    ContractValidationError,
     CycleInvariantError,
     EvidenceGrade,
     Objective,
@@ -15,6 +16,7 @@ from kraken_r import (
     SignalNetwork,
     SignalReplayRecord,
     SignalRule,
+    Signal,
     SignalValidationError,
     make_bound_signal,
     replay_constitutional_signal_path,
@@ -48,6 +50,9 @@ def _signal(
         ttl=int(context.pop("ttl", 2)),
         created_tick=int(context.pop("created_tick", 0)),
         payload=context.pop("payload", {}),
+        source=str(context.pop("source", "test-source")),
+        cause=str(context.pop("cause", f"{signal_id}-cause")),
+        priority=int(context.pop("priority", 0)),
     )
 
 
@@ -66,6 +71,67 @@ def test_signal_replay_is_deterministic_and_amplification_is_explicit() -> None:
         and step.disposition == "propagated"
         for step in first.steps
     )
+
+
+def test_candidate_signal_carries_explicit_source_cause_and_priority() -> None:
+    signal = _signal(
+        "identity-1",
+        "candidate.urgency",
+        source="scheduler-1",
+        cause="deadline-1",
+        priority=7,
+    )
+
+    assert signal.source == "scheduler-1"
+    assert signal.cause == "deadline-1"
+    assert signal.priority == 7
+    assert signal.to_dict()["priority"] == 7
+
+
+def test_priority_orders_same_tick_deliveries_and_ties_by_signal_id() -> None:
+    network = SignalNetwork(
+        (SignalRule("source-to-sink", "candidate.source", "candidate.sink"),)
+    )
+    low = _signal("priority-low", "candidate.source", priority=1)
+    high = _signal("priority-high", "candidate.source", priority=9)
+    tie_b = _signal("priority-b", "candidate.source", priority=5)
+    tie_a = _signal("priority-a", "candidate.source", priority=5)
+
+    trace = network.propagate(
+        (low, high, tie_b, tie_a),
+        **_context(),
+    )
+
+    assert trace.delivered_signal_ids[:4] == (
+        "priority-high",
+        "priority-a",
+        "priority-b",
+        "priority-low",
+    )
+
+
+@pytest.mark.parametrize(
+    "field,value",
+    [
+        ("source", ""),
+        ("cause", ""),
+        ("priority", 101),
+        ("priority", -101),
+        ("priority", True),
+    ],
+)
+def test_signal_rejects_malformed_source_cause_or_priority(field: str, value: object) -> None:
+    kwargs = {"source": "source-1", "cause": "cause-1", "priority": 0}
+    kwargs[field] = value
+
+    with pytest.raises(ContractValidationError):
+        Signal(
+            "malformed-1",
+            "candidate.urgency",
+            "correlation-1",
+            "test",
+            **kwargs,
+        )
 
 
 def test_uncertainty_signal_changes_only_the_candidate_trajectory_and_replays() -> None:
@@ -99,6 +165,38 @@ def test_duplicate_delivery_is_deduplicated_without_changing_propagation() -> No
 
     assert trace.delivered_signal_ids.count(signal.signal_id) == 1
     assert trace.duplicate_signal_ids == (signal.signal_id,)
+
+
+def test_unsupported_signal_topic_fails_closed() -> None:
+    unsupported = _signal("unsupported-1", "candidate.unsupported")
+
+    with pytest.raises(SignalValidationError, match="unsupported signal topic"):
+        replay_signal_propagation(
+            SignalReplayRecord(**_context(), signals=(unsupported,))
+        )
+
+
+def test_candidate_propagation_rejects_missing_source_or_cause() -> None:
+    unbound = Signal(
+        "unbound-1",
+        "candidate.uncertainty",
+        "round4-transaction",
+        "test",
+        task_state_id="round4-objective-state-4",
+        task_state_version=4,
+        provenance={
+            "transaction_id": "round4-transaction",
+            "objective_id": "round4-objective",
+            "task_state_id": "round4-objective-state-4",
+            "task_state_version": 4,
+        },
+        ttl=2,
+    )
+
+    with pytest.raises(SignalValidationError, match="source and cause"):
+        replay_signal_propagation(
+            SignalReplayRecord(**_context(), signals=(unbound,))
+        )
 
 
 def test_stale_task_state_binding_is_rejected() -> None:

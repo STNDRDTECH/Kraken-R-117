@@ -50,7 +50,7 @@ Round 4 adapts only the following legacy *ideas*, not legacy code or authority:
 | --- | --- | --- |
 | Emergence signal record | Canonical Kraken-R `Signal` now carries optional task-state, provenance, TTL, and tick binding for candidate propagation. | The legacy shape relies on wall-clock creation order and has incompatible ownership. |
 | Legacy tick-loop intent | A new fresh, deterministic in-memory propagation run has bounded ticks, deliveries, and fan-out. | The legacy loop does not consume or enforce its declared fan-out budget and has incompatible handler signatures. |
-| Legacy topic and dedup intent | Static named candidate topics, stable content deduplication, and explicit duplicate disposition are used. | Existing topic catalogs are retained as legacy vocabulary; their old dedup window is not a versioned TTL/provenance contract. |
+| Legacy topic, source/priority, and dedup intent | Static named candidate topics, explicit source/cause identities, integer priority with stable tie ordering, stable content deduplication, and explicit duplicate disposition are used. | Existing topic catalogs are retained as legacy vocabulary; their old dedup window and queue ordering are not a versioned TTL/provenance contract, and unknown candidate topics now reject before delivery. |
 
 The following mechanisms remain preserved but **quarantined** from Kraken-R
 authority:
