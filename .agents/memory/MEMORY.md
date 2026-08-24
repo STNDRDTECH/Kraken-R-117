@@ -16,3 +16,4 @@
 - [GitHub empty-repository publishing](github-empty-repository-publishing.md) — the GitHub connector’s Git-object API rejects blobs on an empty repo; establish and then replace a bootstrap ref with the verified root tree.
 - [Kraken-R bounded nervous system](kraken-r-nervous-system.md) — candidate signals stay static, bounded, replayable, and non-evidentiary; adaptive routing remains quarantined.
 - [Bounded candidate physiology](round-five-physiology.md) — physiology is explicit immutable context with advisory candidate-action inhibition only; never a live controller or evidence authority.
+- [Settlement-grounded plastic routing](round-six-plastic-routing.md) — route preference requires a validated constitutional trace and generation-scoped bounded credit; never raw signals or confidence.

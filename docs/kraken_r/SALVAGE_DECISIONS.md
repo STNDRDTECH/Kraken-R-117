@@ -89,3 +89,30 @@ dispatcher, persists a state, chooses a goal, creates evidence, settles a
 transaction, updates learning, or overrides the constitutional action
 authority. Same-record replay is deterministic, and a physiology-on versus
 physiology-off ablation may diverge only at candidate authorization.
+
+## Round-six settlement-grounded plastic routing decision
+
+Round 6 adapts the following legacy *concepts* into an explicit immutable
+candidate reducer, not into a second router, learning daemon, or persistent
+controller:
+
+| Preserved mechanism | Exact candidate adaptation | Why the source is not reused |
+| --- | --- | --- |
+| Hebbian cascade router / plasticity store | Fixed bounded route-local strengthening and weakening after one eligible settlement. | Legacy weights are mutable/persisted, may use wall-clock state, and are not bound to constitutional evidence or settlement identity. |
+| Pathway tracker | Bounded settlement/evidence/lineage audit links on one selected route. | Legacy prefix-chain counting and consolidation admit raw signal frequency without a settlement gate. |
+| Topology tracker | Immutable declared source→target `CandidateRoute` topology with deterministic later preference and reset/ablation. | Legacy tracker observes mutable runtime interactions and writes snapshots; it is not a candidate route authority. |
+| Learning integration / online learner | Explicit reducer invocation after a caller-provided trace only. | Legacy integration consumes confidence and signals, uses global stores and a background loop, and applies broad credit across modules. |
+
+No legacy source is imported. A `RouteSelection` is only a deterministic
+candidate preference and cannot dispatch, choose work, actuate, subscribe,
+persist, create evidence, settle a transaction, or alter physiology. Only
+settled success/failure with operational or grounded observed execution
+evidence may change the selected route. Contradictory, insufficient, declared,
+stale, malformed, and non-grounded records withhold or reject learning.
+
+The adapter uses a fixed ±0.10 adjustment constrained to `[0.25, 0.75]`,
+route-local credit only, a hard 16-settlement budget per topology generation,
+deterministic route-id tie breaking, and explicit generation-advancing reset.
+Those controls intentionally prevent unchecked positive feedback, cross-route
+reward diffusion, duplicate credit after audit eviction, and a permanently
+dominant stable-but-wrong path at this layer.

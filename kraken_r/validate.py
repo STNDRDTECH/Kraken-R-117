@@ -33,6 +33,15 @@ from .physiology import (
     RegulationEffect,
     replay_physiology,
 )
+from .plastic_routing import (
+    CandidateRoute,
+    PlasticRoutingValidationError,
+    RouteTopology,
+    SettlementRouteRecord,
+    apply_settlement_learning,
+    replay_settlement_learning,
+    select_candidate_route,
+)
 from .replay import (
     RecordedExecution,
     RecordedExecutionMode,
@@ -658,6 +667,174 @@ def validate_physiology() -> tuple[str, ...]:
     return tuple(errors)
 
 
+def _route_record(
+    topology: RouteTopology,
+    trace: Any,
+    *,
+    record_id: str,
+) -> SettlementRouteRecord:
+    """Bind one completed constitutional trace to a candidate route selection."""
+
+    selection = select_candidate_route(
+        topology,
+        "candidate-work",
+        transaction_id=trace.transaction_id,
+        objective_id=trace.objective.objective_id,
+        task_state_id=trace.states[4].state_id,
+        task_state_version=trace.states[4].version,
+    )
+    evidence_ids = tuple(item.evidence_id for item in trace.evidence)
+    return SettlementRouteRecord(
+        record_id,
+        selection,
+        trace,
+        provenance={
+            "transaction_id": trace.transaction_id,
+            "objective_id": trace.objective.objective_id,
+            "task_state_id": trace.states[4].state_id,
+            "task_state_version": trace.states[4].version,
+            "route_id": selection.route_id,
+            "settlement_id": trace.settlement.settlement_id,
+            "evidence_ids": evidence_ids,
+        },
+    )
+
+
+def validate_plastic_routing() -> tuple[str, ...]:
+    """Exercise settlement-gated, replayable candidate route plasticity."""
+
+    errors: list[str] = []
+
+    def trace(label: str, mode: CycleMode) -> Any:
+        objective = contracts.Objective(
+            f"validator-routing-{label}-objective",
+            "Validate settlement-grounded candidate route preference",
+            provenance={"transaction_id": f"validator-routing-{label}-tx"},
+        )
+        return run_constitutional_cycle(objective, mode=mode)
+
+    try:
+        topology = RouteTopology.fixture("validator-routing")
+        first_record = _route_record(
+            topology, trace("success-one", CycleMode.SUCCESS), record_id="validator-routing-one"
+        )
+        after_first, first = apply_settlement_learning(topology, first_record)
+        second_record = _route_record(
+            after_first,
+            trace("success-two", CycleMode.SUCCESS),
+            record_id="validator-routing-two",
+        )
+        after_second, second = apply_settlement_learning(after_first, second_record)
+    except (TypeError, ValueError) as exc:
+        return (f"candidate plastic routing failed: {exc}",)
+
+    alpha = next(route for route in after_second.routes if route.route_id == "path-alpha")
+    later = select_candidate_route(
+        after_second,
+        "candidate-work",
+        transaction_id="validator-routing-later-tx",
+        objective_id="validator-routing-later-objective",
+        task_state_id="validator-routing-later-state",
+        task_state_version=4,
+    )
+    if first.effect != "strengthen" or second.effect != "strengthen":
+        errors.append("settled successes did not strengthen the selected route")
+    if alpha.weight != 0.70 or later.candidate_scores[0][1] <= later.candidate_scores[1][1]:
+        errors.append("successful history did not measurably change route organization")
+    ablated = after_second.reset()
+    if any(route.weight != 0.50 for route in ablated.routes):
+        errors.append("route-state ablation did not remove learned preference")
+
+    replayed_one = replay_settlement_learning(topology, (first_record, second_record))
+    replayed_two = replay_settlement_learning(topology, (first_record, second_record))
+    if replayed_one != replayed_two or replayed_one[0] != after_second:
+        errors.append("route learning history is not deterministic under replay")
+
+    preferred = RouteTopology(
+        "validator-routing-failure",
+        0,
+        tuple(
+            CandidateRoute(
+                route.route_id,
+                route.context_id,
+                route.source,
+                route.target,
+                weight=0.60 if route.route_id == "path-alpha" else route.weight,
+            )
+            for route in RouteTopology.fixture("validator-routing-failure").routes
+        ),
+    )
+    failure_one = _route_record(
+        preferred,
+        trace("failure-one", CycleMode.FAILURE),
+        record_id="validator-routing-failure-one",
+    )
+    after_failure_one, failure_trace_one = apply_settlement_learning(preferred, failure_one)
+    failure_two = _route_record(
+        after_failure_one,
+        trace("failure-two", CycleMode.FAILURE),
+        record_id="validator-routing-failure-two",
+    )
+    after_failures, failure_trace_two = apply_settlement_learning(
+        after_failure_one, failure_two
+    )
+    failure_choice = select_candidate_route(
+        after_failures,
+        "candidate-work",
+        transaction_id="validator-routing-failure-later-tx",
+        objective_id="validator-routing-failure-later-objective",
+        task_state_id="validator-routing-failure-later-state",
+        task_state_version=4,
+    )
+    if (
+        failure_trace_one.effect != "weaken"
+        or failure_trace_two.effect != "weaken"
+        or failure_choice.route_id != "path-beta"
+    ):
+        errors.append("settled failures did not weaken and reorganize route preference")
+
+    for label, mode in (
+        ("contradiction", CycleMode.CONTRADICTION),
+        ("insufficient", CycleMode.INSUFFICIENT_EVIDENCE),
+    ):
+        withheld_record = _route_record(
+            topology, trace(label, mode), record_id=f"validator-routing-{label}"
+        )
+        unchanged, withheld = apply_settlement_learning(topology, withheld_record)
+        if unchanged != topology or withheld.disposition != "withheld":
+            errors.append(f"{label} outcome earned route reinforcement")
+
+    try:
+        apply_settlement_learning(after_first, first_record)
+    except PlasticRoutingValidationError:
+        pass
+    else:
+        errors.append("stale route selection was accepted")
+
+    declared_trace = replace(
+        first_record.constitutional_trace,
+        evidence=tuple(
+            replace(item, grade=contracts.EvidenceGrade.DECLARED)
+            for item in first_record.evidence
+        ),
+    )
+    try:
+        apply_settlement_learning(
+            topology,
+            replace(first_record, constitutional_trace=declared_trace),
+        )
+    except PlasticRoutingValidationError:
+        pass
+    else:
+        errors.append("declared evidence earned route reinforcement")
+    if any(
+        route.weight < 0.25 or route.weight > 0.75
+        for route in after_failures.routes + after_second.routes
+    ):
+        errors.append("route weight escaped its fixed bounds")
+    return tuple(errors)
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         description="Validate the isolated, candidate-only Kraken-R foundation."
@@ -691,6 +868,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     replay_errors = validate_recorded_execution_replay()
     nervous_system_errors = validate_nervous_system()
     physiology_errors = validate_physiology()
+    plastic_routing_errors = validate_plastic_routing()
     legacy_runtime_errors = validate_legacy_runtime_boundary()
     report = {
         "ok": (
@@ -700,6 +878,7 @@ def main(argv: Sequence[str] | None = None) -> int:
             and not replay_errors
             and not nervous_system_errors
             and not physiology_errors
+            and not plastic_routing_errors
             and not legacy_runtime_errors
         ),
         "contracts_ok": not contract_errors,
@@ -724,6 +903,11 @@ def main(argv: Sequence[str] | None = None) -> int:
             "ok": not physiology_errors,
             "errors": list(physiology_errors),
             "authority": "advisory_candidate_only",
+        },
+        "plastic_routing": {
+            "ok": not plastic_routing_errors,
+            "errors": list(plastic_routing_errors),
+            "authority": "settlement_grounded_candidate_only",
         },
         "constitution": {
             "ok": True,

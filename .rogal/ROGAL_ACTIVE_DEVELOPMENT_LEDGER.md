@@ -33,6 +33,47 @@
 
 ---
 
+## Kraken-R Round Six Settlement-Grounded Plastic Routing — COMPLETE (2026-08-24)
+
+**Status:** CANDIDATE_ONLY — NOT_PRODUCTION_WIRED
+**Scope:** immutable settlement/evidence-gated candidate route preference only.
+
+**Implementation and evidence:**
+- Added `kraken_r/plastic_routing.py`, an in-memory reducer over caller-owned
+  `RouteTopology` state. `RouteSelection` is advisory and cannot dispatch,
+  execute, select goals, settle transactions, create evidence, or alter the
+  legacy lifecycle.
+- A route update requires a validated immutable constitutional trace plus exact
+  transaction, objective, authorized task-state/version, selected route,
+  settlement, and evidence provenance binding.
+- Only `settled` success/failure with operational or grounded observed
+  execution evidence can adjust the selected route. Contradiction, insufficient
+  evidence, declared claims, confidence, physiology, stale selection,
+  malformed provenance, and duplicate credit cannot reinforce a route.
+- Route changes are fixed at ±0.10, constrained to `[0.25, 0.75]`, route-local,
+  replayable, reversible by grounded failure, and capped at 16 unique
+  settlements per generation. Reset advances generation and ablates learned
+  preference.
+- Added Round 6 tests for success/failure organization change, ablation,
+  deterministic learning-history replay, bounds, declared-evidence rejection,
+  trace/provenance rejection, stale/reset rejection, and history-budget
+  rejection.
+
+**Validation evidence (2026-08-24):**
+- Candidate suite through Round 6 → PASS: **79 passed**.
+- `python -m kraken_r --json` → PASS: constitution 1.6, contracts, cycle,
+  recorded replay, nervous system, physiology, settlement-grounded plastic
+  routing, and registry (67 mechanisms / 16 categories / 11 planned) clean.
+- Candidate source-boundary scan found no legacy ROGAL runtime imports or
+  runtime authorities. Architecture re-review passed after trace binding and
+  generation-scoped deduplication were added.
+
+**Wiring changes:** NONE. No legacy router, cascade, pathway tracker, topology
+tracker, learning integration, online learner, EventBus, store, worker,
+dashboard, workflow, daemon, or lifecycle authority was changed or connected.
+
+---
+
 ## Kraken-R Constitutional Foundation — COMPLETE (2026-08-24)
 
 **Status:** CANDIDATE_ONLY — NOT_PRODUCTION_WIRED

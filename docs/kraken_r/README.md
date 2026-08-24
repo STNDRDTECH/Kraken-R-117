@@ -15,6 +15,8 @@ second runtime.
   declared signals; no runtime subscription, persistence, or adaptive routing.
 - `kraken_r/physiology.py` — immutable, deterministic advisory regulation over
   explicit internal-condition snapshots; it can only inhibit a candidate action.
+- `kraken_r/plastic_routing.py` — immutable settlement/evidence-gated candidate
+  route preference; it never dispatches, persists, executes, or selects goals.
 - `kraken_r/constitution.json` — machine-readable constitution metadata
   validated alongside the registry.
 - `kraken_r/architecture_registry.schema.json` — machine-readable JSON schema.
@@ -34,14 +36,16 @@ pytest -q \
   tests/test_kraken_r_foundation.py \
   tests/test_kraken_r_cycle.py \
   tests/test_kraken_r_replay.py \
-   tests/test_kraken_r_nervous_system.py \
-   tests/test_kraken_r_physiology.py
+  tests/test_kraken_r_nervous_system.py \
+  tests/test_kraken_r_physiology.py \
+  tests/test_kraken_r_plastic_routing.py
 ```
 
 The command reads the bundled JSON, imports the isolated package, and executes
 the bounded fixture matrix in memory. The focused suite retains the accepted
-Rounds 1–3 coverage, adversarial Round 4 signal coverage, and Round 5
-physiology regime/ablation/replay coverage. It does not import `rogal_core`,
+Rounds 1–3 coverage, adversarial Round 4 signal coverage, Round 5 physiology
+regime/ablation/replay coverage, and Round 6 settlement-grounded route
+plasticity coverage. It does not import `rogal_core`,
 start a workflow, contact an LLM, open a live store, or write runtime state.
 
 The cycle can also be exercised directly:
@@ -140,4 +144,50 @@ snapshot = PhysiologySnapshot(
 trace = run_constitutional_cycle(objective, physiology=snapshot)
 assert trace.execution.status == "not_observed"
 assert trace.evidence == ()
+```
+
+Settlement-grounded route preference is an explicit post-settlement reducer,
+not a live router. It can only credit grounded observed execution evidence:
+
+```python
+from kraken_r import (
+    Objective,
+    RouteTopology,
+    SettlementRouteRecord,
+    apply_settlement_learning,
+    run_constitutional_cycle,
+    select_candidate_route,
+)
+
+objective = Objective(
+    "routing-demo",
+    "produce one settled observation before candidate route learning",
+    provenance={"transaction_id": "routing-demo-tx"},
+)
+cycle = run_constitutional_cycle(objective)
+topology = RouteTopology.fixture()
+selection = select_candidate_route(
+    topology,
+    "candidate-work",
+    transaction_id=cycle.transaction_id,
+    objective_id=objective.objective_id,
+    task_state_id=cycle.states[4].state_id,
+    task_state_version=cycle.states[4].version,
+)
+record = SettlementRouteRecord(
+    "routing-demo-record",
+    selection,
+    cycle,
+    provenance={
+        "transaction_id": cycle.transaction_id,
+        "objective_id": objective.objective_id,
+        "task_state_id": cycle.states[4].state_id,
+        "task_state_version": cycle.states[4].version,
+        "route_id": selection.route_id,
+        "settlement_id": cycle.settlement.settlement_id,
+        "evidence_ids": tuple(item.evidence_id for item in cycle.evidence),
+    },
+)
+topology, trace = apply_settlement_learning(topology, record)
+assert trace.disposition == "accepted"
 ```

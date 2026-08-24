@@ -1,3 +1,57 @@
+# Session Log — 2026-08-24 (Kraken-R Round Six Settlement-Grounded Plastic Routing)
+
+## Session Type
+
+Candidate-only organizational-learning implementation on the isolated
+`round-6-plastic-routing` branch. No legacy runtime, deployment, workflow,
+persistence, event, goal, execution, or authority wiring change.
+
+## What This Session Did
+
+1. Inspected the quarantined Hebbian/plasticity store, pathway tracker,
+   topology tracker, learning integration, online learner, and routing-weight
+   patterns before implementation. Reused only bounded route-local adjustment,
+   explicit topology, audit, reset, and reorganization concepts.
+2. Added a pure immutable `RouteTopology` reducer and deterministic
+   `RouteSelection`. Selection is a candidate preference only, not a dispatcher
+   or action/goal controller.
+3. Required each credit record to contain and revalidate a full immutable
+   constitutional trace. Selection identity, transaction, objective,
+   authorized task state/version, route, settlement, and evidence IDs must all
+   match trace-bound provenance.
+4. Allowed only settled success/failure supported by operational or grounded
+   observed execution evidence to update the selected route. Contradiction,
+   insufficient evidence, declared evidence, raw claims, confidence,
+   physiology, stale records, malformed provenance, and duplicate credit are
+   withheld or rejected.
+5. Bounded updates to fixed ±0.10 in `[0.25, 0.75]`, route-local credit, and a
+   hard 16-settlement budget per generation. Reset advances generation, removes
+   learned preference, and makes prior selections stale.
+6. Added Round 6 success/failure organization, ablation, replay, boundedness,
+   forged-evidence, stale/reset, and history-budget tests. Updated validator,
+   registry, constitution, README, salvage decisions, and operating ledger.
+
+## Evidence
+
+- Candidate regression suite through Round 6 → PASS: **79 passed**.
+- `python -m kraken_r --json` → PASS: constitution 1.6, contracts, cycle,
+  recorded replay, nervous system, physiology, plastic routing, and registry
+  (67 mechanisms / 16 categories / 11 planned) clean.
+- Candidate package boundary check found no legacy ROGAL runtime imports,
+  runtime authorities, stores, workers, or routing integration.
+- Architecture review passed after two boundary hardenings: full
+  constitutional-trace validation and generation-scoped, non-evicting
+  settlement deduplication.
+
+## Remaining
+
+Round 6 remains candidate-only on its dedicated branch. It must not be merged
+into `main`, wired into ROGAL, made persistent, given signal/confidence credit,
+or used for live route/goal/action selection without a separate approved
+migration.
+
+---
+
 # Session Log — 2026-08-24 (Kraken-R Round Five Candidate Physiology)
 
 ## Session Type

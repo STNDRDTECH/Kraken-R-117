@@ -1,7 +1,7 @@
 # Kraken-R Constitution
 
 **Status:** candidate-only foundation  
-**Version:** 1.5
+**Version:** 1.6
 **Effective boundary:** documentation, standalone validation, and bounded in-memory candidate-cycle execution
 
 ## Mission
@@ -21,11 +21,12 @@ executors, sandboxes, persistence stores, capability systems, and mutation
 actuators remain unchanged and authoritative for their current behavior.
 
 The `kraken_r` package is candidate-only. Its deterministic cycle,
-recorded-execution replay, bounded signal propagation, and bounded advisory
-physiology have no daemon entrypoint, runtime writer, event subscription,
-external executor, router, ledger, homeostasis controller, or mutation
-actuator. Loading, validating, or running them must not start ROGAL, contact an
-LLM, open live stores, or change `.rogal/` runtime state.
+recorded-execution replay, bounded signal propagation, bounded advisory
+physiology, and settlement-grounded route-preference reducer have no daemon
+entrypoint, runtime writer, event subscription, external executor, router,
+ledger, homeostasis controller, or mutation actuator. Loading, validating, or
+running them must not start ROGAL, contact an LLM, open live stores, or change
+`.rogal/` runtime state.
 
 ## Canonical lifecycle
 
@@ -168,3 +169,41 @@ subscriptions, or persisted regulator state. Hysteresis is explicit input
 same immutable record and produces the same trace. The legacy pressure field,
 HOP, homeostasis controllers, goal queue, and resource pools are neither
 imported nor called and remain preserved/quarantined references.
+
+## Settlement-grounded plastic route preference
+
+Round 6 adapts only the safe ideas from the quarantined cascade router,
+pathway tracker, topology tracker, plasticity store, and online-learning
+integration: route-local preference, explicit source/target topology, bounded
+strengthening and weakening, audit lineage, reset/ablation, and an observable
+later route choice. It does not import those modules or reconnect their SQLite
+stores, global singletons, clocks, background thread, signal subscriptions,
+confidence handling, broad credit assignment, or persistent state.
+
+`kraken_r.plastic_routing` is a pure reducer over an immutable caller-provided
+`RouteTopology`. A `RouteSelection` is a deterministic candidate preference
+only: it cannot dispatch a message, execute an action, select a goal, settle a
+transaction, or alter the constitutional lifecycle. The caller can submit one
+`SettlementRouteRecord` only after the constitutional trace exists.
+
+An update is accepted only when all of the following agree:
+
+1. the selected route is the deterministic highest-weight route at the recorded
+   topology version;
+2. transaction, objective, authorized task state/version, route, settlement,
+   and evidence identities match the explicit provenance binding;
+3. the settlement is `settled` with an observed `success` or `failure`; and
+4. every cited `Evidence` is operational/grounded observed execution evidence.
+
+A grounded success strengthens only the selected route; a grounded failure
+weakens only the selected route. Contradiction, insufficient evidence,
+unsettled results, declared signals, confidence, physiology state, raw model
+claims, malformed provenance, stale selections, and duplicate in-window
+settlements cannot earn credit. Every topology generation accepts at most 16
+unique settlement identities; the bounded budget rejects a seventeenth update
+rather than evicting old IDs. Updates use a fixed ±0.10 delta constrained to
+the `[0.25, 0.75]` interval; no automatic promotion, cross-route credit, or
+adaptive controller exists. Resetting a topology ablates learned state while
+retaining the declared route graph and advances its generation, so prior
+selections cannot be reused. Replaying the same ordered immutable record
+history produces the same topology and audit traces.

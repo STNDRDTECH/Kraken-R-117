@@ -1,11 +1,11 @@
 {
   "registry_kind": "kraken_r_architecture",
   "registry_id": "kraken-r-foundation",
-  "version": "1.5",
+  "version": "1.6",
   "last_reviewed": "2026-08-24",
   "authority_boundary": {
     "legacy_reference": "rogal_core.daemon.ROGALDaemon and rogal_core.autonomous_cycle.AutonomousCycle remain the deployed reference runtime.",
-    "kraken_candidate": "The deterministic Kraken-R cycle, read-only recorded-execution replay, bounded in-memory signal propagation, and advisory bounded physiology are executable candidate infrastructure only; they have no authority over the deployed runtime.",
+    "kraken_candidate": "The deterministic Kraken-R cycle, read-only recorded-execution replay, bounded in-memory signal propagation, advisory bounded physiology, and settlement-grounded bounded route preference are executable candidate infrastructure only; they have no authority over the deployed runtime.",
     "preservation": "Legacy, alternate, dormant, and forgotten mechanisms are classified and preserved, never deleted by this foundation."
   },
   "mechanisms": [
@@ -104,6 +104,22 @@
       "source_refs": ["docs/kraken_r/CONSTITUTION.md", "docs/kraken_r/SALVAGE_DECISIONS.md", "rogal_core/emergence/pressure_field.py", "rogal_core/health/homeostasis.py", "rogal_core/cognition/resources.py"],
       "planned": false,
       "notes": "Pure in-memory adapter of normalized pressure, threshold/hysteresis, contradiction/backlog, and protected-reserve concepts. It imports no legacy mechanism and has no live sensor, queue, router, evidence, settlement, learning, persistence, lifecycle, or goal-selection authority. Its only allowed effect is an explicit, replayable candidate-action inhibition before fixture execution."
+    },
+    {
+      "mechanism_id": "kraken_r_settlement_grounded_plastic_routing",
+      "category": "emergence_routing",
+      "name": "Settlement-grounded bounded candidate route preference",
+      "intended_role": "Select a deterministic candidate organizational edge and apply a fixed bounded preference adjustment only after one provenance-bound constitutional settlement with grounded execution evidence.",
+      "current_status": "infrastructure",
+      "dependencies": ["kraken_r_constitutional_cycle", "kraken_r_recorded_execution_replay"],
+      "authority": "kraken_candidate",
+      "evidence_grade": "implemented",
+      "evidence_refs": ["kraken_r/plastic_routing.py", "tests/test_kraken_r_plastic_routing.py", "kraken_r/validate.py"],
+      "duplicates": [],
+      "disposition": "keep",
+      "source_refs": ["docs/kraken_r/CONSTITUTION.md", "docs/kraken_r/SALVAGE_DECISIONS.md", "rogal_core/emergence/plasticity.py", "rogal_core/emergence/pathway_tracker.py", "rogal_core/emergence/topology_tracker.py", "rogal_core/emergence/learning_integration.py", "rogal_core/emergence/online_learning.py"],
+      "planned": false,
+      "notes": "Pure immutable reducer, not a router or controller. It adapts bounded strengthening/weakening, route topology, auditable pathway lineage, and reset concepts while rejecting legacy stores, globals, clocks, background loops, signal confidence, broad credit assignment, and cross-run persistence. Only settled success/failure with grounded observed execution evidence may adjust the selected route by a fixed bounded delta; contradiction, insufficient evidence, declared claims, stale selections, malformed provenance, and duplicate in-window settlements fail closed or explicitly withhold learning."
     },
     {
       "mechanism_id": "legacy_daemon",
