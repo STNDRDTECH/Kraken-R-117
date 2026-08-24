@@ -5,6 +5,58 @@
 
 ---
 
+## Kraken-R Round Seven Controlled LLM Proposal Adapter — COMPLETE (2026-08-24)
+
+**Status:** CANDIDATE_ONLY — NOT_PRODUCTION_WIRED
+**Scope:** stateless proposal/reasoning adapter, immutable invocation
+provenance, structural replay, and controlled held-out evaluation only.
+
+**Implementation and evidence:**
+- Added `kraken_r/llm_adapter.py` with immutable cycle-bound model context and
+  request records, typed provider request/response envelopes, deterministic
+  fixture provider, optional explicitly injected OpenAI-compatible provider,
+  strict proposal/reasoning/route-hint output, and fail-closed provider,
+  timeout, malformed-output, provenance, and route-boundary handling.
+- Model output is always `declared_only`; it has no evidence, settlement,
+  action, execution, goal, persistence, learning, or controller authority.
+  Provider generation is marked nondeterministic while request/configuration
+  hashes, received-output hashes, typed shape, and failure-envelope
+  dispositions are structurally replayable without a provider call.
+- Added `kraken_r/controlled_evaluation.py` with held-out base-model,
+  Kraken-R-mediated, and reset-routing conditions. Provider identity, model
+  configuration, task set, prompt template, temperature, output budget, and
+  normalized prompt length are controlled; mixed provider-reported input-token
+  availability fails the control check. Reports are descriptive only and never
+  claim performance improvement from a model proposal.
+- Extended the candidate validator, constitution to 1.7, registry to 68
+  mechanisms across 16 categories, documentation, salvage decisions, and
+  focused adversarial tests.
+
+**Validation evidence (2026-08-24):**
+- Candidate suite through Round 7 → PASS: **94 passed**.
+- `python -m kraken_r --json` → PASS: constitution 1.7, contracts, cycle,
+  recorded replay, nervous system, physiology, plastic routing, controlled
+  LLM adapter, and registry clean.
+- Validator reports 68 mechanisms / 16 categories / 11 planned capabilities
+  and `legacy_runtime_wiring=absent`.
+- Independent architecture review passed after hardening provider identity,
+  deadlines, route bounds, failure replay authentication, token controls, and
+  authorized cycle-trace projection.
+- The configured broad Test Runner still has pre-existing collection errors;
+  the dashboard command still lacks `rogal_core.dashboard.__main__`. These
+  unrelated workflow issues were not changed by this candidate-only round.
+
+**Wiring changes:** NONE. No legacy LLM bridge, model bus, cost ledger, event
+bus, store, worker, autonomous cycle, daemon, route learner, evidence path,
+settlement path, dashboard, or workflow was changed or connected.
+
+**Next decision:** Keep the adapter and evaluation isolated. Do not connect
+model proposals to live ROGAL execution, evidence, settlement, goals,
+persistence, or learning without a separate approved migration and independent
+execution-grounded evaluation.
+
+---
+
 ## External Forensic Audit — COMPLETE (2026-06-27)
 
 **Brief:** Full forensic architecture and capability audit per the attached audit brief.  

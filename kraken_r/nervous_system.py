@@ -80,7 +80,13 @@ class SignalRule:
 
 @dataclass(frozen=True)
 class SignalStep:
-    """One deterministic delivery or explicit inhibition decision."""
+    """One deterministic delivery or explicit inhibition decision.
+
+    ``source`` and ``cause`` describe the signal represented by
+    ``signal_id``.  When the step creates a derived signal,
+    ``derived_source`` and ``derived_cause`` describe that derived signal
+    without requiring a reviewer to reconstruct it from the signal network.
+    """
 
     tick: int
     signal_id: str
@@ -90,16 +96,25 @@ class SignalStep:
     effect: PropagationEffect | None
     disposition: str
     derived_signal_id: str | None = None
+    source: str | None = None
+    cause: str | None = None
+    derived_source: str | None = None
+    derived_cause: str | None = None
 
     def to_dict(self) -> dict[str, Any]:
         return {
             "tick": self.tick,
             "signal_id": self.signal_id,
             "topic": self.topic,
+            "priority": self.priority,
             "rule_id": self.rule_id,
             "effect": self.effect.value if self.effect else None,
             "disposition": self.disposition,
             "derived_signal_id": self.derived_signal_id,
+            "source": self.source,
+            "cause": self.cause,
+            "derived_source": self.derived_source,
+            "derived_cause": self.derived_cause,
         }
 
 
@@ -283,6 +298,13 @@ class SignalNetwork:
             for rule in self._rules
             for topic in (rule.source_topic, rule.target_topic)
         }
+        unsupported_topics = sorted(
+            {signal.topic for signal in initial if signal.topic not in supported_topics}
+        )
+        if unsupported_topics:
+            raise SignalValidationError(
+                f"unsupported signal topic: {unsupported_topics[0]}"
+            )
         queue: list[tuple[int, int, str, int, Signal]] = [
             (start_tick, -signal.priority, signal.signal_id, index, signal)
             for index, signal in enumerate(initial)
@@ -328,6 +350,8 @@ class SignalNetwork:
                         None,
                         None,
                         "duplicate",
+                        source=signal.source,
+                        cause=signal.cause,
                     )
                 )
                 continue
@@ -358,6 +382,8 @@ class SignalNetwork:
                         None,
                         None,
                         "delivered",
+                        source=signal.source,
+                        cause=signal.cause,
                     )
                 )
                 continue
@@ -374,6 +400,8 @@ class SignalNetwork:
                             rule.rule_id,
                             rule.effect,
                             "inhibited",
+                            source=signal.source,
+                            cause=signal.cause,
                         )
                     )
                     continue
@@ -423,6 +451,10 @@ class SignalNetwork:
                             rule.effect,
                             "expired",
                             derived_signal_id=derived.signal_id,
+                            source=signal.source,
+                            cause=signal.cause,
+                            derived_source=derived.source,
+                            derived_cause=derived.cause,
                         )
                     )
                     continue
@@ -446,6 +478,10 @@ class SignalNetwork:
                         rule.effect,
                         "propagated",
                         derived_signal_id=derived.signal_id,
+                        source=signal.source,
+                        cause=signal.cause,
+                        derived_source=derived.source,
+                        derived_cause=derived.cause,
                     )
                 )
 

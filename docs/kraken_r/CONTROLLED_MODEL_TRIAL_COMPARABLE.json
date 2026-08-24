@@ -1,0 +1,1196 @@
+{
+  "claim_reason": "Model proposals are candidate declarations; this harness has no independent execution settlement.",
+  "claim_status": "not_claimed",
+  "control_errors": [],
+  "mode_rates": {
+    "base_model": 0.0,
+    "kraken_ablated": 0.0,
+    "kraken_mediated": 1.0
+  },
+  "observed_deltas": {
+    "kraken_mediated_minus_ablated": 1.0,
+    "kraken_mediated_minus_base": 1.0
+  },
+  "results": [
+    {
+      "adapter_accepted": false,
+      "configuration_fingerprint": "cd240f13049c4476ad8a9c15793a3a433de6cc840a365c274e046b7af9f65458",
+      "context_hash": "bef18f9c5b1ef6662fe962384e08c1ddec53c38552ec538a549482e9bf331aa5",
+      "failure_code": "malformed_output",
+      "failure_message": "provider output is not JSON",
+      "invocation": {
+        "failure_code": "malformed_output",
+        "failure_envelope_hash": "ba84b39b2caa26dd2ab0ba0eb8fa3184e45af7c7d4b9172f743540a8cef33ec4",
+        "failure_message": "provider output is not JSON",
+        "input_hash": "408635305e2fb7656bbd3975992a96adc1ff8dafd78772eb88b67f13a71db605",
+        "input_tokens": 164,
+        "model_id": "gpt-4o-mini",
+        "nondeterministic_generation": true,
+        "output_hash": "fd45f6ad8ee3c31ecf73b434f540d1608fe07a0f1253c84f88e45519a21ca6b8",
+        "output_tokens": 128,
+        "proposal": null,
+        "provider_id": "replit_openai_compatible",
+        "raw_output": "{\n  \"proposal\": \"Develop a short analytical brief that evaluates the current market trends and their implications for our strategic planning. The brief will include a comprehensive analysis of competitor activities, consumer behavior shifts, and potential opportunities for growth. It will be structured to provide actionable insights that can inform decision-making processes within the organization.\",\n  \"reasoning\": \"The analytical brief will serve as a critical tool for understanding the dynamic market landscape, enabling the organization to adapt its strategies effectively. By focusing on current trends and competitor analysis, we can identify areas for innovation and improvement, ensuring that our strategic planning is data-driven and aligned with market demands.\",\n ",
+        "request": {
+          "configuration_fingerprint": "cd240f13049c4476ad8a9c15793a3a433de6cc840a365c274e046b7af9f65458",
+          "context": {
+            "allowed_route_ids": [
+              "path-alpha",
+              "path-beta"
+            ],
+            "context_id": "evaluation-base_model-routing-heldout-brief",
+            "objective_description": "Draft a bounded proposal for a short analytical brief.",
+            "objective_id": "routing-heldout-brief-objective",
+            "provenance": {
+              "objective_id": "routing-heldout-brief-objective",
+              "source": "kraken_r_cycle",
+              "task_state_id": "routing-heldout-brief-objective-state-5",
+              "task_state_version": 5,
+              "transaction_id": "routing-heldout-brief-transaction"
+            },
+            "route_scores": [
+              [
+                "path-alpha",
+                0.5
+              ],
+              [
+                "path-beta",
+                0.5
+              ]
+            ],
+            "task_phase": "authorized",
+            "task_state_id": "routing-heldout-brief-objective-state-5",
+            "task_state_version": 5,
+            "transaction_id": "routing-heldout-brief-transaction"
+          },
+          "input_hash": "408635305e2fb7656bbd3975992a96adc1ff8dafd78772eb88b67f13a71db605",
+          "max_tokens": 128,
+          "model_id": "gpt-4o-mini",
+          "prompt": "Round 7 controlled proposal task.\nReturn one raw JSON object, without markdown fences, with exactly proposal, reasoning, and route_hint.\nRoute-code key (static across all conditions): R 0 0 0=path-alpha, R 0 0 1=path-beta; R 9 9 9=masked.\nroute_hint must be exactly path-alpha, path-beta, or null.\nThe route_hint is a suggestion only; do not report evidence, execution, settlement, success, confidence, action, goal, or learning.\nTask: Draft a bounded proposal for a short analytical brief.\nOrganizational context: candidate_route_code=R 9 9 9; candidate_scores_code=0 0 0 0 0 0.................................................................................................................................\n",
+          "prompt_template_version": "round-7-eval-v1",
+          "request_id": "routing-heldout-brief-base_model",
+          "temperature": 0.0
+        },
+        "status": "failed"
+      },
+      "max_tokens": 128,
+      "mode": "base_model",
+      "model_id": "gpt-4o-mini",
+      "model_route_hint": null,
+      "passed": false,
+      "prompt_hash": "3aaae7da796a561f77e4f0635555302e5833187f17bbd03519118c948af1c335",
+      "prompt_length": 708,
+      "provider_configuration_fingerprint": "6a38cc94844b55183fb2d5e5c02b9a480747cba52770f5e8b91751a14f151269",
+      "provider_id": "replit_openai_compatible",
+      "reported_input_tokens": 164,
+      "reported_output_tokens": 128,
+      "request_id": "routing-heldout-brief-base_model",
+      "selected_route_id": null,
+      "structural_replay": {
+        "generation_replayed": false,
+        "output_hash": "fd45f6ad8ee3c31ecf73b434f540d1608fe07a0f1253c84f88e45519a21ca6b8",
+        "proposal": null,
+        "request_hash": "408635305e2fb7656bbd3975992a96adc1ff8dafd78772eb88b67f13a71db605",
+        "status": "failed",
+        "structure_replayed": true
+      },
+      "task_id": "routing-heldout-brief",
+      "temperature": 0.0
+    },
+    {
+      "adapter_accepted": true,
+      "configuration_fingerprint": "cd240f13049c4476ad8a9c15793a3a433de6cc840a365c274e046b7af9f65458",
+      "context_hash": "087587762f785a3b4ba708bf51acaf259d1a890590e7395a09f989f7ac991554",
+      "failure_code": null,
+      "failure_message": null,
+      "invocation": {
+        "failure_code": null,
+        "failure_envelope_hash": null,
+        "failure_message": null,
+        "input_hash": "59b447f2aa26f9704dfca0d75cd37338f8412c8443ca2065f5ecb7becf5f2113",
+        "input_tokens": 164,
+        "model_id": "gpt-4o-mini",
+        "nondeterministic_generation": true,
+        "output_hash": "72383fbf515e549e2a7b8c3c237a1e0129081d9e8ed132784ea28dd4b43e5645",
+        "output_tokens": 96,
+        "proposal": {
+          "declared_only": true,
+          "objective_id": "routing-heldout-brief-objective",
+          "proposal": "Develop a short analytical brief that evaluates the impact of recent market trends on consumer behavior, focusing on the implications for our product strategy.",
+          "proposal_id": "routing-heldout-brief-kraken_mediated-proposal",
+          "reasoning": "This brief will provide insights into how shifts in the market are influencing consumer preferences, enabling us to adjust our product offerings accordingly. By analyzing current data and trends, we can make informed decisions that align with consumer needs and enhance our competitive edge.",
+          "request_id": "routing-heldout-brief-kraken_mediated",
+          "route_hint": "path-beta"
+        },
+        "provider_id": "replit_openai_compatible",
+        "raw_output": "{\n  \"proposal\": \"Develop a short analytical brief that evaluates the impact of recent market trends on consumer behavior, focusing on the implications for our product strategy.\",\n  \"reasoning\": \"This brief will provide insights into how shifts in the market are influencing consumer preferences, enabling us to adjust our product offerings accordingly. By analyzing current data and trends, we can make informed decisions that align with consumer needs and enhance our competitive edge.\",\n  \"route_hint\": \"path-beta\"\n}",
+        "request": {
+          "configuration_fingerprint": "cd240f13049c4476ad8a9c15793a3a433de6cc840a365c274e046b7af9f65458",
+          "context": {
+            "allowed_route_ids": [
+              "path-alpha",
+              "path-beta"
+            ],
+            "context_id": "evaluation-kraken_mediated-routing-heldout-brief",
+            "objective_description": "Draft a bounded proposal for a short analytical brief.",
+            "objective_id": "routing-heldout-brief-objective",
+            "provenance": {
+              "objective_id": "routing-heldout-brief-objective",
+              "source": "kraken_r_cycle",
+              "task_state_id": "routing-heldout-brief-objective-state-5",
+              "task_state_version": 5,
+              "transaction_id": "routing-heldout-brief-transaction"
+            },
+            "route_scores": [
+              [
+                "path-beta",
+                0.5
+              ],
+              [
+                "path-alpha",
+                0.4
+              ]
+            ],
+            "task_phase": "authorized",
+            "task_state_id": "routing-heldout-brief-objective-state-5",
+            "task_state_version": 5,
+            "transaction_id": "routing-heldout-brief-transaction"
+          },
+          "input_hash": "59b447f2aa26f9704dfca0d75cd37338f8412c8443ca2065f5ecb7becf5f2113",
+          "max_tokens": 128,
+          "model_id": "gpt-4o-mini",
+          "prompt": "Round 7 controlled proposal task.\nReturn one raw JSON object, without markdown fences, with exactly proposal, reasoning, and route_hint.\nRoute-code key (static across all conditions): R 0 0 0=path-alpha, R 0 0 1=path-beta; R 9 9 9=masked.\nroute_hint must be exactly path-alpha, path-beta, or null.\nThe route_hint is a suggestion only; do not report evidence, execution, settlement, success, confidence, action, goal, or learning.\nTask: Draft a bounded proposal for a short analytical brief.\nOrganizational context: candidate_route_code=R 0 0 1; candidate_scores_code=0 4 0 0 5 0.................................................................................................................................\n",
+          "prompt_template_version": "round-7-eval-v1",
+          "request_id": "routing-heldout-brief-kraken_mediated",
+          "temperature": 0.0
+        },
+        "status": "accepted"
+      },
+      "max_tokens": 128,
+      "mode": "kraken_mediated",
+      "model_id": "gpt-4o-mini",
+      "model_route_hint": "path-beta",
+      "passed": true,
+      "prompt_hash": "1c06dd264b37167c9ccc06464cac9259376ec49ec2296973af4dedeb6200f6ef",
+      "prompt_length": 708,
+      "provider_configuration_fingerprint": "6a38cc94844b55183fb2d5e5c02b9a480747cba52770f5e8b91751a14f151269",
+      "provider_id": "replit_openai_compatible",
+      "reported_input_tokens": 164,
+      "reported_output_tokens": 96,
+      "request_id": "routing-heldout-brief-kraken_mediated",
+      "selected_route_id": "path-beta",
+      "structural_replay": {
+        "generation_replayed": false,
+        "output_hash": "72383fbf515e549e2a7b8c3c237a1e0129081d9e8ed132784ea28dd4b43e5645",
+        "proposal": {
+          "declared_only": true,
+          "objective_id": "routing-heldout-brief-objective",
+          "proposal": "Develop a short analytical brief that evaluates the impact of recent market trends on consumer behavior, focusing on the implications for our product strategy.",
+          "proposal_id": "routing-heldout-brief-kraken_mediated-proposal",
+          "reasoning": "This brief will provide insights into how shifts in the market are influencing consumer preferences, enabling us to adjust our product offerings accordingly. By analyzing current data and trends, we can make informed decisions that align with consumer needs and enhance our competitive edge.",
+          "request_id": "routing-heldout-brief-kraken_mediated",
+          "route_hint": "path-beta"
+        },
+        "request_hash": "59b447f2aa26f9704dfca0d75cd37338f8412c8443ca2065f5ecb7becf5f2113",
+        "status": "accepted",
+        "structure_replayed": true
+      },
+      "task_id": "routing-heldout-brief",
+      "temperature": 0.0
+    },
+    {
+      "adapter_accepted": true,
+      "configuration_fingerprint": "cd240f13049c4476ad8a9c15793a3a433de6cc840a365c274e046b7af9f65458",
+      "context_hash": "36813df51082abd381dc4dd6afb1b6a513f57b6be41d5ef7b46a2f10d6c9d507",
+      "failure_code": null,
+      "failure_message": null,
+      "invocation": {
+        "failure_code": null,
+        "failure_envelope_hash": null,
+        "failure_message": null,
+        "input_hash": "162706eb7002e7e55873ec33ba1c785a2eea4c2b22769290dc4d48af4ba549e0",
+        "input_tokens": 164,
+        "model_id": "gpt-4o-mini",
+        "nondeterministic_generation": true,
+        "output_hash": "4d8f8c2904274d997d3fe0becd96c0992b61c86112563adcd0d1592e3bf03021",
+        "output_tokens": 106,
+        "proposal": {
+          "declared_only": true,
+          "objective_id": "routing-heldout-brief-objective",
+          "proposal": "Draft a short analytical brief that evaluates the current market trends and their implications for our strategic initiatives. The brief should include a summary of key findings, potential opportunities, and recommended actions based on the analysis.",
+          "proposal_id": "routing-heldout-brief-kraken_ablated-proposal",
+          "reasoning": "This proposal aims to provide a concise yet comprehensive overview of market dynamics that can inform decision-making and strategic planning. By focusing on current trends, the organization can better align its initiatives with market demands and enhance its competitive positioning.",
+          "request_id": "routing-heldout-brief-kraken_ablated",
+          "route_hint": "path-alpha"
+        },
+        "provider_id": "replit_openai_compatible",
+        "raw_output": "{\n  \"proposal\": \"Draft a short analytical brief that evaluates the current market trends and their implications for our strategic initiatives. The brief should include a summary of key findings, potential opportunities, and recommended actions based on the analysis.\",\n  \"reasoning\": \"This proposal aims to provide a concise yet comprehensive overview of market dynamics that can inform decision-making and strategic planning. By focusing on current trends, the organization can better align its initiatives with market demands and enhance its competitive positioning.\",\n  \"route_hint\": \"path-alpha\"\n}",
+        "request": {
+          "configuration_fingerprint": "cd240f13049c4476ad8a9c15793a3a433de6cc840a365c274e046b7af9f65458",
+          "context": {
+            "allowed_route_ids": [
+              "path-alpha",
+              "path-beta"
+            ],
+            "context_id": "evaluation-kraken_ablated-routing-heldout-brief",
+            "objective_description": "Draft a bounded proposal for a short analytical brief.",
+            "objective_id": "routing-heldout-brief-objective",
+            "provenance": {
+              "objective_id": "routing-heldout-brief-objective",
+              "source": "kraken_r_cycle",
+              "task_state_id": "routing-heldout-brief-objective-state-5",
+              "task_state_version": 5,
+              "transaction_id": "routing-heldout-brief-transaction"
+            },
+            "route_scores": [
+              [
+                "path-alpha",
+                0.5
+              ],
+              [
+                "path-beta",
+                0.5
+              ]
+            ],
+            "task_phase": "authorized",
+            "task_state_id": "routing-heldout-brief-objective-state-5",
+            "task_state_version": 5,
+            "transaction_id": "routing-heldout-brief-transaction"
+          },
+          "input_hash": "162706eb7002e7e55873ec33ba1c785a2eea4c2b22769290dc4d48af4ba549e0",
+          "max_tokens": 128,
+          "model_id": "gpt-4o-mini",
+          "prompt": "Round 7 controlled proposal task.\nReturn one raw JSON object, without markdown fences, with exactly proposal, reasoning, and route_hint.\nRoute-code key (static across all conditions): R 0 0 0=path-alpha, R 0 0 1=path-beta; R 9 9 9=masked.\nroute_hint must be exactly path-alpha, path-beta, or null.\nThe route_hint is a suggestion only; do not report evidence, execution, settlement, success, confidence, action, goal, or learning.\nTask: Draft a bounded proposal for a short analytical brief.\nOrganizational context: candidate_route_code=R 0 0 0; candidate_scores_code=0 5 0 0 5 0.................................................................................................................................\n",
+          "prompt_template_version": "round-7-eval-v1",
+          "request_id": "routing-heldout-brief-kraken_ablated",
+          "temperature": 0.0
+        },
+        "status": "accepted"
+      },
+      "max_tokens": 128,
+      "mode": "kraken_ablated",
+      "model_id": "gpt-4o-mini",
+      "model_route_hint": "path-alpha",
+      "passed": false,
+      "prompt_hash": "aa78a34a96df4973ed818a3e34bb43d71efacd6aca1c3f942e1c2a690475b7b1",
+      "prompt_length": 708,
+      "provider_configuration_fingerprint": "6a38cc94844b55183fb2d5e5c02b9a480747cba52770f5e8b91751a14f151269",
+      "provider_id": "replit_openai_compatible",
+      "reported_input_tokens": 164,
+      "reported_output_tokens": 106,
+      "request_id": "routing-heldout-brief-kraken_ablated",
+      "selected_route_id": "path-alpha",
+      "structural_replay": {
+        "generation_replayed": false,
+        "output_hash": "4d8f8c2904274d997d3fe0becd96c0992b61c86112563adcd0d1592e3bf03021",
+        "proposal": {
+          "declared_only": true,
+          "objective_id": "routing-heldout-brief-objective",
+          "proposal": "Draft a short analytical brief that evaluates the current market trends and their implications for our strategic initiatives. The brief should include a summary of key findings, potential opportunities, and recommended actions based on the analysis.",
+          "proposal_id": "routing-heldout-brief-kraken_ablated-proposal",
+          "reasoning": "This proposal aims to provide a concise yet comprehensive overview of market dynamics that can inform decision-making and strategic planning. By focusing on current trends, the organization can better align its initiatives with market demands and enhance its competitive positioning.",
+          "request_id": "routing-heldout-brief-kraken_ablated",
+          "route_hint": "path-alpha"
+        },
+        "request_hash": "162706eb7002e7e55873ec33ba1c785a2eea4c2b22769290dc4d48af4ba549e0",
+        "status": "accepted",
+        "structure_replayed": true
+      },
+      "task_id": "routing-heldout-brief",
+      "temperature": 0.0
+    },
+    {
+      "adapter_accepted": false,
+      "configuration_fingerprint": "cd240f13049c4476ad8a9c15793a3a433de6cc840a365c274e046b7af9f65458",
+      "context_hash": "9d2caf8bb0e03ab4807831f3189eb2877ffcb7d5bd1aa2eee0ba47b11b4f1b66",
+      "failure_code": "malformed_output",
+      "failure_message": "route_hint is outside the caller-provided route boundary",
+      "invocation": {
+        "failure_code": "malformed_output",
+        "failure_envelope_hash": "3e5dd1a9f315bb6b1fc30f22066bf2366cae850fc82b2bba017ad91b4a02d69e",
+        "failure_message": "route_hint is outside the caller-provided route boundary",
+        "input_hash": "42813e878acdab23cf1db2709f80fb68191a36a6342577ac0bf1017c6392f115",
+        "input_tokens": 163,
+        "model_id": "gpt-4o-mini",
+        "nondeterministic_generation": true,
+        "output_hash": "8c14536752316537cd45b4104d07858aad6a5cba2e57744ea09bd2446b4816b2",
+        "output_tokens": 77,
+        "proposal": null,
+        "provider_id": "replit_openai_compatible",
+        "raw_output": "{\n  \"proposal\": \"Conduct a comprehensive inventory review to assess current stock levels, identify discrepancies, and optimize inventory management processes.\",\n  \"reasoning\": \"An inventory review is essential to ensure accuracy in stock levels, reduce excess inventory, and improve overall operational efficiency. This will help in making informed decisions regarding restocking and resource allocation.\",\n  \"route_hint\": \"null\"\n}",
+        "request": {
+          "configuration_fingerprint": "cd240f13049c4476ad8a9c15793a3a433de6cc840a365c274e046b7af9f65458",
+          "context": {
+            "allowed_route_ids": [
+              "path-alpha",
+              "path-beta"
+            ],
+            "context_id": "evaluation-base_model-routing-heldout-inventory",
+            "objective_description": "Draft a bounded proposal for an inventory review.",
+            "objective_id": "routing-heldout-inventory-objective",
+            "provenance": {
+              "objective_id": "routing-heldout-inventory-objective",
+              "source": "kraken_r_cycle",
+              "task_state_id": "routing-heldout-inventory-objective-state-5",
+              "task_state_version": 5,
+              "transaction_id": "routing-heldout-inventory-transaction"
+            },
+            "route_scores": [
+              [
+                "path-alpha",
+                0.5
+              ],
+              [
+                "path-beta",
+                0.5
+              ]
+            ],
+            "task_phase": "authorized",
+            "task_state_id": "routing-heldout-inventory-objective-state-5",
+            "task_state_version": 5,
+            "transaction_id": "routing-heldout-inventory-transaction"
+          },
+          "input_hash": "42813e878acdab23cf1db2709f80fb68191a36a6342577ac0bf1017c6392f115",
+          "max_tokens": 128,
+          "model_id": "gpt-4o-mini",
+          "prompt": "Round 7 controlled proposal task.\nReturn one raw JSON object, without markdown fences, with exactly proposal, reasoning, and route_hint.\nRoute-code key (static across all conditions): R 0 0 0=path-alpha, R 0 0 1=path-beta; R 9 9 9=masked.\nroute_hint must be exactly path-alpha, path-beta, or null.\nThe route_hint is a suggestion only; do not report evidence, execution, settlement, success, confidence, action, goal, or learning.\nTask: Draft a bounded proposal for an inventory review.\nOrganizational context: candidate_route_code=R 9 9 9; candidate_scores_code=0 0 0 0 0 0.................................................................................................................................\n",
+          "prompt_template_version": "round-7-eval-v1",
+          "request_id": "routing-heldout-inventory-base_model",
+          "temperature": 0.0
+        },
+        "status": "failed"
+      },
+      "max_tokens": 128,
+      "mode": "base_model",
+      "model_id": "gpt-4o-mini",
+      "model_route_hint": null,
+      "passed": false,
+      "prompt_hash": "605813ca34e27d66e59c013deabad02d57793be28826fc947c7301da6c04012e",
+      "prompt_length": 703,
+      "provider_configuration_fingerprint": "6a38cc94844b55183fb2d5e5c02b9a480747cba52770f5e8b91751a14f151269",
+      "provider_id": "replit_openai_compatible",
+      "reported_input_tokens": 163,
+      "reported_output_tokens": 77,
+      "request_id": "routing-heldout-inventory-base_model",
+      "selected_route_id": null,
+      "structural_replay": {
+        "generation_replayed": false,
+        "output_hash": "8c14536752316537cd45b4104d07858aad6a5cba2e57744ea09bd2446b4816b2",
+        "proposal": null,
+        "request_hash": "42813e878acdab23cf1db2709f80fb68191a36a6342577ac0bf1017c6392f115",
+        "status": "failed",
+        "structure_replayed": true
+      },
+      "task_id": "routing-heldout-inventory",
+      "temperature": 0.0
+    },
+    {
+      "adapter_accepted": true,
+      "configuration_fingerprint": "cd240f13049c4476ad8a9c15793a3a433de6cc840a365c274e046b7af9f65458",
+      "context_hash": "1f0219bca6dfd7b59167ae736582c6c455bf2212790cba77c705500fcb927860",
+      "failure_code": null,
+      "failure_message": null,
+      "invocation": {
+        "failure_code": null,
+        "failure_envelope_hash": null,
+        "failure_message": null,
+        "input_hash": "94424f03659e3ed8c15c19ec64ac24f37ce6580d4fdb9b39212bfac4e6552761",
+        "input_tokens": 163,
+        "model_id": "gpt-4o-mini",
+        "nondeterministic_generation": true,
+        "output_hash": "9d60edfbec951f010e3ca790439badbfd83492cad284e805392406032d4b758d",
+        "output_tokens": 78,
+        "proposal": {
+          "declared_only": true,
+          "objective_id": "routing-heldout-inventory-objective",
+          "proposal": "Conduct a comprehensive inventory review to assess current stock levels, identify discrepancies, and optimize inventory management processes.",
+          "proposal_id": "routing-heldout-inventory-kraken_mediated-proposal",
+          "reasoning": "An inventory review is essential to ensure accuracy in stock levels, reduce excess inventory, and improve overall operational efficiency. This will help in making informed decisions regarding restocking and resource allocation.",
+          "request_id": "routing-heldout-inventory-kraken_mediated",
+          "route_hint": "path-beta"
+        },
+        "provider_id": "replit_openai_compatible",
+        "raw_output": "{\n  \"proposal\": \"Conduct a comprehensive inventory review to assess current stock levels, identify discrepancies, and optimize inventory management processes.\",\n  \"reasoning\": \"An inventory review is essential to ensure accuracy in stock levels, reduce excess inventory, and improve overall operational efficiency. This will help in making informed decisions regarding restocking and resource allocation.\",\n  \"route_hint\": \"path-beta\"\n}",
+        "request": {
+          "configuration_fingerprint": "cd240f13049c4476ad8a9c15793a3a433de6cc840a365c274e046b7af9f65458",
+          "context": {
+            "allowed_route_ids": [
+              "path-alpha",
+              "path-beta"
+            ],
+            "context_id": "evaluation-kraken_mediated-routing-heldout-inventory",
+            "objective_description": "Draft a bounded proposal for an inventory review.",
+            "objective_id": "routing-heldout-inventory-objective",
+            "provenance": {
+              "objective_id": "routing-heldout-inventory-objective",
+              "source": "kraken_r_cycle",
+              "task_state_id": "routing-heldout-inventory-objective-state-5",
+              "task_state_version": 5,
+              "transaction_id": "routing-heldout-inventory-transaction"
+            },
+            "route_scores": [
+              [
+                "path-beta",
+                0.5
+              ],
+              [
+                "path-alpha",
+                0.4
+              ]
+            ],
+            "task_phase": "authorized",
+            "task_state_id": "routing-heldout-inventory-objective-state-5",
+            "task_state_version": 5,
+            "transaction_id": "routing-heldout-inventory-transaction"
+          },
+          "input_hash": "94424f03659e3ed8c15c19ec64ac24f37ce6580d4fdb9b39212bfac4e6552761",
+          "max_tokens": 128,
+          "model_id": "gpt-4o-mini",
+          "prompt": "Round 7 controlled proposal task.\nReturn one raw JSON object, without markdown fences, with exactly proposal, reasoning, and route_hint.\nRoute-code key (static across all conditions): R 0 0 0=path-alpha, R 0 0 1=path-beta; R 9 9 9=masked.\nroute_hint must be exactly path-alpha, path-beta, or null.\nThe route_hint is a suggestion only; do not report evidence, execution, settlement, success, confidence, action, goal, or learning.\nTask: Draft a bounded proposal for an inventory review.\nOrganizational context: candidate_route_code=R 0 0 1; candidate_scores_code=0 4 0 0 5 0.................................................................................................................................\n",
+          "prompt_template_version": "round-7-eval-v1",
+          "request_id": "routing-heldout-inventory-kraken_mediated",
+          "temperature": 0.0
+        },
+        "status": "accepted"
+      },
+      "max_tokens": 128,
+      "mode": "kraken_mediated",
+      "model_id": "gpt-4o-mini",
+      "model_route_hint": "path-beta",
+      "passed": true,
+      "prompt_hash": "78b5e196bebe730930b22924a0411b0d6d1511300b9ecf5466f0c33b2fca5755",
+      "prompt_length": 703,
+      "provider_configuration_fingerprint": "6a38cc94844b55183fb2d5e5c02b9a480747cba52770f5e8b91751a14f151269",
+      "provider_id": "replit_openai_compatible",
+      "reported_input_tokens": 163,
+      "reported_output_tokens": 78,
+      "request_id": "routing-heldout-inventory-kraken_mediated",
+      "selected_route_id": "path-beta",
+      "structural_replay": {
+        "generation_replayed": false,
+        "output_hash": "9d60edfbec951f010e3ca790439badbfd83492cad284e805392406032d4b758d",
+        "proposal": {
+          "declared_only": true,
+          "objective_id": "routing-heldout-inventory-objective",
+          "proposal": "Conduct a comprehensive inventory review to assess current stock levels, identify discrepancies, and optimize inventory management processes.",
+          "proposal_id": "routing-heldout-inventory-kraken_mediated-proposal",
+          "reasoning": "An inventory review is essential to ensure accuracy in stock levels, reduce excess inventory, and improve overall operational efficiency. This will help in making informed decisions regarding restocking and resource allocation.",
+          "request_id": "routing-heldout-inventory-kraken_mediated",
+          "route_hint": "path-beta"
+        },
+        "request_hash": "94424f03659e3ed8c15c19ec64ac24f37ce6580d4fdb9b39212bfac4e6552761",
+        "status": "accepted",
+        "structure_replayed": true
+      },
+      "task_id": "routing-heldout-inventory",
+      "temperature": 0.0
+    },
+    {
+      "adapter_accepted": true,
+      "configuration_fingerprint": "cd240f13049c4476ad8a9c15793a3a433de6cc840a365c274e046b7af9f65458",
+      "context_hash": "fce3a33c1efc642fba58a0dfcfe18cf589cd7b3b9cb513342b4aeaa51af0cfad",
+      "failure_code": null,
+      "failure_message": null,
+      "invocation": {
+        "failure_code": null,
+        "failure_envelope_hash": null,
+        "failure_message": null,
+        "input_hash": "e22e97240e5d92d7882f055e1fcecad19dc4ebb274cbdebd22c59e17113d3738",
+        "input_tokens": 163,
+        "model_id": "gpt-4o-mini",
+        "nondeterministic_generation": true,
+        "output_hash": "71f9c524c0622bd97100bac3c6fedf639a36af49d7f3904c847326067d665673",
+        "output_tokens": 86,
+        "proposal": {
+          "declared_only": true,
+          "objective_id": "routing-heldout-inventory-objective",
+          "proposal": "Conduct a comprehensive inventory review to assess current stock levels, identify discrepancies, and optimize inventory management processes.",
+          "proposal_id": "routing-heldout-inventory-kraken_ablated-proposal",
+          "reasoning": "An inventory review is essential to ensure accuracy in stock levels, reduce excess inventory, and improve overall operational efficiency. This will help in making informed decisions regarding restocking and minimizing costs associated with overstocking or stockouts.",
+          "request_id": "routing-heldout-inventory-kraken_ablated",
+          "route_hint": "path-alpha"
+        },
+        "provider_id": "replit_openai_compatible",
+        "raw_output": "{\n  \"proposal\": \"Conduct a comprehensive inventory review to assess current stock levels, identify discrepancies, and optimize inventory management processes.\",\n  \"reasoning\": \"An inventory review is essential to ensure accuracy in stock levels, reduce excess inventory, and improve overall operational efficiency. This will help in making informed decisions regarding restocking and minimizing costs associated with overstocking or stockouts.\",\n  \"route_hint\": \"path-alpha\"\n}",
+        "request": {
+          "configuration_fingerprint": "cd240f13049c4476ad8a9c15793a3a433de6cc840a365c274e046b7af9f65458",
+          "context": {
+            "allowed_route_ids": [
+              "path-alpha",
+              "path-beta"
+            ],
+            "context_id": "evaluation-kraken_ablated-routing-heldout-inventory",
+            "objective_description": "Draft a bounded proposal for an inventory review.",
+            "objective_id": "routing-heldout-inventory-objective",
+            "provenance": {
+              "objective_id": "routing-heldout-inventory-objective",
+              "source": "kraken_r_cycle",
+              "task_state_id": "routing-heldout-inventory-objective-state-5",
+              "task_state_version": 5,
+              "transaction_id": "routing-heldout-inventory-transaction"
+            },
+            "route_scores": [
+              [
+                "path-alpha",
+                0.5
+              ],
+              [
+                "path-beta",
+                0.5
+              ]
+            ],
+            "task_phase": "authorized",
+            "task_state_id": "routing-heldout-inventory-objective-state-5",
+            "task_state_version": 5,
+            "transaction_id": "routing-heldout-inventory-transaction"
+          },
+          "input_hash": "e22e97240e5d92d7882f055e1fcecad19dc4ebb274cbdebd22c59e17113d3738",
+          "max_tokens": 128,
+          "model_id": "gpt-4o-mini",
+          "prompt": "Round 7 controlled proposal task.\nReturn one raw JSON object, without markdown fences, with exactly proposal, reasoning, and route_hint.\nRoute-code key (static across all conditions): R 0 0 0=path-alpha, R 0 0 1=path-beta; R 9 9 9=masked.\nroute_hint must be exactly path-alpha, path-beta, or null.\nThe route_hint is a suggestion only; do not report evidence, execution, settlement, success, confidence, action, goal, or learning.\nTask: Draft a bounded proposal for an inventory review.\nOrganizational context: candidate_route_code=R 0 0 0; candidate_scores_code=0 5 0 0 5 0.................................................................................................................................\n",
+          "prompt_template_version": "round-7-eval-v1",
+          "request_id": "routing-heldout-inventory-kraken_ablated",
+          "temperature": 0.0
+        },
+        "status": "accepted"
+      },
+      "max_tokens": 128,
+      "mode": "kraken_ablated",
+      "model_id": "gpt-4o-mini",
+      "model_route_hint": "path-alpha",
+      "passed": false,
+      "prompt_hash": "441d288d0b5998d1f36bc7760a3d447b8b754653cbae74fa708cc449373297b5",
+      "prompt_length": 703,
+      "provider_configuration_fingerprint": "6a38cc94844b55183fb2d5e5c02b9a480747cba52770f5e8b91751a14f151269",
+      "provider_id": "replit_openai_compatible",
+      "reported_input_tokens": 163,
+      "reported_output_tokens": 86,
+      "request_id": "routing-heldout-inventory-kraken_ablated",
+      "selected_route_id": "path-alpha",
+      "structural_replay": {
+        "generation_replayed": false,
+        "output_hash": "71f9c524c0622bd97100bac3c6fedf639a36af49d7f3904c847326067d665673",
+        "proposal": {
+          "declared_only": true,
+          "objective_id": "routing-heldout-inventory-objective",
+          "proposal": "Conduct a comprehensive inventory review to assess current stock levels, identify discrepancies, and optimize inventory management processes.",
+          "proposal_id": "routing-heldout-inventory-kraken_ablated-proposal",
+          "reasoning": "An inventory review is essential to ensure accuracy in stock levels, reduce excess inventory, and improve overall operational efficiency. This will help in making informed decisions regarding restocking and minimizing costs associated with overstocking or stockouts.",
+          "request_id": "routing-heldout-inventory-kraken_ablated",
+          "route_hint": "path-alpha"
+        },
+        "request_hash": "e22e97240e5d92d7882f055e1fcecad19dc4ebb274cbdebd22c59e17113d3738",
+        "status": "accepted",
+        "structure_replayed": true
+      },
+      "task_id": "routing-heldout-inventory",
+      "temperature": 0.0
+    },
+    {
+      "adapter_accepted": true,
+      "configuration_fingerprint": "cd240f13049c4476ad8a9c15793a3a433de6cc840a365c274e046b7af9f65458",
+      "context_hash": "23a929837a2405db77334dd6b06044b541a5a00d5a0a917ffbb735bdecd219d5",
+      "failure_code": null,
+      "failure_message": null,
+      "invocation": {
+        "failure_code": null,
+        "failure_envelope_hash": null,
+        "failure_message": null,
+        "input_hash": "bf24ff92383c938637b6694d264af41f8e8c294f686cc1e797bb478ed13639b2",
+        "input_tokens": 164,
+        "model_id": "gpt-4o-mini",
+        "nondeterministic_generation": true,
+        "output_hash": "fd261582da213a7dc786fea0797020bd11af07f840e0608bf1fb7f180c6e23e1",
+        "output_tokens": 121,
+        "proposal": {
+          "declared_only": true,
+          "objective_id": "routing-heldout-risk-objective",
+          "proposal": "Conduct a comprehensive review of the risk register to identify and assess potential risks that may impact organizational objectives. This review will involve gathering input from key stakeholders, analyzing current risk data, and updating the risk register accordingly to ensure it reflects the most current risk landscape.",
+          "proposal_id": "routing-heldout-risk-base_model-proposal",
+          "reasoning": "A thorough review of the risk register is essential to maintain an accurate understanding of potential risks and their implications for the organization. By engaging stakeholders and updating the register, we can enhance our risk management strategies and ensure that we are prepared for any emerging challenges.",
+          "request_id": "routing-heldout-risk-base_model",
+          "route_hint": null
+        },
+        "provider_id": "replit_openai_compatible",
+        "raw_output": "{\n  \"proposal\": \"Conduct a comprehensive review of the risk register to identify and assess potential risks that may impact organizational objectives. This review will involve gathering input from key stakeholders, analyzing current risk data, and updating the risk register accordingly to ensure it reflects the most current risk landscape.\",\n  \"reasoning\": \"A thorough review of the risk register is essential to maintain an accurate understanding of potential risks and their implications for the organization. By engaging stakeholders and updating the register, we can enhance our risk management strategies and ensure that we are prepared for any emerging challenges.\",\n  \"route_hint\": null\n}",
+        "request": {
+          "configuration_fingerprint": "cd240f13049c4476ad8a9c15793a3a433de6cc840a365c274e046b7af9f65458",
+          "context": {
+            "allowed_route_ids": [
+              "path-alpha",
+              "path-beta"
+            ],
+            "context_id": "evaluation-base_model-routing-heldout-risk",
+            "objective_description": "Draft a bounded proposal for a risk register review.",
+            "objective_id": "routing-heldout-risk-objective",
+            "provenance": {
+              "objective_id": "routing-heldout-risk-objective",
+              "source": "kraken_r_cycle",
+              "task_state_id": "routing-heldout-risk-objective-state-5",
+              "task_state_version": 5,
+              "transaction_id": "routing-heldout-risk-transaction"
+            },
+            "route_scores": [
+              [
+                "path-alpha",
+                0.5
+              ],
+              [
+                "path-beta",
+                0.5
+              ]
+            ],
+            "task_phase": "authorized",
+            "task_state_id": "routing-heldout-risk-objective-state-5",
+            "task_state_version": 5,
+            "transaction_id": "routing-heldout-risk-transaction"
+          },
+          "input_hash": "bf24ff92383c938637b6694d264af41f8e8c294f686cc1e797bb478ed13639b2",
+          "max_tokens": 128,
+          "model_id": "gpt-4o-mini",
+          "prompt": "Round 7 controlled proposal task.\nReturn one raw JSON object, without markdown fences, with exactly proposal, reasoning, and route_hint.\nRoute-code key (static across all conditions): R 0 0 0=path-alpha, R 0 0 1=path-beta; R 9 9 9=masked.\nroute_hint must be exactly path-alpha, path-beta, or null.\nThe route_hint is a suggestion only; do not report evidence, execution, settlement, success, confidence, action, goal, or learning.\nTask: Draft a bounded proposal for a risk register review.\nOrganizational context: candidate_route_code=R 9 9 9; candidate_scores_code=0 0 0 0 0 0.................................................................................................................................\n",
+          "prompt_template_version": "round-7-eval-v1",
+          "request_id": "routing-heldout-risk-base_model",
+          "temperature": 0.0
+        },
+        "status": "accepted"
+      },
+      "max_tokens": 128,
+      "mode": "base_model",
+      "model_id": "gpt-4o-mini",
+      "model_route_hint": null,
+      "passed": false,
+      "prompt_hash": "b66b53266d01890ecd6f02f2aad2e812292434d12648ab1e91d8fd469084d401",
+      "prompt_length": 706,
+      "provider_configuration_fingerprint": "6a38cc94844b55183fb2d5e5c02b9a480747cba52770f5e8b91751a14f151269",
+      "provider_id": "replit_openai_compatible",
+      "reported_input_tokens": 164,
+      "reported_output_tokens": 121,
+      "request_id": "routing-heldout-risk-base_model",
+      "selected_route_id": null,
+      "structural_replay": {
+        "generation_replayed": false,
+        "output_hash": "fd261582da213a7dc786fea0797020bd11af07f840e0608bf1fb7f180c6e23e1",
+        "proposal": {
+          "declared_only": true,
+          "objective_id": "routing-heldout-risk-objective",
+          "proposal": "Conduct a comprehensive review of the risk register to identify and assess potential risks that may impact organizational objectives. This review will involve gathering input from key stakeholders, analyzing current risk data, and updating the risk register accordingly to ensure it reflects the most current risk landscape.",
+          "proposal_id": "routing-heldout-risk-base_model-proposal",
+          "reasoning": "A thorough review of the risk register is essential to maintain an accurate understanding of potential risks and their implications for the organization. By engaging stakeholders and updating the register, we can enhance our risk management strategies and ensure that we are prepared for any emerging challenges.",
+          "request_id": "routing-heldout-risk-base_model",
+          "route_hint": null
+        },
+        "request_hash": "bf24ff92383c938637b6694d264af41f8e8c294f686cc1e797bb478ed13639b2",
+        "status": "accepted",
+        "structure_replayed": true
+      },
+      "task_id": "routing-heldout-risk",
+      "temperature": 0.0
+    },
+    {
+      "adapter_accepted": true,
+      "configuration_fingerprint": "cd240f13049c4476ad8a9c15793a3a433de6cc840a365c274e046b7af9f65458",
+      "context_hash": "72e6d8e2e89c1fbe76780edbf88a94bc66aefa6ebe877288cdc572516127c012",
+      "failure_code": null,
+      "failure_message": null,
+      "invocation": {
+        "failure_code": null,
+        "failure_envelope_hash": null,
+        "failure_message": null,
+        "input_hash": "78c7ed76c4a6bfde0403611bac4bec36861ce104e27544276f237d84bf9f80b5",
+        "input_tokens": 164,
+        "model_id": "gpt-4o-mini",
+        "nondeterministic_generation": true,
+        "output_hash": "6fa9f0f8670266f252ec2b8968c16561b6e5f961a3146b8c441e3932c9d6a1b2",
+        "output_tokens": 114,
+        "proposal": {
+          "declared_only": true,
+          "objective_id": "routing-heldout-risk-objective",
+          "proposal": "Conduct a comprehensive review of the risk register to identify and assess potential risks that may impact project outcomes. This review will involve gathering input from key stakeholders, analyzing existing risk data, and updating the risk register to reflect current project conditions and risk management strategies.",
+          "proposal_id": "routing-heldout-risk-kraken_mediated-proposal",
+          "reasoning": "A thorough review of the risk register is essential to ensure that all potential risks are identified and appropriately managed. By engaging stakeholders and utilizing updated data, the organization can enhance its risk management practices and improve project resilience.",
+          "request_id": "routing-heldout-risk-kraken_mediated",
+          "route_hint": "path-beta"
+        },
+        "provider_id": "replit_openai_compatible",
+        "raw_output": "{\n  \"proposal\": \"Conduct a comprehensive review of the risk register to identify and assess potential risks that may impact project outcomes. This review will involve gathering input from key stakeholders, analyzing existing risk data, and updating the risk register to reflect current project conditions and risk management strategies.\",\n  \"reasoning\": \"A thorough review of the risk register is essential to ensure that all potential risks are identified and appropriately managed. By engaging stakeholders and utilizing updated data, the organization can enhance its risk management practices and improve project resilience.\",\n  \"route_hint\": \"path-beta\"\n}",
+        "request": {
+          "configuration_fingerprint": "cd240f13049c4476ad8a9c15793a3a433de6cc840a365c274e046b7af9f65458",
+          "context": {
+            "allowed_route_ids": [
+              "path-alpha",
+              "path-beta"
+            ],
+            "context_id": "evaluation-kraken_mediated-routing-heldout-risk",
+            "objective_description": "Draft a bounded proposal for a risk register review.",
+            "objective_id": "routing-heldout-risk-objective",
+            "provenance": {
+              "objective_id": "routing-heldout-risk-objective",
+              "source": "kraken_r_cycle",
+              "task_state_id": "routing-heldout-risk-objective-state-5",
+              "task_state_version": 5,
+              "transaction_id": "routing-heldout-risk-transaction"
+            },
+            "route_scores": [
+              [
+                "path-beta",
+                0.5
+              ],
+              [
+                "path-alpha",
+                0.4
+              ]
+            ],
+            "task_phase": "authorized",
+            "task_state_id": "routing-heldout-risk-objective-state-5",
+            "task_state_version": 5,
+            "transaction_id": "routing-heldout-risk-transaction"
+          },
+          "input_hash": "78c7ed76c4a6bfde0403611bac4bec36861ce104e27544276f237d84bf9f80b5",
+          "max_tokens": 128,
+          "model_id": "gpt-4o-mini",
+          "prompt": "Round 7 controlled proposal task.\nReturn one raw JSON object, without markdown fences, with exactly proposal, reasoning, and route_hint.\nRoute-code key (static across all conditions): R 0 0 0=path-alpha, R 0 0 1=path-beta; R 9 9 9=masked.\nroute_hint must be exactly path-alpha, path-beta, or null.\nThe route_hint is a suggestion only; do not report evidence, execution, settlement, success, confidence, action, goal, or learning.\nTask: Draft a bounded proposal for a risk register review.\nOrganizational context: candidate_route_code=R 0 0 1; candidate_scores_code=0 4 0 0 5 0.................................................................................................................................\n",
+          "prompt_template_version": "round-7-eval-v1",
+          "request_id": "routing-heldout-risk-kraken_mediated",
+          "temperature": 0.0
+        },
+        "status": "accepted"
+      },
+      "max_tokens": 128,
+      "mode": "kraken_mediated",
+      "model_id": "gpt-4o-mini",
+      "model_route_hint": "path-beta",
+      "passed": true,
+      "prompt_hash": "4b337aa478462afc86657faa88f9e46cb37b1469e3e21843986ee6c7767dd06d",
+      "prompt_length": 706,
+      "provider_configuration_fingerprint": "6a38cc94844b55183fb2d5e5c02b9a480747cba52770f5e8b91751a14f151269",
+      "provider_id": "replit_openai_compatible",
+      "reported_input_tokens": 164,
+      "reported_output_tokens": 114,
+      "request_id": "routing-heldout-risk-kraken_mediated",
+      "selected_route_id": "path-beta",
+      "structural_replay": {
+        "generation_replayed": false,
+        "output_hash": "6fa9f0f8670266f252ec2b8968c16561b6e5f961a3146b8c441e3932c9d6a1b2",
+        "proposal": {
+          "declared_only": true,
+          "objective_id": "routing-heldout-risk-objective",
+          "proposal": "Conduct a comprehensive review of the risk register to identify and assess potential risks that may impact project outcomes. This review will involve gathering input from key stakeholders, analyzing existing risk data, and updating the risk register to reflect current project conditions and risk management strategies.",
+          "proposal_id": "routing-heldout-risk-kraken_mediated-proposal",
+          "reasoning": "A thorough review of the risk register is essential to ensure that all potential risks are identified and appropriately managed. By engaging stakeholders and utilizing updated data, the organization can enhance its risk management practices and improve project resilience.",
+          "request_id": "routing-heldout-risk-kraken_mediated",
+          "route_hint": "path-beta"
+        },
+        "request_hash": "78c7ed76c4a6bfde0403611bac4bec36861ce104e27544276f237d84bf9f80b5",
+        "status": "accepted",
+        "structure_replayed": true
+      },
+      "task_id": "routing-heldout-risk",
+      "temperature": 0.0
+    },
+    {
+      "adapter_accepted": true,
+      "configuration_fingerprint": "cd240f13049c4476ad8a9c15793a3a433de6cc840a365c274e046b7af9f65458",
+      "context_hash": "2552c3e6b34d5f681ff89c1dc1d368b4ea557b9f7a7e0c7107d317dc358b3fe9",
+      "failure_code": null,
+      "failure_message": null,
+      "invocation": {
+        "failure_code": null,
+        "failure_envelope_hash": null,
+        "failure_message": null,
+        "input_hash": "397706ac0ef070c2fa88783ee275fe7c038b767eeda85b7c3946302cf507485b",
+        "input_tokens": 164,
+        "model_id": "gpt-4o-mini",
+        "nondeterministic_generation": true,
+        "output_hash": "4a7d6ef13bd6dbcecb0cc1584d86862dcc6b31f8a0bb750e40d2ced167e05a05",
+        "output_tokens": 118,
+        "proposal": {
+          "declared_only": true,
+          "objective_id": "routing-heldout-risk-objective",
+          "proposal": "Conduct a comprehensive review of the risk register to identify and assess potential risks that may impact project outcomes. This review will involve gathering input from key stakeholders, analyzing existing risk data, and updating the risk register accordingly to ensure it reflects the current risk landscape.",
+          "proposal_id": "routing-heldout-risk-kraken_ablated-proposal",
+          "reasoning": "A thorough review of the risk register is essential to proactively manage risks and enhance project resilience. By engaging stakeholders and updating the register, we can ensure that all potential risks are identified and mitigated effectively, leading to better project outcomes.",
+          "request_id": "routing-heldout-risk-kraken_ablated",
+          "route_hint": "path-alpha"
+        },
+        "provider_id": "replit_openai_compatible",
+        "raw_output": "{\n  \"proposal\": \"Conduct a comprehensive review of the risk register to identify and assess potential risks that may impact project outcomes. This review will involve gathering input from key stakeholders, analyzing existing risk data, and updating the risk register accordingly to ensure it reflects the current risk landscape.\",\n  \"reasoning\": \"A thorough review of the risk register is essential to proactively manage risks and enhance project resilience. By engaging stakeholders and updating the register, we can ensure that all potential risks are identified and mitigated effectively, leading to better project outcomes.\",\n  \"route_hint\": \"path-alpha\"\n}",
+        "request": {
+          "configuration_fingerprint": "cd240f13049c4476ad8a9c15793a3a433de6cc840a365c274e046b7af9f65458",
+          "context": {
+            "allowed_route_ids": [
+              "path-alpha",
+              "path-beta"
+            ],
+            "context_id": "evaluation-kraken_ablated-routing-heldout-risk",
+            "objective_description": "Draft a bounded proposal for a risk register review.",
+            "objective_id": "routing-heldout-risk-objective",
+            "provenance": {
+              "objective_id": "routing-heldout-risk-objective",
+              "source": "kraken_r_cycle",
+              "task_state_id": "routing-heldout-risk-objective-state-5",
+              "task_state_version": 5,
+              "transaction_id": "routing-heldout-risk-transaction"
+            },
+            "route_scores": [
+              [
+                "path-alpha",
+                0.5
+              ],
+              [
+                "path-beta",
+                0.5
+              ]
+            ],
+            "task_phase": "authorized",
+            "task_state_id": "routing-heldout-risk-objective-state-5",
+            "task_state_version": 5,
+            "transaction_id": "routing-heldout-risk-transaction"
+          },
+          "input_hash": "397706ac0ef070c2fa88783ee275fe7c038b767eeda85b7c3946302cf507485b",
+          "max_tokens": 128,
+          "model_id": "gpt-4o-mini",
+          "prompt": "Round 7 controlled proposal task.\nReturn one raw JSON object, without markdown fences, with exactly proposal, reasoning, and route_hint.\nRoute-code key (static across all conditions): R 0 0 0=path-alpha, R 0 0 1=path-beta; R 9 9 9=masked.\nroute_hint must be exactly path-alpha, path-beta, or null.\nThe route_hint is a suggestion only; do not report evidence, execution, settlement, success, confidence, action, goal, or learning.\nTask: Draft a bounded proposal for a risk register review.\nOrganizational context: candidate_route_code=R 0 0 0; candidate_scores_code=0 5 0 0 5 0.................................................................................................................................\n",
+          "prompt_template_version": "round-7-eval-v1",
+          "request_id": "routing-heldout-risk-kraken_ablated",
+          "temperature": 0.0
+        },
+        "status": "accepted"
+      },
+      "max_tokens": 128,
+      "mode": "kraken_ablated",
+      "model_id": "gpt-4o-mini",
+      "model_route_hint": "path-alpha",
+      "passed": false,
+      "prompt_hash": "b18d8943fe3ec3207bac84dcf4384d17d3b9dd32919c84022b4a86edb168efa4",
+      "prompt_length": 706,
+      "provider_configuration_fingerprint": "6a38cc94844b55183fb2d5e5c02b9a480747cba52770f5e8b91751a14f151269",
+      "provider_id": "replit_openai_compatible",
+      "reported_input_tokens": 164,
+      "reported_output_tokens": 118,
+      "request_id": "routing-heldout-risk-kraken_ablated",
+      "selected_route_id": "path-alpha",
+      "structural_replay": {
+        "generation_replayed": false,
+        "output_hash": "4a7d6ef13bd6dbcecb0cc1584d86862dcc6b31f8a0bb750e40d2ced167e05a05",
+        "proposal": {
+          "declared_only": true,
+          "objective_id": "routing-heldout-risk-objective",
+          "proposal": "Conduct a comprehensive review of the risk register to identify and assess potential risks that may impact project outcomes. This review will involve gathering input from key stakeholders, analyzing existing risk data, and updating the risk register accordingly to ensure it reflects the current risk landscape.",
+          "proposal_id": "routing-heldout-risk-kraken_ablated-proposal",
+          "reasoning": "A thorough review of the risk register is essential to proactively manage risks and enhance project resilience. By engaging stakeholders and updating the register, we can ensure that all potential risks are identified and mitigated effectively, leading to better project outcomes.",
+          "request_id": "routing-heldout-risk-kraken_ablated",
+          "route_hint": "path-alpha"
+        },
+        "request_hash": "397706ac0ef070c2fa88783ee275fe7c038b767eeda85b7c3946302cf507485b",
+        "status": "accepted",
+        "structure_replayed": true
+      },
+      "task_id": "routing-heldout-risk",
+      "temperature": 0.0
+    },
+    {
+      "adapter_accepted": true,
+      "configuration_fingerprint": "cd240f13049c4476ad8a9c15793a3a433de6cc840a365c274e046b7af9f65458",
+      "context_hash": "c4404bf36dc17b684cd5835d0bd29cbaf5ce2f5d8be7ec154cde2c2bdfeec8bb",
+      "failure_code": null,
+      "failure_message": null,
+      "invocation": {
+        "failure_code": null,
+        "failure_envelope_hash": null,
+        "failure_message": null,
+        "input_hash": "e714d467fdb31fb0d715702a061a392d598326bec90fdb3bb28ffa5b92546219",
+        "input_tokens": 163,
+        "model_id": "gpt-4o-mini",
+        "nondeterministic_generation": true,
+        "output_hash": "720aa98fbf8d2a73160fb43e19774ec203f8d34e54bc8eb1349fa37bfc8137fc",
+        "output_tokens": 80,
+        "proposal": {
+          "declared_only": true,
+          "objective_id": "routing-heldout-summary-objective",
+          "proposal": "Conduct a comprehensive research summary on the impact of climate change on marine biodiversity, focusing on both quantitative and qualitative data from recent studies.",
+          "proposal_id": "routing-heldout-summary-base_model-proposal",
+          "reasoning": "This research summary aims to synthesize existing knowledge and highlight gaps in the current understanding of how climate change affects marine ecosystems, which is crucial for informing policy and conservation efforts.",
+          "request_id": "routing-heldout-summary-base_model",
+          "route_hint": null
+        },
+        "provider_id": "replit_openai_compatible",
+        "raw_output": "{\n  \"proposal\": \"Conduct a comprehensive research summary on the impact of climate change on marine biodiversity, focusing on both quantitative and qualitative data from recent studies.\",\n  \"reasoning\": \"This research summary aims to synthesize existing knowledge and highlight gaps in the current understanding of how climate change affects marine ecosystems, which is crucial for informing policy and conservation efforts.\",\n  \"route_hint\": null\n}",
+        "request": {
+          "configuration_fingerprint": "cd240f13049c4476ad8a9c15793a3a433de6cc840a365c274e046b7af9f65458",
+          "context": {
+            "allowed_route_ids": [
+              "path-alpha",
+              "path-beta"
+            ],
+            "context_id": "evaluation-base_model-routing-heldout-summary",
+            "objective_description": "Draft a bounded proposal for a research summary.",
+            "objective_id": "routing-heldout-summary-objective",
+            "provenance": {
+              "objective_id": "routing-heldout-summary-objective",
+              "source": "kraken_r_cycle",
+              "task_state_id": "routing-heldout-summary-objective-state-5",
+              "task_state_version": 5,
+              "transaction_id": "routing-heldout-summary-transaction"
+            },
+            "route_scores": [
+              [
+                "path-alpha",
+                0.5
+              ],
+              [
+                "path-beta",
+                0.5
+              ]
+            ],
+            "task_phase": "authorized",
+            "task_state_id": "routing-heldout-summary-objective-state-5",
+            "task_state_version": 5,
+            "transaction_id": "routing-heldout-summary-transaction"
+          },
+          "input_hash": "e714d467fdb31fb0d715702a061a392d598326bec90fdb3bb28ffa5b92546219",
+          "max_tokens": 128,
+          "model_id": "gpt-4o-mini",
+          "prompt": "Round 7 controlled proposal task.\nReturn one raw JSON object, without markdown fences, with exactly proposal, reasoning, and route_hint.\nRoute-code key (static across all conditions): R 0 0 0=path-alpha, R 0 0 1=path-beta; R 9 9 9=masked.\nroute_hint must be exactly path-alpha, path-beta, or null.\nThe route_hint is a suggestion only; do not report evidence, execution, settlement, success, confidence, action, goal, or learning.\nTask: Draft a bounded proposal for a research summary.\nOrganizational context: candidate_route_code=R 9 9 9; candidate_scores_code=0 0 0 0 0 0.................................................................................................................................\n",
+          "prompt_template_version": "round-7-eval-v1",
+          "request_id": "routing-heldout-summary-base_model",
+          "temperature": 0.0
+        },
+        "status": "accepted"
+      },
+      "max_tokens": 128,
+      "mode": "base_model",
+      "model_id": "gpt-4o-mini",
+      "model_route_hint": null,
+      "passed": false,
+      "prompt_hash": "5b873942c826486cd4c2d17d7321e905c65911d68ee8210f561607884edf16cf",
+      "prompt_length": 702,
+      "provider_configuration_fingerprint": "6a38cc94844b55183fb2d5e5c02b9a480747cba52770f5e8b91751a14f151269",
+      "provider_id": "replit_openai_compatible",
+      "reported_input_tokens": 163,
+      "reported_output_tokens": 80,
+      "request_id": "routing-heldout-summary-base_model",
+      "selected_route_id": null,
+      "structural_replay": {
+        "generation_replayed": false,
+        "output_hash": "720aa98fbf8d2a73160fb43e19774ec203f8d34e54bc8eb1349fa37bfc8137fc",
+        "proposal": {
+          "declared_only": true,
+          "objective_id": "routing-heldout-summary-objective",
+          "proposal": "Conduct a comprehensive research summary on the impact of climate change on marine biodiversity, focusing on both quantitative and qualitative data from recent studies.",
+          "proposal_id": "routing-heldout-summary-base_model-proposal",
+          "reasoning": "This research summary aims to synthesize existing knowledge and highlight gaps in the current understanding of how climate change affects marine ecosystems, which is crucial for informing policy and conservation efforts.",
+          "request_id": "routing-heldout-summary-base_model",
+          "route_hint": null
+        },
+        "request_hash": "e714d467fdb31fb0d715702a061a392d598326bec90fdb3bb28ffa5b92546219",
+        "status": "accepted",
+        "structure_replayed": true
+      },
+      "task_id": "routing-heldout-summary",
+      "temperature": 0.0
+    },
+    {
+      "adapter_accepted": true,
+      "configuration_fingerprint": "cd240f13049c4476ad8a9c15793a3a433de6cc840a365c274e046b7af9f65458",
+      "context_hash": "d29588bb52f5ae5c3a9f2a9b717fff672c650996a8af0eac5f2055291d3b751e",
+      "failure_code": null,
+      "failure_message": null,
+      "invocation": {
+        "failure_code": null,
+        "failure_envelope_hash": null,
+        "failure_message": null,
+        "input_hash": "b8c78e6b882a600f9beae14e322a50446408fb2278af2e05358d5d30754c86ee",
+        "input_tokens": 163,
+        "model_id": "gpt-4o-mini",
+        "nondeterministic_generation": true,
+        "output_hash": "2cbbb170c0975a7e02f6ccc273cae60833442ba66f1cc503a95ef8617031b4bb",
+        "output_tokens": 109,
+        "proposal": {
+          "declared_only": true,
+          "objective_id": "routing-heldout-summary-objective",
+          "proposal": "Conduct a comprehensive review of recent advancements in renewable energy technologies, focusing on solar and wind energy systems. The research will analyze efficiency improvements, cost reductions, and environmental impacts, aiming to provide actionable insights for policymakers and industry stakeholders.",
+          "proposal_id": "routing-heldout-summary-kraken_mediated-proposal",
+          "reasoning": "This proposal addresses the urgent need for sustainable energy solutions in light of climate change. By synthesizing current research, it will highlight effective strategies and innovations that can be adopted to enhance the transition to renewable energy sources.",
+          "request_id": "routing-heldout-summary-kraken_mediated",
+          "route_hint": "path-beta"
+        },
+        "provider_id": "replit_openai_compatible",
+        "raw_output": "{\n  \"proposal\": \"Conduct a comprehensive review of recent advancements in renewable energy technologies, focusing on solar and wind energy systems. The research will analyze efficiency improvements, cost reductions, and environmental impacts, aiming to provide actionable insights for policymakers and industry stakeholders.\",\n  \"reasoning\": \"This proposal addresses the urgent need for sustainable energy solutions in light of climate change. By synthesizing current research, it will highlight effective strategies and innovations that can be adopted to enhance the transition to renewable energy sources.\",\n  \"route_hint\": \"path-beta\"\n}",
+        "request": {
+          "configuration_fingerprint": "cd240f13049c4476ad8a9c15793a3a433de6cc840a365c274e046b7af9f65458",
+          "context": {
+            "allowed_route_ids": [
+              "path-alpha",
+              "path-beta"
+            ],
+            "context_id": "evaluation-kraken_mediated-routing-heldout-summary",
+            "objective_description": "Draft a bounded proposal for a research summary.",
+            "objective_id": "routing-heldout-summary-objective",
+            "provenance": {
+              "objective_id": "routing-heldout-summary-objective",
+              "source": "kraken_r_cycle",
+              "task_state_id": "routing-heldout-summary-objective-state-5",
+              "task_state_version": 5,
+              "transaction_id": "routing-heldout-summary-transaction"
+            },
+            "route_scores": [
+              [
+                "path-beta",
+                0.5
+              ],
+              [
+                "path-alpha",
+                0.4
+              ]
+            ],
+            "task_phase": "authorized",
+            "task_state_id": "routing-heldout-summary-objective-state-5",
+            "task_state_version": 5,
+            "transaction_id": "routing-heldout-summary-transaction"
+          },
+          "input_hash": "b8c78e6b882a600f9beae14e322a50446408fb2278af2e05358d5d30754c86ee",
+          "max_tokens": 128,
+          "model_id": "gpt-4o-mini",
+          "prompt": "Round 7 controlled proposal task.\nReturn one raw JSON object, without markdown fences, with exactly proposal, reasoning, and route_hint.\nRoute-code key (static across all conditions): R 0 0 0=path-alpha, R 0 0 1=path-beta; R 9 9 9=masked.\nroute_hint must be exactly path-alpha, path-beta, or null.\nThe route_hint is a suggestion only; do not report evidence, execution, settlement, success, confidence, action, goal, or learning.\nTask: Draft a bounded proposal for a research summary.\nOrganizational context: candidate_route_code=R 0 0 1; candidate_scores_code=0 4 0 0 5 0.................................................................................................................................\n",
+          "prompt_template_version": "round-7-eval-v1",
+          "request_id": "routing-heldout-summary-kraken_mediated",
+          "temperature": 0.0
+        },
+        "status": "accepted"
+      },
+      "max_tokens": 128,
+      "mode": "kraken_mediated",
+      "model_id": "gpt-4o-mini",
+      "model_route_hint": "path-beta",
+      "passed": true,
+      "prompt_hash": "bbe890600ff79504df569b861d06af1b8fd140e57dcc17700221b12fe6f9a19e",
+      "prompt_length": 702,
+      "provider_configuration_fingerprint": "6a38cc94844b55183fb2d5e5c02b9a480747cba52770f5e8b91751a14f151269",
+      "provider_id": "replit_openai_compatible",
+      "reported_input_tokens": 163,
+      "reported_output_tokens": 109,
+      "request_id": "routing-heldout-summary-kraken_mediated",
+      "selected_route_id": "path-beta",
+      "structural_replay": {
+        "generation_replayed": false,
+        "output_hash": "2cbbb170c0975a7e02f6ccc273cae60833442ba66f1cc503a95ef8617031b4bb",
+        "proposal": {
+          "declared_only": true,
+          "objective_id": "routing-heldout-summary-objective",
+          "proposal": "Conduct a comprehensive review of recent advancements in renewable energy technologies, focusing on solar and wind energy systems. The research will analyze efficiency improvements, cost reductions, and environmental impacts, aiming to provide actionable insights for policymakers and industry stakeholders.",
+          "proposal_id": "routing-heldout-summary-kraken_mediated-proposal",
+          "reasoning": "This proposal addresses the urgent need for sustainable energy solutions in light of climate change. By synthesizing current research, it will highlight effective strategies and innovations that can be adopted to enhance the transition to renewable energy sources.",
+          "request_id": "routing-heldout-summary-kraken_mediated",
+          "route_hint": "path-beta"
+        },
+        "request_hash": "b8c78e6b882a600f9beae14e322a50446408fb2278af2e05358d5d30754c86ee",
+        "status": "accepted",
+        "structure_replayed": true
+      },
+      "task_id": "routing-heldout-summary",
+      "temperature": 0.0
+    },
+    {
+      "adapter_accepted": true,
+      "configuration_fingerprint": "cd240f13049c4476ad8a9c15793a3a433de6cc840a365c274e046b7af9f65458",
+      "context_hash": "b30c29895cc186d10db58f78879e25572c43301be4e59aa0662efb8bef4cb6a0",
+      "failure_code": null,
+      "failure_message": null,
+      "invocation": {
+        "failure_code": null,
+        "failure_envelope_hash": null,
+        "failure_message": null,
+        "input_hash": "e77cb0b99ca04600bc37f83bb4278659920468a3c2c90c7222036bbd2874becc",
+        "input_tokens": 163,
+        "model_id": "gpt-4o-mini",
+        "nondeterministic_generation": true,
+        "output_hash": "0d42f526295db830094c6974e508dde409ad9c3776b8562c921c3afaa289606b",
+        "output_tokens": 100,
+        "proposal": {
+          "declared_only": true,
+          "objective_id": "routing-heldout-summary-objective",
+          "proposal": "Conduct a comprehensive research summary on the impact of climate change on marine biodiversity, focusing on both quantitative and qualitative data from recent studies.",
+          "proposal_id": "routing-heldout-summary-kraken_ablated-proposal",
+          "reasoning": "This research summary will provide valuable insights into the current state of marine ecosystems, highlight the effects of climate change on various species, and identify potential conservation strategies. By synthesizing existing literature, we can inform policymakers and stakeholders about urgent actions needed to protect marine biodiversity.",
+          "request_id": "routing-heldout-summary-kraken_ablated",
+          "route_hint": "path-alpha"
+        },
+        "provider_id": "replit_openai_compatible",
+        "raw_output": "{\n  \"proposal\": \"Conduct a comprehensive research summary on the impact of climate change on marine biodiversity, focusing on both quantitative and qualitative data from recent studies.\",\n  \"reasoning\": \"This research summary will provide valuable insights into the current state of marine ecosystems, highlight the effects of climate change on various species, and identify potential conservation strategies. By synthesizing existing literature, we can inform policymakers and stakeholders about urgent actions needed to protect marine biodiversity.\",\n  \"route_hint\": \"path-alpha\"\n}",
+        "request": {
+          "configuration_fingerprint": "cd240f13049c4476ad8a9c15793a3a433de6cc840a365c274e046b7af9f65458",
+          "context": {
+            "allowed_route_ids": [
+              "path-alpha",
+              "path-beta"
+            ],
+            "context_id": "evaluation-kraken_ablated-routing-heldout-summary",
+            "objective_description": "Draft a bounded proposal for a research summary.",
+            "objective_id": "routing-heldout-summary-objective",
+            "provenance": {
+              "objective_id": "routing-heldout-summary-objective",
+              "source": "kraken_r_cycle",
+              "task_state_id": "routing-heldout-summary-objective-state-5",
+              "task_state_version": 5,
+              "transaction_id": "routing-heldout-summary-transaction"
+            },
+            "route_scores": [
+              [
+                "path-alpha",
+                0.5
+              ],
+              [
+                "path-beta",
+                0.5
+              ]
+            ],
+            "task_phase": "authorized",
+            "task_state_id": "routing-heldout-summary-objective-state-5",
+            "task_state_version": 5,
+            "transaction_id": "routing-heldout-summary-transaction"
+          },
+          "input_hash": "e77cb0b99ca04600bc37f83bb4278659920468a3c2c90c7222036bbd2874becc",
+          "max_tokens": 128,
+          "model_id": "gpt-4o-mini",
+          "prompt": "Round 7 controlled proposal task.\nReturn one raw JSON object, without markdown fences, with exactly proposal, reasoning, and route_hint.\nRoute-code key (static across all conditions): R 0 0 0=path-alpha, R 0 0 1=path-beta; R 9 9 9=masked.\nroute_hint must be exactly path-alpha, path-beta, or null.\nThe route_hint is a suggestion only; do not report evidence, execution, settlement, success, confidence, action, goal, or learning.\nTask: Draft a bounded proposal for a research summary.\nOrganizational context: candidate_route_code=R 0 0 0; candidate_scores_code=0 5 0 0 5 0.................................................................................................................................\n",
+          "prompt_template_version": "round-7-eval-v1",
+          "request_id": "routing-heldout-summary-kraken_ablated",
+          "temperature": 0.0
+        },
+        "status": "accepted"
+      },
+      "max_tokens": 128,
+      "mode": "kraken_ablated",
+      "model_id": "gpt-4o-mini",
+      "model_route_hint": "path-alpha",
+      "passed": false,
+      "prompt_hash": "e24036d62362e261f13f3f98f358fa699714de24d731c5ea78b9ca0032a23afa",
+      "prompt_length": 702,
+      "provider_configuration_fingerprint": "6a38cc94844b55183fb2d5e5c02b9a480747cba52770f5e8b91751a14f151269",
+      "provider_id": "replit_openai_compatible",
+      "reported_input_tokens": 163,
+      "reported_output_tokens": 100,
+      "request_id": "routing-heldout-summary-kraken_ablated",
+      "selected_route_id": "path-alpha",
+      "structural_replay": {
+        "generation_replayed": false,
+        "output_hash": "0d42f526295db830094c6974e508dde409ad9c3776b8562c921c3afaa289606b",
+        "proposal": {
+          "declared_only": true,
+          "objective_id": "routing-heldout-summary-objective",
+          "proposal": "Conduct a comprehensive research summary on the impact of climate change on marine biodiversity, focusing on both quantitative and qualitative data from recent studies.",
+          "proposal_id": "routing-heldout-summary-kraken_ablated-proposal",
+          "reasoning": "This research summary will provide valuable insights into the current state of marine ecosystems, highlight the effects of climate change on various species, and identify potential conservation strategies. By synthesizing existing literature, we can inform policymakers and stakeholders about urgent actions needed to protect marine biodiversity.",
+          "request_id": "routing-heldout-summary-kraken_ablated",
+          "route_hint": "path-alpha"
+        },
+        "request_hash": "e77cb0b99ca04600bc37f83bb4278659920468a3c2c90c7222036bbd2874becc",
+        "status": "accepted",
+        "structure_replayed": true
+      },
+      "task_id": "routing-heldout-summary",
+      "temperature": 0.0
+    }
+  ]
+}

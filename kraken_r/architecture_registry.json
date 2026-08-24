@@ -1,11 +1,11 @@
 {
   "registry_kind": "kraken_r_architecture",
   "registry_id": "kraken-r-foundation",
-  "version": "1.6",
+  "version": "1.7",
   "last_reviewed": "2026-08-24",
   "authority_boundary": {
     "legacy_reference": "rogal_core.daemon.ROGALDaemon and rogal_core.autonomous_cycle.AutonomousCycle remain the deployed reference runtime.",
-    "kraken_candidate": "The deterministic Kraken-R cycle, read-only recorded-execution replay, bounded in-memory signal propagation, advisory bounded physiology, and settlement-grounded bounded route preference are executable candidate infrastructure only; they have no authority over the deployed runtime.",
+    "kraken_candidate": "The deterministic Kraken-R cycle, read-only recorded-execution replay, bounded in-memory signal propagation, advisory bounded physiology, settlement-grounded bounded route preference, and proposal-only LLM adapter are executable candidate infrastructure only; they have no authority over the deployed runtime.",
     "preservation": "Legacy, alternate, dormant, and forgotten mechanisms are classified and preserved, never deleted by this foundation."
   },
   "mechanisms": [
@@ -120,6 +120,22 @@
       "source_refs": ["docs/kraken_r/CONSTITUTION.md", "docs/kraken_r/SALVAGE_DECISIONS.md", "rogal_core/emergence/plasticity.py", "rogal_core/emergence/pathway_tracker.py", "rogal_core/emergence/topology_tracker.py", "rogal_core/emergence/learning_integration.py", "rogal_core/emergence/online_learning.py"],
       "planned": false,
       "notes": "Pure immutable reducer, not a router or controller. It adapts bounded strengthening/weakening, route topology, auditable pathway lineage, and reset concepts while rejecting legacy stores, globals, clocks, background loops, signal confidence, broad credit assignment, and cross-run persistence. Only settled success/failure with grounded observed execution evidence may adjust the selected route by a fixed bounded delta; contradiction, insufficient evidence, declared claims, stale selections, malformed provenance, and duplicate in-window settlements fail closed or explicitly withhold learning."
+    },
+    {
+      "mechanism_id": "kraken_r_controlled_llm_proposal_adapter",
+      "category": "task_state_reasoning",
+      "name": "Controlled candidate LLM proposal adapter and held-out evaluator",
+      "intended_role": "Request one bounded typed proposal/reasoning declaration from an injected model provider, record structural provenance, and compare base, mediated, and reset-routing conditions without granting the model authority.",
+      "current_status": "infrastructure",
+      "dependencies": ["kraken_r_constitutional_cycle", "kraken_r_settlement_grounded_plastic_routing"],
+      "authority": "kraken_candidate",
+      "evidence_grade": "implemented",
+      "evidence_refs": ["kraken_r/llm_adapter.py", "kraken_r/controlled_evaluation.py", "tests/test_kraken_r_llm_adapter.py", "tests/test_kraken_r_controlled_evaluation.py", "kraken_r/validate.py"],
+      "duplicates": [],
+      "disposition": "keep",
+      "source_refs": ["docs/kraken_r/CONSTITUTION.md", "docs/kraken_r/SALVAGE_DECISIONS.md", "rogal_core/llm/open_llm_bridge.py", "rogal_core/llm/llm_intuition.py", "rogal_core/llm/claude_intuition.py", "rogal_core/cognition/model_comparison_runner.py"],
+      "planned": false,
+      "notes": "Stateless injected-provider leaf with strict proposal/reasoning/route-hint JSON only. Inputs are bound to a cycle task state; outputs are declared-only and cannot become evidence, settlement, goal, persistence, execution, controller state, or learning credit. Provider identity and model provenance are bound to the injected request; enforced deadlines, provider errors, malformed output, self-report fields, invalid provenance, and out-of-bound route hints fail closed. Generation is marked nondeterministic while input/output hashes and structural replay (including received malformed output) are deterministic. The evaluator holds task, model configuration, provider identity, template, temperature, and output budget fixed across base, mediated, and reset-routing conditions, checks normalized prompt length and available provider-reported input-token counts, reports descriptive observed deltas, and never makes a performance claim."
     },
     {
       "mechanism_id": "legacy_daemon",

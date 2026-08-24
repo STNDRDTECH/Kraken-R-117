@@ -42,6 +42,18 @@ from .plastic_routing import (
     replay_settlement_learning,
     select_candidate_route,
 )
+from .llm_adapter import (
+    AdapterFailureCode,
+    CandidateModelContext,
+    FixtureModelProvider,
+    ModelAdapter,
+    replay_model_invocation,
+)
+from .controlled_evaluation import (
+    ControlledEvaluationHarness,
+    EvaluationMode,
+    HeldOutTask,
+)
 from .replay import (
     RecordedExecution,
     RecordedExecutionMode,
@@ -835,6 +847,110 @@ def validate_plastic_routing() -> tuple[str, ...]:
     return tuple(errors)
 
 
+def validate_controlled_llm_adapter() -> tuple[str, ...]:
+    """Exercise proposal-only parsing, structural replay, and evaluation controls."""
+
+    errors: list[str] = []
+    objective = contracts.Objective(
+        "validator-llm-objective",
+        "Validate a bounded candidate model proposal.",
+        provenance={"transaction_id": "validator-llm-transaction"},
+    )
+    trace = run_constitutional_cycle(
+        objective, mode=CycleMode.INSUFFICIENT_EVIDENCE
+    )
+    try:
+        context = CandidateModelContext.from_cycle_trace(
+            trace,
+            context_id="validator-llm-context",
+            allowed_route_ids=("path-alpha", "path-beta"),
+            route_scores=(("path-alpha", 0.50), ("path-beta", 0.50)),
+        )
+        provider = FixtureModelProvider(
+            lambda _: (
+                '{"proposal":"inspect candidate route","reasoning":"declared only",'
+                '"route_hint":"path-alpha"}'
+            ),
+            provider_id="validator-fixture",
+        )
+        result = ModelAdapter(provider).invoke(
+            context,
+            request_id="validator-llm-request",
+            prompt="Return only the bounded proposal JSON.",
+            model_id="validator-fixture-model",
+        )
+    except (TypeError, ValueError) as exc:
+        return (f"candidate LLM adapter failed: {exc}",)
+    if not result.accepted or result.proposal is None or result.invocation is None:
+        errors.append("valid model proposal was not accepted")
+        return tuple(errors)
+    if result.proposal.declared_only is not True or any(
+        hasattr(result.proposal, field_name)
+        for field_name in ("evidence", "settlement", "action", "goal", "learning_update")
+    ):
+        errors.append("model proposal crossed the candidate authority boundary")
+    try:
+        replay = replay_model_invocation(result.invocation)
+    except (TypeError, ValueError) as exc:
+        errors.append(f"model invocation structural replay failed: {exc}")
+    else:
+        if not replay.structure_replayed or replay.generation_replayed:
+            errors.append("model replay did not mark generation nondeterminism honestly")
+
+    self_report = ModelAdapter(
+        FixtureModelProvider(
+            lambda _: (
+                '{"proposal":"claim success","reasoning":"declared",'
+                '"route_hint":"path-alpha","success":true}'
+            )
+        )
+    ).invoke(
+        context,
+        request_id="validator-llm-self-report",
+        prompt="Return only the bounded proposal JSON.",
+        model_id="validator-fixture-model",
+    )
+    if self_report.failure_code is not AdapterFailureCode.MALFORMED_OUTPUT:
+        errors.append("self-report authority field was accepted")
+
+    def evaluation_output(request: Any) -> str:
+        route = "path-beta" if "candidate_route=path-beta" in request.prompt else "path-alpha"
+        return (
+            '{"proposal":"consider context","reasoning":"declared only",'
+            f'"route_hint":"{route}"}}'
+        )
+
+    evaluator = ControlledEvaluationHarness(
+        FixtureModelProvider(evaluation_output, provider_id="validator-eval-fixture"),
+        model_id="validator-eval-model",
+        max_tokens=128,
+        temperature=0.0,
+    )
+    try:
+        report = evaluator.run(
+            (
+                HeldOutTask(
+                    "validator-heldout",
+                    "validator-heldout-objective",
+                    "Classify an unseen held-out task.",
+                    "path-alpha",
+                ),
+            ),
+            RouteTopology.fixture("validator-llm-topology"),
+        )
+    except (TypeError, ValueError) as exc:
+        errors.append(f"controlled evaluation failed: {exc}")
+    else:
+        if report.control_errors:
+            errors.append("controlled evaluation did not preserve comparable conditions")
+        if report.claim_status != "not_claimed":
+            errors.append("controlled evaluation made an unsupported performance claim")
+        modes = {item.mode for item in report.results}
+        if modes != set(EvaluationMode):
+            errors.append("controlled evaluation did not include all three conditions")
+    return tuple(errors)
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         description="Validate the isolated, candidate-only Kraken-R foundation."
@@ -869,6 +985,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     nervous_system_errors = validate_nervous_system()
     physiology_errors = validate_physiology()
     plastic_routing_errors = validate_plastic_routing()
+    llm_adapter_errors = validate_controlled_llm_adapter()
     legacy_runtime_errors = validate_legacy_runtime_boundary()
     report = {
         "ok": (
@@ -879,6 +996,7 @@ def main(argv: Sequence[str] | None = None) -> int:
             and not nervous_system_errors
             and not physiology_errors
             and not plastic_routing_errors
+            and not llm_adapter_errors
             and not legacy_runtime_errors
         ),
         "contracts_ok": not contract_errors,
@@ -908,6 +1026,11 @@ def main(argv: Sequence[str] | None = None) -> int:
             "ok": not plastic_routing_errors,
             "errors": list(plastic_routing_errors),
             "authority": "settlement_grounded_candidate_only",
+        },
+        "controlled_llm_adapter": {
+            "ok": not llm_adapter_errors,
+            "errors": list(llm_adapter_errors),
+            "authority": "proposal_only_candidate",
         },
         "constitution": {
             "ok": True,

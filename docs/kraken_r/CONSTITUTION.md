@@ -1,7 +1,7 @@
 # Kraken-R Constitution
 
 **Status:** candidate-only foundation  
-**Version:** 1.6
+**Version:** 1.7
 **Effective boundary:** documentation, standalone validation, and bounded in-memory candidate-cycle execution
 
 ## Mission
@@ -22,7 +22,8 @@ actuators remain unchanged and authoritative for their current behavior.
 
 The `kraken_r` package is candidate-only. Its deterministic cycle,
 recorded-execution replay, bounded signal propagation, bounded advisory
-physiology, and settlement-grounded route-preference reducer have no daemon
+physiology, settlement-grounded route-preference reducer, and proposal-only LLM
+adapter have no daemon
 entrypoint, runtime writer, event subscription, external executor, router,
 ledger, homeostasis controller, or mutation actuator. Loading, validating, or
 running them must not start ROGAL, contact an LLM, open live stores, or change
@@ -207,3 +208,49 @@ adaptive controller exists. Resetting a topology ablates learned state while
 retaining the declared route graph and advances its generation, so prior
 selections cannot be reused. Replaying the same ordered immutable record
 history produces the same topology and audit traces.
+
+## Controlled LLM proposal adapter
+
+Round 7 adds `kraken_r.llm_adapter` as a narrow, stateless leaf behind an
+injected provider protocol. It accepts an immutable `CandidateModelContext`
+projected only after the canonical cycle trace validates and its authorized
+task state is confirmed, plus a bounded prompt and model configuration. The
+context deliberately excludes evidence, execution observations, settlement,
+confidence, signals, and physiology. A model can return exactly three declared
+fields: `proposal`, `reasoning`, and an optional bounded `route_hint`.
+
+The adapter has no fallback model, retry loop, cache, budget authority, event
+emission, store, runtime wiring, queue, controller state, execution path, goal
+selection, or persistence. It cannot create an Action, Evidence, Settlement,
+LearningUpdate, or Mutation. Top-level model claims about success, failure,
+confidence, evidence, execution, settlement, action, goal, or learning are
+rejected. A valid proposal is still declared-only; no model self-report can
+support learning. The existing settlement-grounded reducer continues to accept
+only a complete constitutional trace with grounded execution evidence.
+
+Provider identity and model provenance must exactly match the injected request;
+provider failures, enforced invocation deadlines, malformed JSON, invalid route
+hints, and malformed context bindings fail closed with no proposal. Received
+malformed output is retained only in the immutable invocation envelope and
+hashed so its failed disposition can also be structurally replayed. Generation
+is explicitly nondeterministic, but the request configuration/input hash,
+raw-output hash, parsed proposal shape, and failure disposition can be
+structurally replayed without another provider call.
+
+`kraken_r.controlled_evaluation` evaluates the same held-out task set in three
+conditions: base model with a masked organizational slot, Kraken-R-mediated
+with the current bounded route selection, and Kraken-R with route learning
+reset. It fixes the provider, model ID, task set, prompt template, temperature,
+and output-token budget. It verifies provider identity, model configuration,
+and normalized prompt length per task; where a provider reports input-token
+counts, unequal counts are surfaced as a failed control rather than hidden.
+The report is descriptive only: it records observed task-label deltas but makes
+no performance claim because proposal output is not independent execution
+settlement.
+
+The provider-backed [controlled trial archive](CONTROLLED_MODEL_TRIAL_COMPARABLE.md)
+stores immutable invocation envelopes and structural replay records beside its
+descriptive labels. Structural replay verifies the stored request/output hashes
+without a second provider call. Any provider or schema failure remains visible
+in the archive and does not become evidence, execution, settlement, learning,
+or a performance claim.

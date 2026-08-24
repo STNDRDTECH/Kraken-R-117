@@ -1,5 +1,78 @@
 # Session Log — 2026-08-24 (Kraken-R Round Six Settlement-Grounded Plastic Routing)
 
+---
+
+# Session Log — 2026-08-24 (Kraken-R Round Seven Controlled LLM Proposal Adapter)
+
+## Session Type
+
+Candidate-only LLM proposal/reasoning and controlled-evaluation implementation
+on the isolated `round-7-controlled-llm` branch. No legacy runtime,
+deployment, workflow configuration, persistence, event, goal, execution,
+settlement, learning, or authority wiring change.
+
+## What This Session Did
+
+1. Created the fresh Round 7 branch from the exact accepted Round 6 local
+   checkpoint `fcfa00466d85704ea0f94b959afe1a6d2c748edc`.
+2. Inspected legacy model bridges, intuition ports, circuit-breaker/budget
+   concepts, and model-comparison code. Reused only narrow provider,
+   timeout/failure, structured-output, and evaluation ideas; no legacy module
+   was imported or reconnected.
+3. Added a stateless typed adapter. Its context is projected only from a
+   complete canonical cycle trace with a candidate-authorized task state.
+   Inputs, provider identity, model identity, configuration, output hashes,
+   and immutable failure envelopes are provenance-bound.
+4. Restricted accepted model output to exactly `proposal`, `reasoning`, and
+   optional authorized `route_hint`. Evidence, settlement, action, execution,
+   goal, confidence, self-report, learning, and persistence authority are
+   absent or rejected. Provider errors, timeouts, malformed output, invalid
+   provenance, and unauthorized route hints fail closed.
+5. Added structural replay that never regenerates model output and explicitly
+   marks provider generation nondeterministic. Failure replay authenticates the
+   received-output hash and failure disposition.
+6. Added controlled held-out evaluation for base model, current bounded
+   Kraken-R routing, and reset/ablated routing. The provider/model/task/prompt
+   template/temperature/output budget are fixed; normalized prompt length and
+   available provider-reported input-token counts are checked. Results are
+   descriptive only and do not claim an improvement.
+7. Extended the candidate validator, constitution/registry/documentation, and
+   adversarial tests. Final architecture review passed with no concrete
+   remaining defects.
+
+## Evidence
+
+- Candidate regression suite through Round 7 → PASS: **94 passed**.
+- `python -m kraken_r --json` → PASS: constitution 1.7, controlled LLM adapter,
+  registry (68 mechanisms / 16 categories / 11 planned), and no legacy runtime
+  wiring.
+- Focused Round 7 adapter/evaluation suite → PASS: **15 passed**.
+- Provider identity, deadline, unauthorized-trace, malformed-output,
+  self-report, route-boundary, failure-envelope, and structural-replay tests
+  all pass.
+- Architecture review passed after hardening provider identity, timeout
+  enforcement/pre-dispatch rejection, failure disposition hashing, mixed-token
+  controls, and complete authorized-trace projection.
+
+## Workflow Baseline
+
+- The configured broad Test Runner still reports pre-existing collection
+  errors during startup.
+- The configured ROGAL Dashboard still fails because
+  `rogal_core.dashboard.__main__` is absent.
+- These workflow issues are unrelated to the isolated candidate package; no
+  workflow or legacy runtime source was changed.
+
+## Remaining
+
+Round 7 remains candidate-only on its dedicated branch. Do not merge it into
+`main`, wire it into ROGAL, or let model output create evidence, settlement,
+goals, persistence, execution, controller state, or route-learning credit
+without a separate approved migration and independent execution-grounded
+evaluation.
+
+---
+
 ## Session Type
 
 Candidate-only organizational-learning implementation on the isolated

@@ -17,6 +17,10 @@ second runtime.
   explicit internal-condition snapshots; it can only inhibit a candidate action.
 - `kraken_r/plastic_routing.py` — immutable settlement/evidence-gated candidate
   route preference; it never dispatches, persists, executes, or selects goals.
+- `kraken_r/llm_adapter.py` — strict, injected-provider proposal/reasoning leaf;
+  output remains declared-only and structurally replayable.
+- `kraken_r/controlled_evaluation.py` — base/mediated/reset held-out comparison
+  with fixed provider/model/prompt-budget controls and no performance claim.
 - `kraken_r/constitution.json` — machine-readable constitution metadata
   validated alongside the registry.
 - `kraken_r/architecture_registry.schema.json` — machine-readable JSON schema.
@@ -38,7 +42,9 @@ pytest -q \
   tests/test_kraken_r_replay.py \
   tests/test_kraken_r_nervous_system.py \
   tests/test_kraken_r_physiology.py \
-  tests/test_kraken_r_plastic_routing.py
+   tests/test_kraken_r_plastic_routing.py \
+   tests/test_kraken_r_llm_adapter.py \
+   tests/test_kraken_r_controlled_evaluation.py
 ```
 
 The command reads the bundled JSON, imports the isolated package, and executes
@@ -47,6 +53,8 @@ Rounds 1–3 coverage, adversarial Round 4 signal coverage, Round 5 physiology
 regime/ablation/replay coverage, and Round 6 settlement-grounded route
 plasticity coverage. It does not import `rogal_core`,
 start a workflow, contact an LLM, open a live store, or write runtime state.
+The Round 7 provider is deterministic fixture-only unless a caller explicitly
+injects a configured provider.
 
 The cycle can also be exercised directly:
 
@@ -190,4 +198,40 @@ record = SettlementRouteRecord(
 )
 topology, trace = apply_settlement_learning(topology, record)
 assert trace.disposition == "accepted"
+```
+
+The model adapter is proposal-only and does not turn a model answer into
+evidence or learning:
+
+```python
+from kraken_r import (
+    CandidateModelContext,
+    CycleMode,
+    FixtureModelProvider,
+    ModelAdapter,
+    Objective,
+    run_constitutional_cycle,
+)
+
+trace = run_constitutional_cycle(
+    Objective("llm-demo", "suggest a bounded candidate route"),
+    mode=CycleMode.INSUFFICIENT_EVIDENCE,
+)
+context = CandidateModelContext.from_cycle_trace(
+    trace,
+    context_id="llm-demo-context",
+    allowed_route_ids=("path-alpha", "path-beta"),
+    route_scores=(("path-alpha", 0.50), ("path-beta", 0.50)),
+)
+provider = FixtureModelProvider(
+    lambda _: '{"proposal":"inspect alpha","reasoning":"declared only","route_hint":"path-alpha"}'
+)
+result = ModelAdapter(provider).invoke(
+    context,
+    request_id="llm-demo-request",
+    prompt="Return only the bounded proposal JSON.",
+    model_id="fixture-model",
+)
+assert result.proposal.declared_only
+assert not hasattr(result.proposal, "evidence")
 ```

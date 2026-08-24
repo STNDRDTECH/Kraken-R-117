@@ -116,3 +116,33 @@ deterministic route-id tie breaking, and explicit generation-advancing reset.
 Those controls intentionally prevent unchecked positive feedback, cross-route
 reward diffusion, duplicate credit after audit eviction, and a permanently
 dominant stable-but-wrong path at this layer.
+
+## Round-seven controlled LLM proposal decision
+
+Round 7 salvages only narrow interface and evaluation ideas from legacy model
+bridges. It does not import, wrap, or reconnect a legacy model port, model
+cache, retry loop, financial ledger, event bus, background job, prompt-memory
+system, benchmark store, or autonomous solver path.
+
+| Preserved mechanism | Exact candidate adaptation | Why the source is not reused |
+| --- | --- | --- |
+| OpenAI-compatible / Anthropic bridge shape | Injected typed provider request and response leaf, with an optional configured OpenAI-compatible provider. | Legacy paths own broad fallback behavior, retries, budgets, event emission, caches, and runtime authority. |
+| Circuit-breaker and timeout intent | Explicit timeout/provider-error failure dispositions that return no proposal. | Candidate code has no mutable breaker state, retry policy, background recovery, or controller authority. |
+| Structured response and provenance ideas | Strict three-field proposal JSON plus immutable request/output hashes and non-generation structural replay. | Legacy responses carry confidence, rich raw state, and operational side effects that cannot be evidence or governance authority here. |
+| Model-comparison runner | Fixed three-condition held-out harness: base, mediated, and reset-routing ablation. | Legacy comparison conditions conflate prompt/memory differences and have no candidate constitutional boundary. |
+
+The accepted adapter sees only a sanitized cycle task-state projection and
+bounded candidate route context. It returns a declared `proposal`, `reasoning`,
+and optional route hint. It cannot issue an action, choose a goal, persist,
+settle, execute, become a controller, create evidence, or modify plastic
+routing. Self-reported success, confidence, evidence, settlement, execution,
+goal, action, or learning fields reject before a proposal exists. Existing route
+learning remains exclusively settlement/grounded-evidence gated.
+
+The evaluation harness binds the provider identity and model configuration,
+holds the held-out task set, prompt template, temperature, and output budget
+constant, and normalizes prompt length with a fixed-width routing slot. If a
+provider reports input-token counts, inconsistent counts fail the comparison
+control instead of being silently treated as equal. It reports descriptive
+label outcomes and a reset ablation, not an unsupported claim that the
+organization improved model capability.

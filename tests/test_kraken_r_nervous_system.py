@@ -71,6 +71,54 @@ def test_signal_replay_is_deterministic_and_amplification_is_explicit() -> None:
         and step.disposition == "propagated"
         for step in first.steps
     )
+    assert first.steps[0].to_dict()["priority"] == urgency.priority
+
+
+def test_replay_preserves_source_and_cause_across_a_propagation_chain() -> None:
+    network = SignalNetwork(
+        (
+            SignalRule("middle-to-sink", "candidate.middle", "candidate.sink"),
+            SignalRule("source-to-middle", "candidate.source", "candidate.middle"),
+        )
+    )
+    root = _signal(
+        "lineage-root",
+        "candidate.source",
+        source="scheduler-7",
+        cause="deadline-7",
+    )
+    record = SignalReplayRecord(**_context(), signals=(root,))
+
+    first = replay_signal_propagation(record, network=network)
+    second = replay_signal_propagation(record, network=network)
+
+    assert first.to_dict() == second.to_dict()
+    assert [step.disposition for step in first.steps] == [
+        "propagated",
+        "propagated",
+        "delivered",
+    ]
+    source_step, middle_step, sink_step = first.steps
+    assert source_step.signal_id == root.signal_id
+    assert source_step.source == "scheduler-7"
+    assert source_step.cause == "deadline-7"
+    assert source_step.derived_signal_id == middle_step.signal_id
+    assert source_step.derived_source == "kraken_r_signal_network"
+    assert source_step.derived_cause == root.signal_id
+
+    assert middle_step.source == "kraken_r_signal_network"
+    assert middle_step.cause == root.signal_id
+    assert middle_step.derived_signal_id == sink_step.signal_id
+    assert middle_step.derived_source == "kraken_r_signal_network"
+    assert middle_step.derived_cause == middle_step.signal_id
+    assert sink_step.source == "kraken_r_signal_network"
+    assert sink_step.cause == middle_step.signal_id
+
+    serialized = source_step.to_dict()
+    assert serialized["source"] == "scheduler-7"
+    assert serialized["cause"] == "deadline-7"
+    assert serialized["derived_source"] == "kraken_r_signal_network"
+    assert serialized["derived_cause"] == root.signal_id
 
 
 def test_candidate_signal_carries_explicit_source_cause_and_priority() -> None:
@@ -174,6 +222,17 @@ def test_unsupported_signal_topic_fails_closed() -> None:
         replay_signal_propagation(
             SignalReplayRecord(**_context(), signals=(unsupported,))
         )
+
+
+def test_unsupported_topic_is_rejected_before_supported_delivery() -> None:
+    network = SignalNetwork(
+        (SignalRule("source-to-sink", "candidate.source", "candidate.sink"),)
+    )
+    supported = _signal("supported-1", "candidate.source")
+    unsupported = _signal("unsupported-2", "candidate.unsupported")
+
+    with pytest.raises(SignalValidationError, match="unsupported signal topic"):
+        network.propagate((supported, unsupported), **_context())
 
 
 def test_candidate_propagation_rejects_missing_source_or_cause() -> None:

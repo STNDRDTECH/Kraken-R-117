@@ -17,3 +17,6 @@
 - [Kraken-R bounded nervous system](kraken-r-nervous-system.md) — candidate signals stay static, bounded, replayable, and non-evidentiary; adaptive routing remains quarantined.
 - [Bounded candidate physiology](round-five-physiology.md) — physiology is explicit immutable context with advisory candidate-action inhibition only; never a live controller or evidence authority.
 - [Settlement-grounded plastic routing](round-six-plastic-routing.md) — route preference requires a validated constitutional trace and generation-scoped bounded credit; never raw signals or confidence.
+- [Controlled LLM proposal boundary](controlled-llm-boundary.md) — model output stays declared-only; provider calls, replay, and comparisons must fail closed without granting authority.
+- [GitHub publication verification](github-publication-verification.md) — Contents API writes may outlive a client replay error; verify refs and a fresh checkout independently.
+- [Provider-backed controlled trials](provider-backed-controlled-trial.md) — normalize base URLs and use token-stable routing codes; preserve and disclose every fail-closed provider result.
