@@ -1,0 +1,44 @@
+{
+  "constitution_kind": "kraken_r_constitution",
+  "version": "1.2",
+  "mission": "Define and deterministically validate a candidate-only, domain-agnostic constitutional lifecycle, including read-only recorded-execution replay, without starting, replacing, or wiring a second ROGAL runtime.",
+  "authority_boundary": {
+    "legacy_reference": "ROGALDaemon and AutonomousCycle remain the deployed reference authority.",
+    "kraken_candidate": "Kraken-R contracts, deterministic in-memory cycle, and read-only recorded-execution replay are candidate infrastructure only; they have no authority over the deployed runtime.",
+    "allowed_effects": ["documentation", "standalone_validation", "candidate_cycle_execution"],
+    "forbidden_effects": ["runtime_wiring", "live_store_write", "event_subscription", "mutation_actuation"]
+  },
+  "canonical_lifecycle": [
+    "Objective",
+    "TaskState",
+    "Plan",
+    "Hypothesis",
+    "Signal",
+    "Event",
+    "Action",
+    "ExecutionResult",
+    "Evidence",
+    "GroundTruth",
+    "Decision",
+    "Settlement",
+    "LearningUpdate",
+    "Capability",
+    "Authority",
+    "Mutation",
+    "Lineage",
+    "Regression"
+  ],
+  "planned_capabilities": [
+    "metaplasticity",
+    "neuromodulation",
+    "reservoir_dynamics",
+    "criticality_control",
+    "organizational_engrams",
+    "offline_consolidation",
+    "causal_lesion_shadow",
+    "developmental_specialization",
+    "hyperdimensional_state",
+    "hierarchical_learning"
+  ],
+  "preservation_policy": "Legacy, alternate, dormant, experimental, and forgotten mechanisms remain classified and preserved until explicitly retired."
+}

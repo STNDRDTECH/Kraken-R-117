@@ -1,0 +1,121 @@
+# Kraken-R Constitution
+
+**Status:** candidate-only foundation  
+**Version:** 1.2
+**Effective boundary:** documentation, standalone validation, and bounded in-memory candidate-cycle execution
+
+## Mission
+
+Kraken-R is a domain-agnostic architectural direction for reasoning from
+objectives through evidence-backed settlement and learning. The foundation
+defines shared vocabulary, records the existing ROGAL architecture, and
+executes one deterministic in-memory candidate cycle so the causal contracts
+can be validated without guessing which mechanism is authoritative.
+
+## Authority boundary
+
+`rogal_core.daemon.ROGALDaemon` and
+`rogal_core.autonomous_cycle.AutonomousCycle` remain the legacy reference
+runtime. Existing EventBuses, routers, ledgers, homeostasis controllers,
+executors, sandboxes, persistence stores, capability systems, and mutation
+actuators remain unchanged and authoritative for their current behavior.
+
+The `kraken_r` package is candidate-only. Its deterministic cycle and
+recorded-execution replay have no daemon entrypoint, runtime writer, event
+subscription, external executor, router, ledger, homeostasis controller, or
+mutation actuator. Loading, validating, or running them must not start ROGAL,
+contact an LLM, open live stores, or change `.rogal/` runtime state.
+
+## Canonical lifecycle
+
+The future lifecycle is:
+
+1. acquire an **Objective** and versioned **TaskState**;
+2. form falsifiable **Hypothesis** records and a bounded **Plan**;
+3. observe **Signal/Event** inputs and issue bounded **Action** requests;
+4. return an **ExecutionResult** through a domain adapter;
+5. attach **Evidence/GroundTruth** with provenance and an honest evidence grade;
+6. record a **Decision** and compare it with observation in **Settlement**;
+7. propose a **LearningUpdate** against a named capability, route, memory, or
+   constraint;
+8. govern **Capability/Authority**, **Mutation/Lineage**, and **Regression**
+   before any future promotion.
+
+The cycle is a bounded fixture, not an autonomous loop: it ends with an
+explicit `Decision(outcome="stop")`.
+
+## Evidence-first rules
+
+- Declared intent is not execution evidence.
+- A retrieved or referenced pattern is not proof that it caused an outcome.
+- Evidence must identify its subject, source, provenance, and (when applicable)
+  execution boundary.
+- Confidence never outranks contradictory observed ground truth.
+- A declared `Signal`/`Event` and an `ExecutionResult` are not evidence by
+  themselves; evidence is created only from the cycle's observed execution
+  fixture.
+- Regression comparisons require a named baseline and evidence references.
+
+## Authority and mutation rules
+
+- Every authority is explicit and singular for its scope.
+- Aliases in the canonical vocabulary do not create second buses, stores, or
+  authorities.
+- A mutation is a governed proposal with lineage, rollback information, and
+  regression evidence; it is never an implicit write.
+- Kraken-R cannot promote or wire itself during this phase.
+
+## Preservation policy
+
+Legacy, alternate, dormant, experimental, attached, and forgotten mechanisms
+are preserved and classified in
+`kraken_r/architecture_registry.json`. A `merge`, `quarantine`, or
+`rebuild` disposition is a future decision marker, not permission to delete or
+replace code now. Orzhaal Bubble and recursive stacks are explicitly retained.
+
+## Planned capabilities
+
+Metaplasticity, neuromodulation, reservoir-style dynamics, criticality control,
+organizational engrams, offline consolidation, causal lesion/shadow
+experiments, developmental specialization, hyperdimensional associative
+state, and hierarchical learning levels are catalogued as planned-only. They
+are not implemented, reachable, authoritative, or evidence-backed by this
+foundation.
+
+## Acceptance
+
+An architectural change is accepted only when its files physically exist, its
+registry entry is current, its validator passes, focused tests pass, and the
+legacy non-interference boundary is checked. The registry and category notes
+are the living record for future bounded changes.
+
+## Deterministic candidate cycle
+
+`kraken_r.cycle.run_constitutional_cycle` accepts one `Objective` and a
+deterministic mode: `success`, `failure`, `contradiction`, or
+`insufficient_evidence`. Every run advances immutable `TaskState` versions
+from objective acquisition through an explicit stop. The action must carry
+`Authority.KRAKEN_CANDIDATE`; missing or other authority fails closed.
+
+Success and failure produce operational evidence from the observed execution
+and may produce a learning update after settlement. Contradictory observations
+produce evidence but withhold learning. An unobserved execution produces no
+evidence and no learning. No declared claim or self-report is promoted to
+evidence.
+
+## Recorded-execution replay
+
+`kraken_r.replay` accepts one immutable `RecordedExecution` record and feeds it
+through the same candidate lifecycle as the deterministic cycle. It is a
+read-only fixture adapter, not an event subscription or execution engine.
+
+Replay fails closed unless the record preserves its transaction, objective,
+authorized task-state version, action, execution, evidence, decision, and
+settlement identities. Its provenance must name those identities and the
+recorded observation boundary. Missing provenance, stale task-state versions,
+mismatched observed identities, unsupported status, and self-report-only
+success are rejected before a trace is produced. Only observed execution
+evidence can support settlement or learning.
+
+The replay adapter has no live inputs. It accepts only caller-provided
+in-memory records, writes nothing, and never imports ROGAL runtime machinery.
