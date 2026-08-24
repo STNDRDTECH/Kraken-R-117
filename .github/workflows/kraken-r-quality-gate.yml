@@ -1,0 +1,78 @@
+name: Kraken-R quality gate
+
+on:
+  push:
+    branches:
+      - "round-*"
+      - "infra-*"
+      - "kraken-r-*"
+  pull_request:
+    branches:
+      - "round-*"
+      - "infra-*"
+      - "kraken-r-*"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  quality-gate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Check out the complete history
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install minimal validation dependencies
+        run: |
+          python -m pip install --disable-pip-version-check --no-cache-dir \
+            pytest==8.4.2 \
+            cryptography==45.0.7
+          python -m pip check
+
+      - name: Verify protected artifacts and repository hygiene
+        run: python scripts/check_kraken_r_quality_gate.py
+
+      - name: Compile and import the candidate package
+        run: |
+          python -m compileall -q kraken_r bounded_execution_runner.py scripts/check_kraken_r_quality_gate.py
+          python -c "import bounded_execution_runner; import kraken_r; import kraken_r.grounded_execution"
+
+      - name: Run the cumulative Kraken-R acceptance suite
+        run: |
+          python -m pytest -q \
+            tests/test_kraken_r_controlled_evaluation.py \
+            tests/test_kraken_r_cycle.py \
+            tests/test_kraken_r_foundation.py \
+            tests/test_kraken_r_grounded_execution.py \
+            tests/test_kraken_r_llm_adapter.py \
+            tests/test_kraken_r_nervous_system.py \
+            tests/test_kraken_r_physiology.py \
+            tests/test_kraken_r_plastic_routing.py \
+            tests/test_kraken_r_replay.py
+
+      - name: Run the standalone constitutional validator
+        run: |
+          python -m kraken_r --json > validator.json
+          python - <<'PY'
+          import json
+          from pathlib import Path
+
+          result = json.loads(Path("validator.json").read_text())
+          if result.get("ok") is not True:
+              raise SystemExit(f"validator did not pass: {result}")
+          if result.get("legacy_runtime_wiring") != "absent":
+              raise SystemExit("legacy runtime wiring is not absent")
+          print("validator: ok=true; legacy runtime wiring absent")
+          PY
+
+      - name: Check final whitespace
+        run: git diff --check
