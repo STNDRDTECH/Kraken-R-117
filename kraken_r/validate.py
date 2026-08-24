@@ -7,6 +7,7 @@ import ast
 from dataclasses import replace
 import json
 import sys
+import tempfile
 from pathlib import Path
 from typing import Any, Mapping, Sequence
 
@@ -53,6 +54,15 @@ from .controlled_evaluation import (
     ControlledEvaluationHarness,
     EvaluationMode,
     HeldOutTask,
+)
+from .grounded_execution import (
+    GroundedExecutionExecutor,
+    GroundedDeliveryLedger,
+    GroundedExecutionRejected,
+    GroundedExecutionRequest,
+    GroundedExecutionVerifier,
+    make_grounded_action,
+    replay_grounded_execution,
 )
 from .replay import (
     RecordedExecution,
@@ -951,6 +961,119 @@ def validate_controlled_llm_adapter() -> tuple[str, ...]:
     return tuple(errors)
 
 
+def validate_grounded_execution() -> tuple[str, ...]:
+    """Verify the bounded external-observation boundary end to end."""
+
+    errors: list[str] = []
+    objective = contracts.Objective(
+        "validator-grounded-objective",
+        "Execute one sealed candidate test in a bounded workspace.",
+        provenance={"transaction_id": "validator-grounded-transaction"},
+    )
+    action = make_grounded_action(objective.objective_id)
+    authorized_state = contracts.TaskState(
+        f"{objective.objective_id}-state-5",
+        objective.objective_id,
+        5,
+        "authorized",
+        values={"action_id": action.action_id},
+    )
+    request = GroundedExecutionRequest(
+        "validator-grounded-request",
+        "validator-grounded-transaction",
+        objective.objective_id,
+        authorized_state.state_id,
+        authorized_state.version,
+        action,
+        {
+            "subject.py": "def add(left, right):\n    return left + right\n",
+            "test_subject.py": (
+                "from subject import add\n\n"
+                "def test_bounded_addition():\n"
+                "    assert add(20, 22) == 42\n"
+            ),
+        },
+        ("test_subject.py",),
+    )
+    executor = GroundedExecutionExecutor(
+        delivery_ledger=GroundedDeliveryLedger(
+            Path(tempfile.mkdtemp(prefix="kraken-r-validator-receipts-"))
+            / "receipts.json"
+        )
+    )
+    verifier = executor.verifier()
+    try:
+        record = executor.execute(request, authorized_state=authorized_state)
+        verified = verifier.verify(
+            record, request=request, authorized_state=authorized_state
+        )
+        replay = replay_grounded_execution(
+            record,
+            request=request,
+            authorized_state=authorized_state,
+            verifier=verifier,
+        )
+    except (GroundedExecutionRejected, OSError, RuntimeError) as exc:
+        return (f"bounded grounded execution failed: {exc}",)
+    if verified.observed_outcome != "success" or replay != verified:
+        errors.append("verified execution did not structurally replay as success")
+    try:
+        fresh_verifier = GroundedExecutionVerifier.from_record(
+            record, trusted_executor=executor.trusted_executor()
+        )
+        fresh_verifier.verify(
+            record, request=request, authorized_state=authorized_state
+        )
+    except GroundedExecutionRejected as exc:
+        errors.append(f"fresh public-key verifier rejected a valid record: {exc}")
+    try:
+        executor.execute(request, authorized_state=authorized_state)
+    except GroundedExecutionRejected:
+        pass
+    else:
+        errors.append("duplicate grounded execution was accepted")
+    try:
+        trace = run_constitutional_cycle(
+            objective,
+            grounded_execution=verified,
+            grounded_request=request,
+            grounded_verifier=verifier,
+        )
+    except CycleInvariantError as exc:
+        errors.append(f"verified execution did not enter the candidate cycle: {exc}")
+    else:
+        if (
+            trace.decision.outcome != "success"
+            or trace.capability.evidence_grade is not contracts.EvidenceGrade.GROUNDED
+            or not trace.learning_update
+        ):
+            errors.append("verified execution did not produce grounded settlement evidence")
+    try:
+        verifier.verify(
+            replace(record, input_hash="0" * 64),
+            request=request,
+            authorized_state=authorized_state,
+        )
+    except GroundedExecutionRejected:
+        pass
+    else:
+        errors.append("tampered grounded record was accepted")
+    stale_state = contracts.TaskState(
+        f"{objective.objective_id}-state-6",
+        objective.objective_id,
+        6,
+        "authorized",
+        values={"action_id": action.action_id},
+    )
+    try:
+        verifier.verify(record, request=request, authorized_state=stale_state)
+    except GroundedExecutionRejected:
+        pass
+    else:
+        errors.append("stale task state was accepted for grounded verification")
+    return tuple(errors)
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         description="Validate the isolated, candidate-only Kraken-R foundation."
@@ -986,6 +1109,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     physiology_errors = validate_physiology()
     plastic_routing_errors = validate_plastic_routing()
     llm_adapter_errors = validate_controlled_llm_adapter()
+    grounded_execution_errors = validate_grounded_execution()
     legacy_runtime_errors = validate_legacy_runtime_boundary()
     report = {
         "ok": (
@@ -997,6 +1121,7 @@ def main(argv: Sequence[str] | None = None) -> int:
             and not physiology_errors
             and not plastic_routing_errors
             and not llm_adapter_errors
+            and not grounded_execution_errors
             and not legacy_runtime_errors
         ),
         "contracts_ok": not contract_errors,
@@ -1031,6 +1156,11 @@ def main(argv: Sequence[str] | None = None) -> int:
             "ok": not llm_adapter_errors,
             "errors": list(llm_adapter_errors),
             "authority": "proposal_only_candidate",
+        },
+        "grounded_execution": {
+            "ok": not grounded_execution_errors,
+            "errors": list(grounded_execution_errors),
+            "authority": "verified_candidate_execution_only",
         },
         "constitution": {
             "ok": True,

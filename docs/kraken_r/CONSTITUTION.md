@@ -1,8 +1,9 @@
 # Kraken-R Constitution
 
 **Status:** candidate-only foundation  
-**Version:** 1.7
-**Effective boundary:** documentation, standalone validation, and bounded in-memory candidate-cycle execution
+**Version:** 1.8
+**Effective boundary:** documentation, standalone validation, deterministic fixture
+execution, and independently verified bounded candidate execution observations
 
 ## Mission
 
@@ -22,11 +23,11 @@ actuators remain unchanged and authoritative for their current behavior.
 
 The `kraken_r` package is candidate-only. Its deterministic cycle,
 recorded-execution replay, bounded signal propagation, bounded advisory
-physiology, settlement-grounded route-preference reducer, and proposal-only LLM
-adapter have no daemon
-entrypoint, runtime writer, event subscription, external executor, router,
-ledger, homeostasis controller, or mutation actuator. Loading, validating, or
-running them must not start ROGAL, contact an LLM, open live stores, or change
+physiology, settlement-grounded route-preference reducer, proposal-only LLM
+adapter, and narrow verified execution observer have no daemon entrypoint,
+runtime writer, event subscription, general command surface, router, ledger,
+homeostasis controller, or mutation actuator. Loading, validating, or running
+them must not start ROGAL, contact an LLM, open live stores, or change
 `.rogal/` runtime state.
 
 ## Canonical lifecycle
@@ -57,6 +58,10 @@ explicit `Decision(outcome="stop")`.
 - A declared `Signal`/`Event` and an `ExecutionResult` are not evidence by
   themselves; evidence is created only from the cycle's observed execution
   fixture.
+- A fixture observation remains operational evidence. `GROUNDED` evidence
+  requires a sealed execution request, disposable-workspace observation,
+  complete provenance and hashes, executor attestation, and separate verifier
+  acceptance.
 - Regression comparisons require a named baseline and evidence references.
 
 ## Authority and mutation rules
@@ -147,6 +152,51 @@ settlement or learning.
 
 The replay adapter has no live inputs. It accepts only caller-provided
 in-memory records, writes nothing, and never imports ROGAL runtime machinery.
+
+## Independently verified bounded execution
+
+Round 8 adds `kraken_r.grounded_execution`, a deliberately narrow external
+observation adapter. It accepts exactly one candidate-owned
+`run_bounded_pytest` action, a version-5 authorized `TaskState`, declared
+relative text files, declared Python test paths, and explicit wall-clock, CPU,
+memory, and output limits. It materializes those files only in a disposable
+child workspace and has no arbitrary command, repository clone, network,
+provider, persistence, goal-selection, mutation, retry, subscriber, or
+controller path.
+
+The executor produces an immutable observation record with sealed input,
+workspace, output, and record hashes plus disposal and resource-limit
+provenance. That record is **not evidence** and it has no success field. Each
+ record carries an Ed25519 signature and public-key metadata; the private
+ signing key never serializes. A record's public key is never a trust root:
+ restart verification requires an independently supplied, pinned
+ `TrustedExecutorIdentity`. Canonical JSON reconstruction is available for the
+ sealed request, authorized state, and record before that verifier can recheck
+ bindings and hashes. It rejects stale authorization, workspace escape,
+ malformed or self-reported records, and derives success or failure only from
+ completed test facts. A timeout, setup failure, malformed collection, or
+ zero-test run withholds evidence and learning.
+
+The bounded pytest transport uses a runner-owned empty configuration and
+disables candidate `conftest.py` discovery. Candidate-controlled pytest hooks
+or configuration therefore cannot rewrite the runner's call facts; any test
+that depends on such local setup fails closed rather than becoming grounded
+evidence.
+
+Only a `VerifiedGroundedExecution` can enter the constitutional cycle. Its
+translated `Evidence` is `GROUNDED`, not merely operational, and is bound to
+the execution-record and record hashes. Structural replay revalidates the
+immutable record without launching another child process. The existing fixture
+path remains the default for unit tests; comparing fixture and grounded traces
+is a source/authority ablation only and carries no performance claim. A
+ caller-owned bounded receipt ledger persists bounded, expiry-stamped receipts
+ with a file lock, durable replace, and directory sync. It rejects duplicate
+ execution, evidence, settlement, and learning delivery across restarts and
+ concurrent processes until their explicit expiry. It is an idempotency guard,
+ not a controller. Resource-limit and cleanup provenance are accepted only when
+ measured by the host runner: the sandbox is a fresh user/mount/network/PID
+ namespace whose parent uses `unshare --kill-child=SIGKILL`; the runner confirms
+ the whole namespace parent group has disappeared before it reports cleanup.
 
 ## Bounded advisory physiology
 

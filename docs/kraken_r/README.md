@@ -21,6 +21,9 @@ second runtime.
   output remains declared-only and structurally replayable.
 - `kraken_r/controlled_evaluation.py` — base/mediated/reset held-out comparison
   with fixed provider/model/prompt-budget controls and no performance claim.
+- `kraken_r/grounded_execution.py` — sealed, disposable-workspace candidate test
+  observation with explicit limits, executor attestation, independent
+  verification, and structural replay.
 - `kraken_r/constitution.json` — machine-readable constitution metadata
   validated alongside the registry.
 - `kraken_r/architecture_registry.schema.json` — machine-readable JSON schema.
@@ -44,7 +47,8 @@ pytest -q \
   tests/test_kraken_r_physiology.py \
    tests/test_kraken_r_plastic_routing.py \
    tests/test_kraken_r_llm_adapter.py \
-   tests/test_kraken_r_controlled_evaluation.py
+   tests/test_kraken_r_controlled_evaluation.py \
+   tests/test_kraken_r_grounded_execution.py
 ```
 
 The command reads the bundled JSON, imports the isolated package, and executes
@@ -55,6 +59,91 @@ plasticity coverage. It does not import `rogal_core`,
 start a workflow, contact an LLM, open a live store, or write runtime state.
 The Round 7 provider is deterministic fixture-only unless a caller explicitly
 injects a configured provider.
+
+## Bounded grounded execution
+
+The fixture cycle remains the default for deterministic unit tests. When a
+caller needs a real local observation, it must first provide a candidate-owned
+`run_bounded_pytest` action and the exact authorized state. The bounded adapter
+accepts only declared relative text files and test paths, runs them in a
+disposable child workspace under explicit resource limits, and emits an
+attested record. A separate verifier recomputes the sealed request/output
+hashes and derives the outcome from test facts; executor output and model
+claims are not trusted as evidence by themselves.
+
+```python
+from kraken_r import (
+    GroundedExecutionExecutor,
+    GroundedDeliveryLedger,
+    GroundedExecutionRequest,
+    GroundedExecutionVerifier,
+    Objective,
+    TaskState,
+    make_grounded_action,
+    run_constitutional_cycle,
+)
+
+objective = Objective(
+    "grounded-demo",
+    "run one bounded real test",
+    provenance={"transaction_id": "grounded-demo-tx"},
+)
+action = make_grounded_action(objective.objective_id)
+state = TaskState(
+    "grounded-demo-state-5", objective.objective_id, 5, "authorized",
+    values={"action_id": action.action_id},
+)
+request = GroundedExecutionRequest(
+    "grounded-demo-request", "grounded-demo-tx", objective.objective_id,
+    state.state_id, state.version, action,
+    {
+        "subject.py": "def add(a, b):\n    return a + b\n",
+        "test_subject.py": (
+            "from subject import add\n\n"
+            "def test_add():\n    assert add(20, 22) == 42\n"
+        ),
+    },
+    ("test_subject.py",),
+)
+ledger = GroundedDeliveryLedger("/trusted-runtime/grounded-receipts.json")
+executor = GroundedExecutionExecutor(delivery_ledger=ledger)
+record = executor.execute(request, authorized_state=state)
+verifier = executor.verifier()
+verified = verifier.verify(
+    record, request=request, authorized_state=state,
+)
+trace = run_constitutional_cycle(
+    objective,
+    grounded_execution=verified,
+    grounded_request=request,
+    grounded_verifier=verifier,
+)
+assert trace.evidence[0].grade.value == "grounded"
+```
+
+This is an execution-source ablation, not a model evaluation or performance
+claim. A timeout, failed setup, malformed test collection, zero-test run,
+stale state, workspace escape, or invalid attestation produces no grounded
+evidence or learning.
+
+Records carry an Ed25519 signature, but the public key inside a record is never
+trusted by itself. Persist the request, authorized state, record, and a pinned
+`TrustedExecutorIdentity` through their JSON serializers; a restarted verifier
+must be constructed with the external trust anchor:
+
+```python
+trusted = executor.trusted_executor()  # distribute independently of the record
+fresh = GroundedExecutionVerifier.from_record(
+    GroundedExecutionRecord.from_json(record.to_json()),
+    trusted_executor=trusted,
+)
+```
+
+`GroundedDeliveryLedger(path)` persists bounded expiry-stamped receipts. It
+rejects duplicate execution, evidence, settlement, and learning delivery after
+restart until the configured receipt expiry; it grants no controller authority.
+The host runner measures the applied resource limits and confirms the sandbox
+process group is gone before marking cleanup provenance as verified.
 
 The cycle can also be exercised directly:
 

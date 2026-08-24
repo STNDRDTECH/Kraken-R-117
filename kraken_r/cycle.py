@@ -28,6 +28,13 @@ from .contracts import (
     Signal,
     TaskState,
 )
+from .grounded_execution import (
+    GroundedDeliveryLedger,
+    GroundedExecutionRejected,
+    GroundedExecutionRequest,
+    GroundedExecutionVerifier,
+    VerifiedGroundedExecution,
+)
 from .nervous_system import PropagationTrace, SignalNetwork, SignalPropagationError
 from .physiology import (
     PhysiologySnapshot,
@@ -149,6 +156,10 @@ class ConstitutionalCycle:
         signals: tuple[Signal, ...] = (),
         signal_network: SignalNetwork | None = None,
         physiology: PhysiologySnapshot | None = None,
+        grounded_execution: VerifiedGroundedExecution | None = None,
+        grounded_request: GroundedExecutionRequest | None = None,
+        grounded_verifier: GroundedExecutionVerifier | None = None,
+        grounded_delivery_ledger: GroundedDeliveryLedger | None = None,
     ) -> CycleTrace:
         if not isinstance(objective, Objective):
             raise CycleInvariantError("cycle requires an Objective contract")
@@ -273,15 +284,37 @@ class ConstitutionalCycle:
                 action_inhibited or physiology_trace.decision.action_inhibited
             )
 
-        action = Action(
-            f"{prefix}-action",
-            prefix,
-            "observe_bounded_target",
-            "deterministic_target",
-            parameters={"mode": selected_mode.value},
-            preconditions=plan.preconditions,
-            authority=selected_authority,
-        )
+        if grounded_execution is None:
+            action = Action(
+                f"{prefix}-action",
+                prefix,
+                "observe_bounded_target",
+                "deterministic_target",
+                parameters={"mode": selected_mode.value},
+                preconditions=plan.preconditions,
+                authority=selected_authority,
+            )
+        else:
+            if not isinstance(grounded_execution, VerifiedGroundedExecution):
+                raise CycleInvariantError(
+                    "grounded execution requires a verifier-issued observation"
+                )
+            action = grounded_execution.action
+            if (
+                action.action_id != f"{prefix}-action"
+                or action.objective_id != objective.objective_id
+                or action.authority is not Authority.KRAKEN_CANDIDATE
+                or action.operation != "run_bounded_pytest"
+                or action.target != "isolated_workspace"
+                or action.preconditions != plan.preconditions
+            ):
+                raise CycleInvariantError(
+                    "verified grounded execution is not bound to this candidate action"
+                )
+            if action_inhibited:
+                raise CycleInvariantError(
+                    "an inhibited candidate action cannot consume grounded execution"
+                )
         state = self._advance(
             state,
             "inhibited" if action_inhibited else "authorized",
@@ -310,12 +343,44 @@ class ConstitutionalCycle:
         )
         states.append(state)
 
-        execution = self._execute_fixture(
-            action,
-            selected_mode,
-            signal_trace=signal_trace,
-            physiology_trace=physiology_trace,
-        )
+        delivery_ledger: GroundedDeliveryLedger | None = None
+        if grounded_execution is not None:
+            if (
+                not isinstance(grounded_request, GroundedExecutionRequest)
+                or not isinstance(grounded_verifier, GroundedExecutionVerifier)
+            ):
+                raise CycleInvariantError(
+                    "grounded execution requires its sealed request and verifier"
+                )
+            try:
+                grounded_execution = grounded_verifier.verify(
+                    grounded_execution.record,
+                    request=grounded_request,
+                    authorized_state=state,
+                )
+            except GroundedExecutionRejected as exc:
+                raise CycleInvariantError(
+                    f"grounded execution failed independent verification: {exc}"
+                ) from exc
+            delivery_ledger = grounded_delivery_ledger or grounded_verifier.delivery_ledger
+            if not delivery_ledger.is_durable:
+                raise CycleInvariantError(
+                    "grounded execution requires a durable delivery ledger"
+                )
+
+        if grounded_execution is None:
+            execution = self._execute_fixture(
+                action,
+                selected_mode,
+                signal_trace=signal_trace,
+                physiology_trace=physiology_trace,
+            )
+        else:
+            execution = self._execute_grounded(
+                grounded_execution,
+                transaction_id=transaction_id,
+                authorized_state=state,
+            )
         state = self._advance(
             state,
             "observed",
@@ -328,6 +393,12 @@ class ConstitutionalCycle:
 
         evidence = self._evidence_for(execution)
         evidence_ids = tuple(item.evidence_id for item in evidence)
+        if delivery_ledger is not None and evidence:
+            delivery_ledger.claim(
+                "evidence",
+                grounded_execution.record.record_id,
+                grounded_execution.record.output_hash,
+            )
         observed_outcome = self._observed_outcome(execution)
         ground_truth = evidence[0] if observed_outcome in {"success", "failure"} else None
         state = self._advance(
@@ -363,6 +434,12 @@ class ConstitutionalCycle:
             evidence_ids=evidence_ids,
             status="settled" if evidence else "insufficient_evidence",
         )
+        if delivery_ledger is not None and evidence:
+            delivery_ledger.claim(
+                "settlement",
+                settlement.settlement_id,
+                grounded_execution.record.record_hash,
+            )
         state = self._advance(
             state,
             "settled",
@@ -378,7 +455,9 @@ class ConstitutionalCycle:
             f"{prefix}-capability",
             "bounded deterministic observation",
             evidence_grade=(
-                EvidenceGrade.OPERATIONAL
+                EvidenceGrade.GROUNDED
+                if any(item.grade is EvidenceGrade.GROUNDED for item in evidence)
+                else EvidenceGrade.OPERATIONAL
                 if evidence
                 else EvidenceGrade.NONE
             ),
@@ -387,6 +466,12 @@ class ConstitutionalCycle:
         learning_update = self._learning_update(
             prefix, capability, settlement, observed_outcome, evidence_ids
         )
+        if delivery_ledger is not None and learning_update is not None:
+            delivery_ledger.claim(
+                "learning",
+                learning_update.update_id,
+                grounded_execution.record.record_hash,
+            )
         state = self._advance(
             state,
             "learned" if learning_update is not None else "learning_withheld",
@@ -435,8 +520,16 @@ class ConstitutionalCycle:
             stop_decision=stop_decision,
             provenance={
                 "transaction_id": transaction_id,
-                "source": "deterministic_fixture",
-                "observation_origin": "execution_result",
+                "source": (
+                    "grounded_execution_verifier"
+                    if grounded_execution is not None
+                    else "deterministic_fixture"
+                ),
+                "observation_origin": (
+                    "grounded_execution"
+                    if grounded_execution is not None
+                    else "execution_result"
+                ),
             },
             signal_trace=signal_trace,
             physiology_trace=physiology_trace,
@@ -534,19 +627,89 @@ class ConstitutionalCycle:
         )
 
     @staticmethod
+    def _execute_grounded(
+        verified_execution: VerifiedGroundedExecution,
+        *,
+        transaction_id: str,
+        authorized_state: TaskState,
+    ) -> ExecutionResult:
+        """Translate a verifier-issued record into a read-only cycle observation."""
+
+        record = verified_execution.record
+        if (
+            record.transaction_id != transaction_id
+            or record.task_state_id != authorized_state.state_id
+            or record.task_state_version != authorized_state.version
+            or record.action.action_id != verified_execution.action.action_id
+        ):
+            raise CycleInvariantError(
+                "grounded execution record is not bound to the authorized state"
+            )
+        outcome = verified_execution.observed_outcome
+        observed = outcome in {"success", "failure"}
+        mode = {
+            "success": CycleMode.SUCCESS.value,
+            "failure": CycleMode.FAILURE.value,
+            "not_observed": CycleMode.INSUFFICIENT_EVIDENCE.value,
+        }[outcome]
+        observations = {
+            "mode": mode,
+            "observed": observed,
+            "criteria_met": outcome == "success" if observed else None,
+            "grounded_execution": True,
+            "execution_record_id": record.record_id,
+            "input_hash": record.input_hash,
+            "output_hash": record.output_hash,
+            "record_hash": record.record_hash,
+            "tests_run": record.observation.tests_run,
+            "tests_passed": record.observation.tests_passed,
+            "tests_failed": record.observation.tests_failed,
+            "resource_limits_enforced": record.provenance.resource_limits_enforced,
+            "cleanup_verified": record.provenance.cleanup_verified,
+        }
+        return ExecutionResult(
+            f"{record.record_id}-execution",
+            record.action.action_id,
+            (
+                record.observation.status.value
+                if observed
+                else "not_observed"
+            ),
+            exit_code=record.observation.exit_code,
+            observations=observations,
+        )
+
+    @staticmethod
     def _evidence_for(execution: ExecutionResult) -> tuple[Evidence, ...]:
         if not execution.observations.get("observed"):
             # The declared Signal and the ExecutionResult are not evidence.
             return ()
+        grounded = execution.observations.get("grounded_execution") is True
         common = {
             "source_kind": "observed_execution",
             "execution_status": execution.status,
         }
-        provenance = {
-            "cycle": "kraken_r_deterministic_candidate",
-            "adapter": "deterministic_observation",
-            "observation_origin": "execution_result",
-        }
+        provenance = (
+            {
+                "cycle": "kraken_r_candidate",
+                "adapter": "grounded_execution_verifier",
+                "observation_origin": "grounded_execution",
+                "execution_record_id": execution.observations["execution_record_id"],
+                "record_hash": execution.observations["record_hash"],
+            }
+            if grounded
+            else {
+                "cycle": "kraken_r_deterministic_candidate",
+                "adapter": "deterministic_observation",
+                "observation_origin": "execution_result",
+            }
+        )
+        grade = EvidenceGrade.GROUNDED if grounded else EvidenceGrade.OPERATIONAL
+        source = (
+            "grounded_execution_verifier"
+            if grounded
+            else "deterministic_observation"
+        )
         if (
             execution.observations.get("positive_observation")
             and execution.observations.get("negative_observation")
@@ -555,8 +718,8 @@ class ConstitutionalCycle:
                 Evidence(
                     f"{execution.execution_id}-positive",
                     execution.execution_id,
-                    EvidenceGrade.OPERATIONAL,
-                    "deterministic_observation",
+                    grade,
+                    source,
                     observations={**common, "criteria_met": True},
                     execution_id=execution.execution_id,
                     provenance=provenance,
@@ -564,8 +727,8 @@ class ConstitutionalCycle:
                 Evidence(
                     f"{execution.execution_id}-negative",
                     execution.execution_id,
-                    EvidenceGrade.OPERATIONAL,
-                    "deterministic_observation",
+                    grade,
+                    source,
                     observations={**common, "criteria_met": False},
                     execution_id=execution.execution_id,
                     provenance=provenance,
@@ -580,8 +743,8 @@ class ConstitutionalCycle:
             Evidence(
                 f"{execution.execution_id}-observed",
                 execution.execution_id,
-                EvidenceGrade.OPERATIONAL,
-                "deterministic_observation",
+                grade,
+                source,
                 observations={**common, "criteria_met": criteria_met},
                 execution_id=execution.execution_id,
                 provenance=provenance,
@@ -663,7 +826,7 @@ class ConstitutionalCycle:
             or evidence.grade in {EvidenceGrade.NONE, EvidenceGrade.DECLARED}
             or not evidence.provenance
             or evidence.provenance.get("observation_origin")
-            not in {"execution_result", "recorded_execution"}
+             not in {"execution_result", "recorded_execution", "grounded_execution"}
             for evidence in trace.evidence
         ):
             raise CycleInvariantError("evidence is not grounded in observed execution")
@@ -753,6 +916,10 @@ def run_constitutional_cycle(
     signals: tuple[Signal, ...] = (),
     signal_network: SignalNetwork | None = None,
     physiology: PhysiologySnapshot | None = None,
+    grounded_execution: VerifiedGroundedExecution | None = None,
+    grounded_request: GroundedExecutionRequest | None = None,
+    grounded_verifier: GroundedExecutionVerifier | None = None,
+    grounded_delivery_ledger: GroundedDeliveryLedger | None = None,
 ) -> CycleTrace:
     """Run the bounded deterministic candidate cycle."""
 
@@ -763,6 +930,10 @@ def run_constitutional_cycle(
         signals=signals,
         signal_network=signal_network,
         physiology=physiology,
+        grounded_execution=grounded_execution,
+        grounded_request=grounded_request,
+        grounded_verifier=grounded_verifier,
+        grounded_delivery_ledger=grounded_delivery_ledger,
     )
 
 
