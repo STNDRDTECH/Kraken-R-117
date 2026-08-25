@@ -42,7 +42,12 @@ from .physiology import (
     PhysiologyTrace,
     evaluate_physiology,
 )
-from .plastic_routing import BASELINE_WEIGHT, SettlementRouteRecord, apply_settlement_learning
+from .plastic_routing import (
+    BASELINE_WEIGHT,
+    PlasticRoutingValidationError,
+    SettlementRouteRecord,
+    apply_settlement_learning,
+)
 
 
 MAX_TICK_EVENTS = 16
@@ -580,6 +585,7 @@ class DynamicalState:
     consumed_event_ids: tuple[str, ...] = ()
     event_log: tuple[str, ...] = ()
     withheld_events: tuple[WithheldEvent, ...] = ()
+    historical_event_ids: tuple[str, ...] = ()
 
     def __post_init__(self) -> None:
         for value, name in (
@@ -614,6 +620,16 @@ class DynamicalState:
         ):
             raise DynamicalSubstrateValidationError("withheld event audit is invalid")
         object.__setattr__(self, "withheld_events", withheld)
+        historical = _bounded_tuple(
+            self.historical_event_ids, MAX_EVENT_COUNTER, "historical_event_ids"
+        )
+        if len(set(historical)) != len(historical) or not all(
+            isinstance(item, str) and item for item in historical
+        ):
+            raise DynamicalSubstrateValidationError(
+                "historical event identities are invalid or repeated"
+            )
+        object.__setattr__(self, "historical_event_ids", historical)
 
     @classmethod
     def fixture(
@@ -672,6 +688,7 @@ class DynamicalState:
             "consumed_event_ids": list(self.consumed_event_ids),
             "event_log": list(self.event_log),
             "withheld_events": [item.to_dict() for item in self.withheld_events],
+            "historical_event_ids": list(self.historical_event_ids),
             "authority": "kraken_candidate",
         }
 
@@ -783,6 +800,23 @@ def _context_match(state: DynamicalState, record: SettlementRouteRecord) -> None
         raise DynamicalSubstrateValidationError(
             "settlement is not bound to the substrate task state"
         )
+
+
+def _is_current_lineage_error(error: ValueError) -> bool:
+    """Identify stale/reused authority inputs that become provenance-only."""
+
+    text = str(error).lower()
+    return any(
+        phrase in text
+        for phrase in (
+            "stale",
+            "already applied",
+            "already consumed",
+            "already invalidated",
+            "not bound to the substrate task state",
+            "checkpoint is not retained",
+        )
+    )
 
 
 def _signal_trace(state: DynamicalState, signals: tuple[Signal, ...]) -> PropagationTrace | None:
@@ -918,7 +952,11 @@ def _reduce_dynamical_tick_counterfactual(
         raise DynamicalSubstrateValidationError("canonical withheld event ids are invalid")
     canonical_withheld = frozenset(canonical_withheld_event_ids)
     ordered = DynamicalEventFabric.order(tick.events)
-    if any(event.event_id in state.consumed_event_ids for event in ordered):
+    if any(
+        event.event_id in state.consumed_event_ids
+        or event.event_id in state.historical_event_ids
+        for event in ordered
+    ):
         raise DynamicalSubstrateValidationError("event was already consumed")
 
     signals = tuple(event.signal for event in ordered if event.signal is not None)
@@ -1020,6 +1058,7 @@ def _reduce_dynamical_tick_counterfactual(
     decay_events = state.medium.decay_events
     plasticity_events = state.medium.plasticity_events
     rollback_events = state.instrumentation.rollback_events
+    provenance_only_event_ids: set[str] = set()
     for event in ordered:
         if event.checkpoint_id is not None:
             if event.event_id in canonical_withheld:
@@ -1047,6 +1086,18 @@ def _reduce_dynamical_tick_counterfactual(
             try:
                 adaptive, audit = rollback_adaptive_state(adaptive, event.checkpoint_id)
             except ValueError as exc:
+                if _is_current_lineage_error(exc):
+                    provenance_only_event_ids.add(event.event_id)
+                    withheld.append(
+                        WithheldEvent(
+                            event.event_id,
+                            event.kind,
+                            f"current-state lineage withheld candidate rollback: {exc}",
+                            operation="rollback",
+                            checkpoint_id=event.checkpoint_id,
+                        )
+                    )
+                    continue
                 raise DynamicalSubstrateValidationError(
                     f"rollback reducer rejected {event.event_id}: {exc}"
                 ) from exc
@@ -1067,8 +1118,22 @@ def _reduce_dynamical_tick_counterfactual(
                 )
             )
             continue
-        _context_match(state, record)
-        learning = apply_settlement_learning(adaptive.route_topology, record)[1]
+        try:
+            _context_match(state, record)
+            learning = apply_settlement_learning(adaptive.route_topology, record)[1]
+        except (DynamicalSubstrateValidationError, PlasticRoutingValidationError) as exc:
+            if _is_current_lineage_error(exc):
+                provenance_only_event_ids.add(event.event_id)
+                noncreditable.append(record.record_id)
+                withheld.append(
+                    _withheld_settlement(
+                        event,
+                        record,
+                        f"current-state lineage withheld candidate adaptation: {exc}",
+                    )
+                )
+                continue
+            raise
         if learning.disposition != "accepted":
             noncreditable.append(record.record_id)
             withheld.append(_withheld_settlement(event, record, learning.reason))
@@ -1111,6 +1176,17 @@ def _reduce_dynamical_tick_counterfactual(
                     adaptive, record, operation=event.operation
                 )
         except ValueError as exc:
+            if _is_current_lineage_error(exc):
+                provenance_only_event_ids.add(event.event_id)
+                noncreditable.append(record.record_id)
+                withheld.append(
+                    _withheld_settlement(
+                        event,
+                        record,
+                        f"current-state lineage withheld candidate adaptation: {exc}",
+                    )
+                )
+                continue
             raise DynamicalSubstrateValidationError(
                 f"grounded settlement reducer rejected {record.record_id}: {exc}"
             ) from exc
@@ -1197,7 +1273,23 @@ def _reduce_dynamical_tick_counterfactual(
             else 0
         ),
     )
-    next_state = DynamicalState(
+    provenance_only_tick = bool(ordered) and len(provenance_only_event_ids) == len(ordered)
+    if provenance_only_tick:
+        next_state = replace(
+            state,
+            tick=tick.tick,
+            consumed_event_ids=(
+                state.consumed_event_ids + tuple(event.event_id for event in ordered)
+            )[-MAX_EVENT_LOG:],
+            event_log=(state.event_log + tuple(event.event_id for event in ordered))[
+                -MAX_EVENT_LOG:
+            ],
+            withheld_events=(state.withheld_events + tuple(withheld))[-MAX_AUDIT_RECORDS:],
+            historical_event_ids=state.historical_event_ids
+            + tuple(event.event_id for event in ordered),
+        )
+    else:
+        next_state = DynamicalState(
         state.substrate_id,
         state.transaction_id,
         state.objective_id,
@@ -1211,7 +1303,8 @@ def _reduce_dynamical_tick_counterfactual(
         (state.consumed_event_ids + tuple(event.event_id for event in ordered))[-MAX_EVENT_LOG:],
         (state.event_log + tuple(event.event_id for event in ordered))[-MAX_EVENT_LOG:],
         (state.withheld_events + tuple(withheld))[-MAX_AUDIT_RECORDS:],
-    )
+        state.historical_event_ids + tuple(event.event_id for event in ordered),
+        )
     trace = DynamicalTickTrace(
         tick.tick,
         tuple(event.event_id for event in ordered),

@@ -301,6 +301,68 @@ def test_duplicate_record_remains_rejected_after_rollback() -> None:
         replace(rolled_back, generation=MAX_ADAPTIVE_GENERATIONS + 1)
 
 
+def test_settlement_and_checkpoint_lineage_fail_closed_after_state_advances() -> None:
+    state = AdaptiveState.fixture("lineage-settlement")
+    record = _route_record(state, "lineage-settlement-success")
+    updated, _ = apply_grounded_adaptation(state, record)
+    checkpoint_id = updated.checkpoints[-1].checkpoint_id
+
+    replay_selection = select_candidate_route(
+        updated.route_topology,
+        "candidate-work",
+        transaction_id=record.selection.transaction_id,
+        objective_id=record.selection.objective_id,
+        task_state_id=record.selection.task_state_id,
+        task_state_version=record.selection.task_state_version,
+    )
+    reused_settlement = replace(
+        record,
+        record_id="lineage-settlement-reused-record",
+        selection=replay_selection,
+        provenance={
+            **dict(record.provenance),
+            "route_id": replay_selection.route_id,
+        },
+    )
+    before = updated.to_dict()
+    with pytest.raises(AdaptiveSubstrateValidationError, match="settlement identity"):
+        apply_grounded_adaptation(updated, reused_settlement)
+    assert updated.to_dict() == before
+
+    rolled_back, _ = rollback_adaptive_state(updated, checkpoint_id)
+    before = rolled_back.to_dict()
+    with pytest.raises(AdaptiveSubstrateValidationError, match="checkpoint lineage is stale"):
+        rollback_adaptive_state(rolled_back, checkpoint_id)
+    assert rolled_back.to_dict() == before
+
+
+def test_stale_topology_generation_and_replay_after_invalidation_fail_closed() -> None:
+    initial = AdaptiveState.fixture("lineage-generation")
+    stale = _route_record(initial, "lineage-generation-stale")
+    advanced = replace(
+        initial,
+        route_topology=replace(
+            initial.route_topology,
+            generation=initial.route_topology.generation + 1,
+        ),
+    )
+    before = advanced.to_dict()
+    with pytest.raises(AdaptiveSubstrateValidationError, match="generation is stale"):
+        apply_grounded_adaptation(advanced, stale)
+    assert advanced.to_dict() == before
+
+    success = _route_record(initial, "lineage-replay-success")
+    reinforced, _ = apply_grounded_adaptation(initial, success)
+    failure = _route_record(reinforced, "lineage-replay-failure", passing=False)
+    invalidated, _ = invalidate_grounded_adaptation(
+        reinforced, success.record_id, failure, reason="verified contrary outcome"
+    )
+    before = invalidated.to_dict()
+    with pytest.raises(AdaptiveSubstrateValidationError, match="already applied"):
+        replay_adaptive_updates(invalidated, (("credit", success, None),))
+    assert invalidated.to_dict() == before
+
+
 def test_infrastructure_and_execution_failures_cannot_reshape_adaptation() -> None:
     state = AdaptiveState.fixture("non-creditable-adaptive")
     malformed = _route_record_from_execution(
@@ -361,6 +423,24 @@ def test_later_grounded_failure_can_invalidate_bad_reinforcement() -> None:
         )
     with pytest.raises(AdaptiveSubstrateValidationError, match="already applied"):
         apply_grounded_adaptation(recovered, success)
+    before = recovered.to_dict()
+    with pytest.raises(AdaptiveSubstrateValidationError, match="settlement identity"):
+        apply_grounded_adaptation(
+            recovered,
+            replace(
+                later_failure,
+                record_id="resilience-reused-invalidating-settlement",
+                selection=select_candidate_route(
+                    recovered.route_topology,
+                    "candidate-work",
+                    transaction_id=later_failure.selection.transaction_id,
+                    objective_id=later_failure.selection.objective_id,
+                    task_state_id=later_failure.selection.task_state_id,
+                    task_state_version=later_failure.selection.task_state_version,
+                ),
+            ),
+        )
+    assert recovered.to_dict() == before
 
 
 def test_resilience_caps_monopoly_escapes_lock_in_and_rejects_stale_selection() -> None:

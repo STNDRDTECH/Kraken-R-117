@@ -358,6 +358,116 @@ def test_event_identity_and_tick_order_fail_closed() -> None:
         reduce_dynamical_tick(initial, DynamicalTick(2))
 
 
+def test_stale_settlements_and_checkpoints_are_provenance_only() -> None:
+    initial = _grounded_state("stale-lineage")
+    topology = initial.medium.adaptive_state.route_topology
+    boosted = replace(
+        initial,
+        fast=replace(initial.fast, active_route_id=topology.routes[0].route_id),
+        medium=replace(
+            initial.medium,
+            adaptive_state=replace(
+                initial.medium.adaptive_state,
+                route_topology=replace(
+                    topology,
+                    routes=(replace(topology.routes[0], weight=0.65), *topology.routes[1:]),
+                ),
+            ),
+        ),
+    )
+    stale_record = _grounded_record(boosted, "stale-lineage-settlement")
+    _require_child_pytest(stale_record)
+    decayed, _ = reduce_dynamical_tick(boosted, DynamicalTick(1))
+    before = decayed.to_dict()
+    withheld, trace = reduce_dynamical_tick(
+        decayed,
+        DynamicalTick(
+            2,
+            (DynamicalEvent.settlement_event("stale-lineage-event", stale_record),),
+        ),
+    )
+    assert trace.noncreditable_settlement_ids == (stale_record.record_id,)
+    assert "current-state lineage withheld" in trace.withheld_events[0].reason
+    assert withheld.medium == decayed.medium
+    assert withheld.fast == decayed.fast
+    assert withheld.slow == decayed.slow
+    assert withheld.instrumentation == decayed.instrumentation
+    assert withheld.event_log == ("stale-lineage-event",)
+    assert before["medium"] == withheld.to_dict()["medium"]
+
+    connected_record = _grounded_record(initial, "stale-lineage-checkpoint")
+    connected, _ = reduce_dynamical_tick(
+        initial,
+        DynamicalTick(
+            1,
+            (
+                DynamicalEvent.settlement_event(
+                    "stale-lineage-connect", connected_record, operation="form_connection"
+                ),
+            ),
+        ),
+    )
+    checkpoint_id = connected.medium.adaptive_state.checkpoints[-1].checkpoint_id
+    rolled_back, _ = reduce_dynamical_tick(
+        connected,
+        DynamicalTick(2, (DynamicalEvent.rollback_event("stale-lineage-rollback", checkpoint_id),)),
+    )
+    before = rolled_back.to_dict()
+    rejected, trace = reduce_dynamical_tick(
+        rolled_back,
+        DynamicalTick(
+            3,
+            (DynamicalEvent.rollback_event("stale-lineage-reused-checkpoint", checkpoint_id),),
+        ),
+    )
+    assert "checkpoint lineage is stale" in trace.withheld_events[0].reason
+    assert rejected.medium == rolled_back.medium
+    assert rejected.fast == rolled_back.fast
+    assert rejected.slow == rolled_back.slow
+    assert rejected.instrumentation == rolled_back.instrumentation
+    assert before["medium"] == rejected.to_dict()["medium"]
+
+
+def test_event_identity_cannot_be_reused_after_short_audit_retention() -> None:
+    state = DynamicalState.fixture("historical-event-identities")
+    first = DynamicalEvent.resource_event("historical-event-0", 0.20)
+    state, _ = reduce_dynamical_tick(state, DynamicalTick(1, (first,)))
+    for tick in range(2, MAX_EVENT_LOG + 3):
+        state, _ = reduce_dynamical_tick(
+            state,
+            DynamicalTick(
+                tick,
+                (DynamicalEvent.resource_event(f"historical-event-{tick}", 0.20),),
+            ),
+        )
+    assert "historical-event-0" not in state.consumed_event_ids
+    assert "historical-event-0" in state.historical_event_ids
+    with pytest.raises(DynamicalSubstrateValidationError, match="already consumed"):
+        reduce_dynamical_tick(state, DynamicalTick(MAX_EVENT_LOG + 3, (first,)))
+
+
+def test_older_task_state_settlement_is_withheld_without_dynamical_mutation() -> None:
+    state = _grounded_state("stale-task-state")
+    record = _grounded_record(state, "stale-task-state-record")
+    _require_child_pytest(record)
+    newer_task_state = replace(state, task_state_version=state.task_state_version + 1)
+    before = newer_task_state.to_dict()
+    next_state, trace = reduce_dynamical_tick(
+        newer_task_state,
+        DynamicalTick(
+            1,
+            (DynamicalEvent.settlement_event("stale-task-state-event", record),),
+        ),
+    )
+    assert trace.noncreditable_settlement_ids == (record.record_id,)
+    assert "not bound to the substrate task state" in trace.withheld_events[0].reason
+    assert next_state.medium == newer_task_state.medium
+    assert next_state.fast == newer_task_state.fast
+    assert next_state.slow == newer_task_state.slow
+    assert next_state.instrumentation == newer_task_state.instrumentation
+    assert before["medium"] == next_state.to_dict()["medium"]
+
+
 def test_generator_boundaries_fail_closed_without_eager_materialization() -> None:
     def too_many_events():
         for index in range(17):
