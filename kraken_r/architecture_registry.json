@@ -1,11 +1,11 @@
 {
   "registry_kind": "kraken_r_architecture",
   "registry_id": "kraken-r-foundation",
-  "version": "1.9",
-  "last_reviewed": "2026-08-24",
+  "version": "1.10",
+  "last_reviewed": "2026-08-25",
   "authority_boundary": {
     "legacy_reference": "rogal_core.daemon.ROGALDaemon and rogal_core.autonomous_cycle.AutonomousCycle remain the deployed reference runtime.",
-    "kraken_candidate": "The deterministic Kraken-R cycle, read-only recorded-execution replay, bounded in-memory signal propagation, advisory bounded physiology, settlement-grounded bounded route preference, proposal-only LLM adapter, verified bounded execution observer, and static interaction validation are executable candidate infrastructure only; they have no authority over the deployed runtime.",
+    "kraken_candidate": "The deterministic Kraken-R cycle, read-only recorded-execution replay, bounded in-memory signal propagation, advisory bounded physiology, settlement-grounded bounded route preference, grounded bounded adaptive reducers, disposable isolated Orzhaal experiments, proposal-only LLM adapter, verified bounded execution observer, and static interaction validation are executable candidate infrastructure only; they have no authority over the deployed runtime.",
     "preservation": "Legacy, alternate, dormant, and forgotten mechanisms are classified and preserved, never deleted by this foundation."
   },
   "mechanisms": [
@@ -120,6 +120,38 @@
       "source_refs": ["docs/kraken_r/CONSTITUTION.md", "docs/kraken_r/SALVAGE_DECISIONS.md", "rogal_core/emergence/plasticity.py", "rogal_core/emergence/pathway_tracker.py", "rogal_core/emergence/topology_tracker.py", "rogal_core/emergence/learning_integration.py", "rogal_core/emergence/online_learning.py"],
       "planned": false,
       "notes": "Pure immutable reducer, not a router or controller. It adapts bounded strengthening/weakening, route topology, auditable pathway lineage, and reset concepts while rejecting legacy stores, globals, clocks, background loops, signal confidence, broad credit assignment, and cross-run persistence. Only settled success/failure with grounded observed execution evidence may adjust the selected route by a fixed bounded delta; contradiction, insufficient evidence, declared claims, stale selections, malformed provenance, and duplicate in-window settlements fail closed or explicitly withhold learning."
+    },
+    {
+      "mechanism_id": "kraken_r_bounded_adaptive_substrate",
+      "category": "emergence_routing",
+      "name": "Grounded bounded candidate adaptive substrate",
+      "intended_role": "Apply deterministic, local, generation-bounded route, connection, rollback, and tactic adjustments only after an independently reverified grounded constitutional settlement.",
+      "current_status": "infrastructure",
+      "dependencies": ["kraken_r_settlement_grounded_plastic_routing", "kraken_r_bounded_physiology"],
+      "authority": "kraken_candidate",
+      "evidence_grade": "implemented",
+      "evidence_refs": ["kraken_r/adaptive_substrate.py", "tests/test_kraken_r_adaptive_substrate.py", "kraken_r/validate.py"],
+      "duplicates": [],
+      "disposition": "keep",
+      "source_refs": ["docs/kraken_r/CONSTITUTION.md", "docs/kraken_r/README.md"],
+      "planned": false,
+      "notes": "Pure caller-owned immutable reducer. Settled independently verified execution with matching request, record, provenance, authorized state, and evidence hashes is required for every update. Signals, physiology, confidence, and declared model output cannot earn credit, form topology, or change tactics. The substrate has no dispatch, execution, persistence, subscription, goal-selection, controller, or live runtime authority."
+    },
+    {
+      "mechanism_id": "kraken_r_orzhaal_disposable_experiments",
+      "category": "operator_surfaces",
+      "name": "Disposable Orzhaal adaptation-rule experiment boundary",
+      "intended_role": "Compare one bounded adaptation-rule variation against an immutable forked candidate state without promotion or canonical mutation.",
+      "current_status": "infrastructure",
+      "dependencies": ["kraken_r_bounded_adaptive_substrate"],
+      "authority": "kraken_candidate",
+      "evidence_grade": "implemented",
+      "evidence_refs": ["kraken_r/adaptive_substrate.py", "tests/test_kraken_r_adaptive_substrate.py"],
+      "duplicates": [],
+      "disposition": "keep",
+      "source_refs": ["docs/kraken_r/CONSTITUTION.md"],
+      "planned": false,
+      "notes": "An Orzhaal result is structured disposable experiment output only. It has no canonical write, promotion, evidence, settlement, learning, topology, provider, runtime, or persistent-state authority; adaptation of adaptation rules remains excluded from Kraken-R ordinary operation."
     },
     {
       "mechanism_id": "kraken_r_controlled_llm_proposal_adapter",

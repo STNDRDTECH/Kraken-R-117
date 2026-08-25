@@ -30,6 +30,12 @@ from .plastic_routing import (
     SettlementRouteRecord,
     apply_settlement_learning,
 )
+from .adaptive_substrate import (
+    AdaptiveAudit,
+    AdaptiveState,
+    HomeostaticSnapshot,
+    apply_grounded_adaptation,
+)
 
 
 class InteractionValidationError(ValueError):
@@ -55,6 +61,7 @@ class InteractionReport:
     grounded_execution: bool
     delivery_stages: tuple[DeliveryStage, ...]
     route_learning: RouteLearningTrace | None = None
+    adaptive_audit: AdaptiveAudit | None = None
     proposal_id: str | None = None
 
     def to_dict(self) -> dict[str, object]:
@@ -66,6 +73,11 @@ class InteractionReport:
             "delivery_stages": [stage.value for stage in self.delivery_stages],
             "route_learning": (
                 self.route_learning.to_dict() if self.route_learning is not None else None
+            ),
+            "adaptive_audit": (
+                self.adaptive_audit.to_dict()
+                if self.adaptive_audit is not None
+                else None
             ),
             "proposal_id": self.proposal_id,
         }
@@ -143,13 +155,17 @@ def validate_interaction_chain(
     delivery_stages: Iterable[DeliveryStage | str] | None = None,
     topology: RouteTopology | None = None,
     route_record: SettlementRouteRecord | None = None,
+    adaptive_state: AdaptiveState | None = None,
+    adaptive_record: SettlementRouteRecord | None = None,
+    homeostatic_snapshot: HomeostaticSnapshot | None = None,
     model_invocation: ModelInvocation | None = None,
 ) -> InteractionReport:
     """Validate a bounded, caller-supplied interaction trajectory.
 
     A grounded trace is independently rechecked, signal and physiology
     inhibitions remain conservative, delivery stages must be causal, route
-    credit remains a pure reducer call, and model output stays declared-only.
+    credit remains a pure reducer call, adaptive state remains grounded-only,
+    and model output stays declared-only.
     The function has no side effects and intentionally does not replace the
     receipt ledger, execution verifier, or route reducer.
     """
@@ -280,6 +296,31 @@ def validate_interaction_chain(
                 "grounded settled evidence did not reach bounded route learning"
             )
 
+    adaptive_audit: AdaptiveAudit | None = None
+    if (adaptive_state is None) != (adaptive_record is None):
+        raise InteractionValidationError(
+            "adaptive validation requires both a state and a settlement record"
+        )
+    if adaptive_state is None and homeostatic_snapshot is not None:
+        raise InteractionValidationError(
+            "homeostatic input requires an adaptive state and settlement record"
+        )
+    if adaptive_state is not None and adaptive_record is not None:
+        if adaptive_record.constitutional_trace != trace:
+            raise InteractionValidationError(
+                "adaptive record does not bind the validated constitutional trace"
+            )
+        try:
+            _, adaptive_audit = apply_grounded_adaptation(
+                adaptive_state,
+                adaptive_record,
+                pressure=homeostatic_snapshot,
+            )
+        except ValueError as exc:
+            raise InteractionValidationError(
+                f"grounded adaptive record is invalid: {exc}"
+            ) from exc
+
     proposal_id = None
     if model_invocation is not None:
         proposal_id = _validate_model_provenance(trace, model_invocation)
@@ -291,6 +332,7 @@ def validate_interaction_chain(
         grounded_execution=trace_is_grounded,
         delivery_stages=actual_stages,
         route_learning=route_learning,
+        adaptive_audit=adaptive_audit,
         proposal_id=proposal_id,
     )
 

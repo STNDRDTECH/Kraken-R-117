@@ -73,6 +73,12 @@ from .replay import (
 )
 from .interactions import InteractionValidationError, validate_interaction_chain
 from .registry import load_default_registry, load_registry
+from .adaptive_substrate import (
+    AdaptiveState,
+    AdaptiveSubstrateValidationError,
+    HomeostaticSnapshot,
+    run_orzhaal_experiment,
+)
 
 
 CANONICAL_CONTRACTS = (
@@ -1159,6 +1165,55 @@ def validate_interaction_boundaries() -> tuple[str, ...]:
     return tuple(errors)
 
 
+def validate_adaptive_substrate() -> tuple[str, ...]:
+    """Validate Stage 10's bounded advisory and disposable-state boundaries."""
+
+    errors: list[str] = []
+    state = AdaptiveState.fixture("validator-adaptive")
+    snapshot = HomeostaticSnapshot(
+        "validator-adaptive-pressure",
+        "validator-adaptive-transaction",
+        "validator-adaptive-objective",
+        "validator-adaptive-state-4",
+        4,
+        contradiction=0.8,
+        uncertainty=0.7,
+        repeated_failure=0.6,
+        novelty=0.4,
+        resource_expenditure=0.9,
+    )
+    signals = snapshot.signals()
+    if len(signals) != 5 or any(
+        item.evidence_grade is not contracts.EvidenceGrade.DECLARED
+        or item.payload.get("advisory_only") is not True
+        for item in signals
+    ):
+        errors.append("homeostatic observations escaped their advisory signal boundary")
+    before = state.to_dict()
+    try:
+        experiment = run_orzhaal_experiment(
+            state, experiment_id="validator-orzhaal-experiment"
+        )
+    except AdaptiveSubstrateValidationError as exc:
+        errors.append(f"disposable Orzhaal experiment failed: {exc}")
+    else:
+        if (
+            experiment.promotable
+            or experiment.canonical_mutation
+            or state.to_dict() != before
+        ):
+            errors.append("Orzhaal experiment crossed the canonical isolation boundary")
+    try:
+        run_orzhaal_experiment(
+            state, experiment_id="validator-orzhaal-too-large", weight_delta=0.10
+        )
+    except AdaptiveSubstrateValidationError:
+        pass
+    else:
+        errors.append("Orzhaal accepted an unbounded experimental change")
+    return tuple(errors)
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         description="Validate the isolated, candidate-only Kraken-R foundation."
@@ -1204,6 +1259,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     llm_adapter_errors = validate_controlled_llm_adapter()
     grounded_execution_errors = validate_grounded_execution()
     interaction_errors = validate_interaction_boundaries()
+    adaptive_substrate_errors = validate_adaptive_substrate()
     legacy_runtime_errors = validate_legacy_runtime_boundary()
     report = {
         "ok": (
@@ -1218,6 +1274,7 @@ def main(argv: Sequence[str] | None = None) -> int:
             and not llm_adapter_errors
             and not grounded_execution_errors
             and not interaction_errors
+            and not adaptive_substrate_errors
             and not legacy_runtime_errors
         ),
         "contracts_ok": not contract_errors,
@@ -1268,6 +1325,11 @@ def main(argv: Sequence[str] | None = None) -> int:
             "ok": not interaction_errors,
             "errors": list(interaction_errors),
             "authority": "static_candidate_validation_only",
+        },
+        "adaptive_substrate": {
+            "ok": not adaptive_substrate_errors,
+            "errors": list(adaptive_substrate_errors),
+            "authority": "grounded_candidate_reducers_and_disposable_experiments_only",
         },
         "constitution": {
             "ok": True,

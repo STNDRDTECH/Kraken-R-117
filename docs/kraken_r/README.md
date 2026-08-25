@@ -142,6 +142,38 @@ fresh = GroundedExecutionVerifier.from_record(
 )
 ```
 
+## Stage 10 adaptive substrate
+
+`kraken_r.adaptive_substrate` adds bounded ordinary adaptation as immutable,
+caller-owned candidate state.  It requires a sealed, independently verified
+grounded constitutional settlement before it can adjust a selected route, form
+or weaken a limited candidate connection, switch a predeclared tactic, decay or
+recover a route, or retain a rollback checkpoint.  It has no store, daemon,
+event subscription, provider loop, controller, dispatch, execution, or
+promotion authority.
+
+```python
+from kraken_r import AdaptiveState, HomeostaticSnapshot, run_orzhaal_experiment
+
+state = AdaptiveState.fixture()
+pressure = HomeostaticSnapshot(
+    "pressure-1", "tx-1", "objective-1", "objective-1-state-4", 4,
+    contradiction=0.3, uncertainty=0.2, repeated_failure=0.0,
+    novelty=0.4, resource_expenditure=0.2,
+)
+assert all(signal.payload["advisory_only"] for signal in pressure.signals())
+
+# Orzhaal only compares a disposable immutable fork.  The result cannot
+# promote itself or mutate the canonical candidate state.
+result = run_orzhaal_experiment(state, experiment_id="compare-rule-1")
+assert result.promotable is False and result.canonical_mutation is False
+```
+
+All ordinary changes require exact grounded trace, request, authorized-state,
+record, evidence, and provenance bindings.  Model declarations, confidence,
+signals, and physiology never earn learning credit or create topology.  Stage
+11 mechanisms remain unstarted and excluded.
+
 `GroundedDeliveryLedger(path)` persists bounded expiry-stamped receipts. It
 rejects duplicate execution, evidence, settlement, and learning delivery after
 restart until the configured receipt expiry; it grants no controller authority.

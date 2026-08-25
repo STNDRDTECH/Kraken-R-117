@@ -338,3 +338,51 @@ descriptive labels. Structural replay verifies the stored request/output hashes
 without a second provider call. Any provider or schema failure remains visible
 in the archive and does not become evidence, execution, settlement, learning,
 or a performance claim.
+
+## Stage 10 adaptive substrate
+
+Stage 10 adds only ordinary, bounded candidate adaptation. It is a pure reducer
+over caller-owned immutable `AdaptiveState`, not a new Kraken runtime. Every
+route, connection, recovery, decay, tactic, or rollback operation is
+generation-scoped, bounded by explicit hard limits, and recorded in finite
+immutable audit lineage.
+
+Learning credit is stricter than an ordinary candidate cycle: it requires the
+exact constitutional trace, a settled success or failure, an independently
+reverified execution record, the sealed request, the matching authorized
+candidate state, and matching request, record, evidence, and provenance hashes.
+Signals, physiology, uncertainty, confidence, novelty, resource pressure, and
+model declarations may conservatively advise or inhibit; none can create
+evidence, settlement, learning credit, route preference, connection topology,
+or tactic authority.
+
+Route preference changes only the selected eligible route. Weights remain
+within fixed bounds, decay and recovery move toward the neutral baseline in
+small fixed steps, and finite update budgets prevent lock-in. Candidate
+connections are deterministic source-target identities with fixed total and
+degree limits; they never dispatch, execute, subscribe, persist, or become a
+runtime edge. Tactic switching only chooses among predeclared labels using a
+grounded settled result plus a task-state-bound `HomeostaticSnapshot`; it cannot
+select a goal or bypass authorization and stop behavior.
+
+Rollback restores a retained immutable checkpoint into a new generation while
+retaining all already-consumed record identities, so an old outcome cannot earn
+credit a second time. Homeostatic observations explicitly cover contradiction,
+uncertainty, repeated failure, novelty, and resource expenditure as bounded
+declared signals. They are advisory-only and remain outside evidence and
+learning authority.
+
+### Orzhaal boundary
+
+Orzhaal is not a Kraken-R organ, controller, recursive loop, or persistent
+experimental runtime. It is a minimal disposable comparison boundary for
+adaptation-rule experiments: it reads an immutable candidate state, returns a
+structured non-promotable result, and provides no canonical write or promotion
+operation. Adaptation of adaptation rules therefore remains isolated from
+ordinary Kraken adaptation.
+
+Stage 11 is explicitly unstarted. Higher-order circuits, autonomous recursion,
+specialist daemons, event buses, background workers, live controllers,
+permanent self-modification, organ evolution, broad lattice composition,
+chemistry, Redstone, HOP, ALU systems, and alternate reasoning runtimes remain
+excluded.
