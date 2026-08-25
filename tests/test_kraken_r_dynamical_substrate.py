@@ -2,12 +2,14 @@
 
 from __future__ import annotations
 
+from dataclasses import replace
 from pathlib import Path
 import tempfile
 
 import pytest
 
 from kraken_r import (
+    AdaptiveSubstrateValidationError,
     DynamicalEvent,
     DynamicalState,
     DynamicalSubstrateValidationError,
@@ -26,6 +28,13 @@ from kraken_r import (
     select_candidate_route,
 )
 from kraken_r.dynamical_substrate import MAX_TICKS
+from kraken_r.dynamical_substrate import (
+    MAX_EVENT_COUNTER,
+    MAX_EVENT_LOG,
+    MAX_SIGNAL_TOPICS,
+    DynamicalEventFabric,
+)
+from kraken_r.physiology import OperatingRegime
 
 
 def _grounded_record(
@@ -368,3 +377,184 @@ def test_generator_boundaries_fail_closed_without_eager_materialization() -> Non
 
     with pytest.raises(DynamicalSubstrateValidationError, match="replay tick budget exceeded"):
         replay_dynamical_ticks(initial, too_many_ticks())
+
+
+def test_public_iterable_boundaries_reject_oversized_generators_incrementally() -> None:
+    initial = DynamicalState.fixture()
+
+    def oversized_events():
+        for index in range(17):
+            yield DynamicalEvent.resource_event(f"fabric-event-{index}", 0.20)
+        raise AssertionError("event fabric read beyond its bounded budget")
+
+    with pytest.raises(DynamicalSubstrateValidationError, match="event fabric budget exceeded"):
+        DynamicalEventFabric.order(oversized_events())
+
+    def oversized_topics():
+        for index in range(MAX_SIGNAL_TOPICS + 1):
+            yield f"topic-{index}"
+        raise AssertionError("fast state read beyond its bounded budget")
+
+    with pytest.raises(DynamicalSubstrateValidationError, match="signal topics budget exceeded"):
+        replace(initial.fast, signal_topics=oversized_topics())
+
+    def oversized_event_log():
+        for index in range(MAX_EVENT_LOG + 1):
+            yield f"event-{index}"
+        raise AssertionError("state read beyond its bounded budget")
+
+    with pytest.raises(DynamicalSubstrateValidationError, match="event_log budget exceeded"):
+        replace(initial, event_log=oversized_event_log())
+
+    def oversized_connections():
+        for _ in range(9):
+            yield object()
+        raise AssertionError("nested adaptive state read beyond its bounded budget")
+
+    with pytest.raises(
+        AdaptiveSubstrateValidationError, match="connections exceeds its fixed retention"
+    ):
+        replace(initial.medium.adaptive_state, connections=oversized_connections())
+
+
+def test_inactive_candidate_decay_is_explicit_neutral_and_noncrediting() -> None:
+    initial = DynamicalState.fixture()
+    topology = initial.medium.adaptive_state.route_topology
+    active_route = topology.routes[0]
+    strengthened = replace(active_route, weight=0.65)
+    adaptive = replace(
+        initial.medium.adaptive_state,
+        route_topology=replace(
+            topology,
+            routes=(strengthened,) + topology.routes[1:],
+        ),
+    )
+    state = replace(
+        initial,
+        fast=replace(initial.fast, active_route_id=active_route.route_id),
+        medium=replace(initial.medium, adaptive_state=adaptive),
+    )
+
+    next_state, trace = reduce_dynamical_tick(state, DynamicalTick(1))
+
+    decayed_route = next(
+        route
+        for route in next_state.medium.adaptive_state.route_topology.routes
+        if route.route_id == active_route.route_id
+    )
+    assert trace.inactive_decay_route_id == active_route.route_id
+    assert trace.adaptive_audits == ()
+    assert decayed_route.weight == pytest.approx(0.60)
+    assert next_state.medium.adaptive_state.applied_record_ids == ()
+    assert next_state.medium.decay_events == 1
+
+
+def test_noninactive_ticks_cannot_trigger_automatic_candidate_decay() -> None:
+    initial = DynamicalState.fixture()
+    topology = initial.medium.adaptive_state.route_topology
+    active_route = topology.routes[0]
+    adaptive = replace(
+        initial.medium.adaptive_state,
+        route_topology=replace(
+            topology,
+            routes=(replace(active_route, weight=0.65),) + topology.routes[1:],
+        ),
+    )
+    state = replace(
+        initial,
+        fast=replace(initial.fast, active_route_id=active_route.route_id),
+        medium=replace(initial.medium, adaptive_state=adaptive),
+    )
+
+    observed, observed_trace = reduce_dynamical_tick(
+        state,
+        DynamicalTick(
+            1,
+            (DynamicalEvent.observation_event("active-observation", 0.50, 0.50),),
+        ),
+    )
+
+    assert observed_trace.inactive_decay_route_id is None
+    assert observed.medium.adaptive_state.route_topology == adaptive.route_topology
+    decayed, decayed_trace = reduce_dynamical_tick(observed, DynamicalTick(2))
+    assert decayed_trace.inactive_decay_route_id == active_route.route_id
+    assert decayed.medium.adaptive_state.route_topology.routes[0].weight == pytest.approx(0.60)
+
+
+def test_hysteresis_cooldown_carries_only_across_explicit_ticks() -> None:
+    initial = DynamicalState.fixture()
+    state = replace(
+        initial,
+        fast=replace(
+            initial.fast,
+            last_regime=OperatingRegime.CRITICAL,
+            cooldown_remaining=2,
+        ),
+    )
+
+    first, first_trace = reduce_dynamical_tick(state, DynamicalTick(1))
+    second, second_trace = reduce_dynamical_tick(first, DynamicalTick(2))
+    third, third_trace = reduce_dynamical_tick(second, DynamicalTick(3))
+
+    assert first_trace.physiology.decision.cooldown_applied is True
+    assert second_trace.physiology.decision.cooldown_applied is True
+    assert first.fast.cooldown_remaining == 1
+    assert second.fast.cooldown_remaining == 0
+    assert third_trace.physiology.decision.cooldown_applied is False
+    assert third.fast.last_regime is OperatingRegime.CAUTIOUS
+    assert third_trace.inhibited is False
+
+
+def test_retained_counters_saturate_and_reject_unbounded_constructor_values() -> None:
+    initial = DynamicalState.fixture()
+    topology = initial.medium.adaptive_state.route_topology
+    adaptive = replace(
+        initial.medium.adaptive_state,
+        route_topology=replace(
+            topology,
+            routes=(replace(topology.routes[0], weight=0.65),) + topology.routes[1:],
+        ),
+    )
+    saturated = replace(
+        initial,
+        fast=replace(initial.fast, active_route_id=topology.routes[0].route_id),
+        medium=replace(
+            initial.medium,
+            adaptive_state=adaptive,
+            turnover=MAX_EVENT_COUNTER,
+            decay_events=MAX_EVENT_COUNTER,
+            plasticity_events=MAX_EVENT_COUNTER,
+        ),
+    )
+    next_state, _ = reduce_dynamical_tick(saturated, DynamicalTick(1))
+
+    assert next_state.medium.turnover == MAX_EVENT_COUNTER
+    assert next_state.medium.decay_events == MAX_EVENT_COUNTER
+    assert next_state.medium.plasticity_events == MAX_EVENT_COUNTER
+    with pytest.raises(DynamicalSubstrateValidationError, match="turnover exceeds"):
+        replace(initial.medium, turnover=MAX_EVENT_COUNTER + 1)
+    with pytest.raises(DynamicalSubstrateValidationError, match="recurrence exceeds"):
+        replace(initial.slow, recurrence=MAX_TICKS + 1)
+    with pytest.raises(DynamicalSubstrateValidationError, match="inhibition_events exceeds"):
+        replace(initial.instrumentation, inhibition_events=MAX_TICKS + 1)
+
+
+def test_saturated_failure_streak_stays_replayable_and_bounded_as_pressure() -> None:
+    initial = DynamicalState.fixture()
+    state = replace(
+        initial,
+        medium=replace(
+            initial.medium,
+            adaptive_state=replace(initial.medium.adaptive_state, failure_streak=4),
+        ),
+    )
+    ticks = (DynamicalTick(1), DynamicalTick(2))
+
+    first, first_traces = replay_dynamical_ticks(state, ticks)
+    second, second_traces = replay_dynamical_ticks(state, ticks)
+
+    assert first.to_dict() == second.to_dict()
+    assert tuple(item.to_dict() for item in first_traces) == tuple(
+        item.to_dict() for item in second_traces
+    )
+    assert first_traces[0].physiology.snapshot.routing_pressure == 1.0

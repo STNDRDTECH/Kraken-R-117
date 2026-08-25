@@ -15,7 +15,7 @@ from __future__ import annotations
 from dataclasses import dataclass, replace
 import hashlib
 import math
-from typing import Any, Mapping
+from typing import Any, Iterable, Mapping
 
 from .contracts import Authority, EvidenceGrade, Signal
 from .grounded_execution import (
@@ -52,7 +52,24 @@ MAX_TACTIC_STREAK = 3
 MAX_ADAPTIVE_AUDIT = 32
 MAX_CHECKPOINTS = 4
 MAX_TRACKED_RECORDS = 64
+MAX_TACTICS = 8
+MAX_ADAPTIVE_FAILURE_STREAK = MAX_ADAPTIVE_UPDATES
 BASELINE_CONNECTION_WEIGHT = 0.50
+
+
+def _bounded_tuple(values: Iterable[Any], maximum: int, field_name: str) -> tuple[Any, ...]:
+    """Collect at most one item beyond a public immutable retention bound."""
+
+    try:
+        iterator = iter(values)
+    except TypeError as exc:
+        raise AdaptiveSubstrateValidationError(f"{field_name} must be iterable") from exc
+    result: list[Any] = []
+    for value in iterator:
+        if len(result) >= maximum:
+            raise AdaptiveSubstrateValidationError(f"{field_name} exceeds its fixed retention")
+        result.append(value)
+    return tuple(result)
 
 
 def _identifier(value: str, field_name: str) -> str:
@@ -267,9 +284,25 @@ class AdaptiveCheckpoint:
         _positive_integer(self.generation, "generation")
         if not isinstance(self.route_topology, RouteTopology):
             raise AdaptiveSubstrateValidationError("checkpoint route topology is invalid")
-        object.__setattr__(self, "connections", tuple(self.connections))
-        object.__setattr__(self, "tactic_scores", tuple(self.tactic_scores))
-        object.__setattr__(self, "applied_record_ids", tuple(self.applied_record_ids))
+        connections = _bounded_tuple(self.connections, MAX_CONNECTIONS, "connections")
+        if not all(isinstance(item, CandidateConnection) for item in connections):
+            raise AdaptiveSubstrateValidationError("checkpoint connections are invalid")
+        scores = _bounded_tuple(self.tactic_scores, MAX_TACTICS, "tactic_scores")
+        if not all(
+            isinstance(item, (tuple, list))
+            and len(item) == 2
+            and isinstance(item[0], str)
+            for item in scores
+        ):
+            raise AdaptiveSubstrateValidationError("checkpoint tactic scores are invalid")
+        record_ids = _bounded_tuple(
+            self.applied_record_ids, MAX_TRACKED_RECORDS, "applied_record_ids"
+        )
+        if not all(isinstance(item, str) and item for item in record_ids):
+            raise AdaptiveSubstrateValidationError("checkpoint record identities are invalid")
+        object.__setattr__(self, "connections", connections)
+        object.__setattr__(self, "tactic_scores", scores)
+        object.__setattr__(self, "applied_record_ids", record_ids)
 
 
 @dataclass(frozen=True)
@@ -312,8 +345,9 @@ class AdaptiveAudit:
             raise AdaptiveSubstrateValidationError("unsupported adaptive operation")
         if not isinstance(self.reason, str) or not self.reason.strip():
             raise AdaptiveSubstrateValidationError("audit reason is required")
-        object.__setattr__(self, "evidence_ids", tuple(self.evidence_ids))
-        if not all(isinstance(item, str) and item for item in self.evidence_ids):
+        evidence_ids = _bounded_tuple(self.evidence_ids, MAX_ADAPTIVE_AUDIT, "evidence_ids")
+        object.__setattr__(self, "evidence_ids", evidence_ids)
+        if not all(isinstance(item, str) and item for item in evidence_ids):
             raise AdaptiveSubstrateValidationError("audit evidence ids are invalid")
         if self.operation == "rollback":
             if self.epistemic_class is not None:
@@ -395,9 +429,7 @@ class AdaptiveState:
             raise AdaptiveSubstrateValidationError(
                 "route preference exceeds the adaptive anti-monopoly bound"
             )
-        connections = tuple(self.connections)
-        if len(connections) > MAX_CONNECTIONS:
-            raise AdaptiveSubstrateValidationError("connection count exceeds the hard limit")
+        connections = _bounded_tuple(self.connections, MAX_CONNECTIONS, "connections")
         if any(not isinstance(item, CandidateConnection) for item in connections):
             raise AdaptiveSubstrateValidationError("connections are invalid")
         if len({item.connection_id for item in connections}) != len(connections):
@@ -408,7 +440,7 @@ class AdaptiveState:
             degree[item.target] = degree.get(item.target, 0) + 1
         if any(value > MAX_CONNECTION_DEGREE for value in degree.values()):
             raise AdaptiveSubstrateValidationError("connection degree exceeds the hard limit")
-        tactics = tuple(self.tactics)
+        tactics = _bounded_tuple(self.tactics, MAX_TACTICS, "tactics")
         if not tactics or any(not isinstance(item, CandidateTactic) for item in tactics):
             raise AdaptiveSubstrateValidationError("at least one tactic is required")
         if len({item.tactic_id for item in tactics}) != len(tactics):
@@ -417,46 +449,56 @@ class AdaptiveState:
         _identifier(self.active_tactic_id, "active_tactic_id")
         if self.active_tactic_id not in tactic_ids:
             raise AdaptiveSubstrateValidationError("active tactic is not declared")
-        scores = tuple(self.tactic_scores)
+        scores = _bounded_tuple(self.tactic_scores, MAX_TACTICS, "tactic_scores")
+        if not all(
+            isinstance(item, (tuple, list)) and len(item) == 2 for item in scores
+        ):
+            raise AdaptiveSubstrateValidationError("tactic scores must contain id-score pairs")
         if {item[0] for item in scores} != tactic_ids or len(scores) != len(tactic_ids):
             raise AdaptiveSubstrateValidationError("tactic scores must cover declared tactics")
         for tactic_id, score in scores:
             _identifier(tactic_id, "tactic score id")
             _bounded(score, "tactic score")
+        bounded_values: dict[str, tuple[Any, ...]] = {}
         for name, values, limit in (
             ("applied_record_ids", self.applied_record_ids, MAX_TRACKED_RECORDS),
             ("invalidated_record_ids", self.invalidated_record_ids, MAX_TRACKED_RECORDS),
             ("audits", self.audits, MAX_ADAPTIVE_AUDIT),
             ("checkpoints", self.checkpoints, MAX_CHECKPOINTS),
         ):
-            if len(values) > limit:
-                raise AdaptiveSubstrateValidationError(f"{name} exceeds its fixed retention")
-        if len(set(self.applied_record_ids)) != len(self.applied_record_ids):
+            bounded_values[name] = _bounded_tuple(values, limit, name)
+        applied_record_ids = bounded_values["applied_record_ids"]
+        invalidated_record_ids = bounded_values["invalidated_record_ids"]
+        audits = bounded_values["audits"]
+        checkpoints = bounded_values["checkpoints"]
+        if len(set(applied_record_ids)) != len(applied_record_ids):
             raise AdaptiveSubstrateValidationError("applied record identities must not repeat")
-        if any(not isinstance(item, str) or not item for item in self.applied_record_ids):
+        if any(not isinstance(item, str) or not item for item in applied_record_ids):
             raise AdaptiveSubstrateValidationError("applied record identities are invalid")
-        if len(set(self.invalidated_record_ids)) != len(self.invalidated_record_ids):
+        if len(set(invalidated_record_ids)) != len(invalidated_record_ids):
             raise AdaptiveSubstrateValidationError(
                 "invalidated record identities must not repeat"
             )
         if any(
             not isinstance(item, str) or not item
-            for item in self.invalidated_record_ids
+            for item in invalidated_record_ids
         ):
             raise AdaptiveSubstrateValidationError(
                 "invalidated record identities are invalid"
             )
-        if not set(self.invalidated_record_ids).issubset(
-            set(self.applied_record_ids)
-        ):
+        if not set(invalidated_record_ids).issubset(set(applied_record_ids)):
             raise AdaptiveSubstrateValidationError(
                 "invalidated identities must remain applied identities"
             )
-        if any(not isinstance(item, AdaptiveAudit) for item in self.audits):
+        if any(not isinstance(item, AdaptiveAudit) for item in audits):
             raise AdaptiveSubstrateValidationError("adaptive audit entries are invalid")
-        if any(not isinstance(item, AdaptiveCheckpoint) for item in self.checkpoints):
+        if any(not isinstance(item, AdaptiveCheckpoint) for item in checkpoints):
             raise AdaptiveSubstrateValidationError("adaptive checkpoints are invalid")
         _positive_integer(self.failure_streak, "failure_streak")
+        if self.failure_streak > MAX_ADAPTIVE_FAILURE_STREAK:
+            raise AdaptiveSubstrateValidationError(
+                "failure_streak exceeds the bounded adaptive limit"
+            )
         if self.tactic_streak < 0 or self.tactic_streak > MAX_TACTIC_STREAK:
             raise AdaptiveSubstrateValidationError(
                 "tactic streak exceeds the anti-lock-in bound"
@@ -464,9 +506,10 @@ class AdaptiveState:
         object.__setattr__(self, "connections", connections)
         object.__setattr__(self, "tactics", tactics)
         object.__setattr__(self, "tactic_scores", scores)
-        object.__setattr__(self, "applied_record_ids", tuple(self.applied_record_ids))
-        object.__setattr__(self, "audits", tuple(self.audits))
-        object.__setattr__(self, "checkpoints", tuple(self.checkpoints))
+        object.__setattr__(self, "applied_record_ids", applied_record_ids)
+        object.__setattr__(self, "invalidated_record_ids", invalidated_record_ids)
+        object.__setattr__(self, "audits", audits)
+        object.__setattr__(self, "checkpoints", checkpoints)
 
     @classmethod
     def fixture(cls, substrate_id: str = "candidate-adaptive-substrate") -> "AdaptiveState":
@@ -825,7 +868,7 @@ def apply_grounded_adaptation(
         epistemic_class=epistemic_class,
         route_topology=next_topology,
         failure_streak=(
-            state.failure_streak + 1
+            min(MAX_ADAPTIVE_FAILURE_STREAK, state.failure_streak + 1)
             if outcome == "failure"
             else 0
         ),
@@ -883,7 +926,7 @@ def form_grounded_connection(
 def weaken_grounded_connection(
     state: AdaptiveState, record: SettlementRouteRecord, connection_id: str
 ) -> tuple[AdaptiveState, AdaptiveAudit]:
-    """Weaken one local candidate edge after grounded failure; remove at floor."""
+    """Weaken one local candidate edge after grounded failure; retain it at floor."""
 
     if not isinstance(state, AdaptiveState):
         raise AdaptiveSubstrateValidationError("connection weakening requires AdaptiveState")
@@ -903,6 +946,10 @@ def weaken_grounded_connection(
     if connection.connection_id != _connection_id(route.source, route.target):
         raise AdaptiveSubstrateValidationError(
             "grounded failure can weaken only the selected route connection"
+        )
+    if connection.weight <= MIN_WEIGHT:
+        raise AdaptiveSubstrateValidationError(
+            "candidate connection is retained at its minimum weight floor"
         )
     checkpoint, _ = _prepare_update(state, record.record_id)
     next_weight = max(MIN_WEIGHT, round(connection.weight - MAX_CONNECTION_CHANGE, 6))
@@ -1252,6 +1299,7 @@ __all__ = [
     "CandidateTactic",
     "HomeostaticSnapshot",
     "MAX_ADAPTIVE_AUDIT",
+    "MAX_ADAPTIVE_FAILURE_STREAK",
     "MAX_ADAPTIVE_ROUTE_WEIGHT",
     "MAX_ADAPTIVE_GENERATIONS",
     "MAX_ADAPTIVE_UPDATES",
@@ -1260,6 +1308,7 @@ __all__ = [
     "MAX_ROUTE_DECAY",
     "MAX_ROUTE_RECOVERY",
     "MAX_TACTIC_STREAK",
+    "MAX_TACTICS",
     "OrzhaalExperimentResult",
     "apply_grounded_adaptation",
     "form_grounded_connection",

@@ -13,7 +13,7 @@ evidence, topology, tactics, or persistence.
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from enum import Enum
 import math
 from typing import Any, Iterable
@@ -22,6 +22,7 @@ from .adaptive_substrate import (
     AdaptiveAudit,
     AdaptiveState,
     HomeostaticSnapshot,
+    MAX_ROUTE_DECAY,
     apply_grounded_adaptation,
     form_grounded_connection,
     rollback_adaptive_state,
@@ -41,7 +42,7 @@ from .physiology import (
     PhysiologyTrace,
     evaluate_physiology,
 )
-from .plastic_routing import SettlementRouteRecord, apply_settlement_learning
+from .plastic_routing import BASELINE_WEIGHT, SettlementRouteRecord, apply_settlement_learning
 
 
 MAX_TICK_EVENTS = 16
@@ -53,6 +54,8 @@ MAX_AUDIT_RECORDS = 32
 MAX_RESOURCE_PRESSURE = 1.0
 MAX_SURPRISE = 1.0
 MAX_TICKS = 256
+MAX_EVENT_COUNTER = MAX_TICKS * MAX_TICK_EVENTS
+MAX_PHYSIOLOGY_COOLDOWN = 2
 
 
 class DynamicalSubstrateValidationError(ValueError):
@@ -117,6 +120,12 @@ def _integer(value: int, name: str, *, maximum: int | None = None) -> None:
         raise DynamicalSubstrateValidationError(f"{name} must be a non-negative integer")
     if maximum is not None and value > maximum:
         raise DynamicalSubstrateValidationError(f"{name} exceeds its bounded limit")
+
+
+def _increment(value: int, maximum: int, amount: int = 1) -> int:
+    """Saturate a retained count rather than allowing a long replay to grow it."""
+
+    return min(maximum, value + amount)
 
 
 @dataclass(frozen=True)
@@ -349,6 +358,7 @@ class FastState:
     last_regime: OperatingRegime = OperatingRegime.PRODUCTIVE
     active_route_id: str | None = None
     signal_topics: tuple[str, ...] = ()
+    cooldown_remaining: int = 0
 
     def __post_init__(self) -> None:
         for name in ("activation", "inhibition", "surprise", "resource_pressure"):
@@ -359,10 +369,15 @@ class FastState:
             raise DynamicalSubstrateValidationError("last_regime is unsupported") from exc
         if self.active_route_id is not None:
             _identifier(self.active_route_id, "active_route_id")
-        topics = tuple(self.signal_topics)
-        if len(topics) > MAX_SIGNAL_TOPICS or not all(isinstance(item, str) for item in topics):
+        topics = _bounded_tuple(self.signal_topics, MAX_SIGNAL_TOPICS, "signal topics")
+        if not all(isinstance(item, str) and item for item in topics):
             raise DynamicalSubstrateValidationError("signal topic retention is bounded")
         object.__setattr__(self, "signal_topics", topics)
+        _integer(
+            self.cooldown_remaining,
+            "cooldown_remaining",
+            maximum=MAX_PHYSIOLOGY_COOLDOWN,
+        )
 
 
 @dataclass(frozen=True)
@@ -378,13 +393,12 @@ class MediumState:
     def __post_init__(self) -> None:
         if not isinstance(self.adaptive_state, AdaptiveState):
             raise DynamicalSubstrateValidationError("medium state requires AdaptiveState")
-        for name in ("route_history",):
-            values = tuple(getattr(self, name))
-            if len(values) > MAX_ROUTE_HISTORY or not all(isinstance(v, str) for v in values):
-                raise DynamicalSubstrateValidationError("route history is invalid or unbounded")
-            object.__setattr__(self, name, values)
+        values = _bounded_tuple(self.route_history, MAX_ROUTE_HISTORY, "route_history")
+        if not all(isinstance(v, str) and v for v in values):
+            raise DynamicalSubstrateValidationError("route history is invalid or unbounded")
+        object.__setattr__(self, "route_history", values)
         for name in ("turnover", "decay_events", "plasticity_events"):
-            _integer(getattr(self, name), name)
+            _integer(getattr(self, name), name, maximum=MAX_EVENT_COUNTER)
 
 
 @dataclass(frozen=True)
@@ -397,9 +411,13 @@ class SlowState:
 
     def __post_init__(self) -> None:
         object.__setattr__(self, "coherence_score", _unit(self.coherence_score, "coherence_score"))
-        _integer(self.recurrence, "recurrence")
-        values = tuple(self.coherence_observations)
-        if len(values) > MAX_COHERENCE_OBSERVATIONS or not all(
+        _integer(self.recurrence, "recurrence", maximum=MAX_TICKS)
+        values = _bounded_tuple(
+            self.coherence_observations,
+            MAX_COHERENCE_OBSERVATIONS,
+            "coherence_observations",
+        )
+        if not all(
             isinstance(v, str) and v for v in values
         ):
             raise DynamicalSubstrateValidationError("coherence observations are invalid")
@@ -443,7 +461,15 @@ class SubstrateInstrumentation:
             "stagnation_ticks",
             "coherence_recurrence",
         ):
-            _integer(getattr(self, name), name)
+            _integer(
+                getattr(self, name),
+                name,
+                maximum=MAX_EVENT_COUNTER if name not in {
+                    "inhibition_events",
+                    "stagnation_ticks",
+                    "coherence_recurrence",
+                } else MAX_TICKS,
+            )
 
 
 @dataclass(frozen=True)
@@ -491,7 +517,7 @@ class WithheldEvent:
                 raise DynamicalSubstrateValidationError(
                     "withheld task_state_version must be positive"
                 )
-        values = tuple(self.evidence_ids)
+        values = _bounded_tuple(self.evidence_ids, MAX_AUDIT_RECORDS, "withheld evidence_ids")
         if not all(isinstance(value, str) and value for value in values):
             raise DynamicalSubstrateValidationError("withheld evidence ids are invalid")
         object.__setattr__(self, "evidence_ids", values)
@@ -556,14 +582,14 @@ class DynamicalState:
             if not isinstance(getattr(self, name), expected):
                 raise DynamicalSubstrateValidationError(f"{name} is invalid")
         for name in ("consumed_event_ids", "event_log"):
-            values = tuple(getattr(self, name))
-            if len(values) > MAX_EVENT_LOG or not all(
+            values = _bounded_tuple(getattr(self, name), MAX_EVENT_LOG, name)
+            if not all(
                 isinstance(v, str) and v for v in values
             ):
                 raise DynamicalSubstrateValidationError(f"{name} is invalid or unbounded")
             object.__setattr__(self, name, values)
-        withheld = tuple(self.withheld_events)
-        if len(withheld) > MAX_AUDIT_RECORDS or not all(
+        withheld = _bounded_tuple(self.withheld_events, MAX_AUDIT_RECORDS, "withheld_events")
+        if not all(
             isinstance(item, WithheldEvent) for item in withheld
         ):
             raise DynamicalSubstrateValidationError("withheld event audit is invalid")
@@ -608,6 +634,7 @@ class DynamicalState:
                 "last_regime": self.fast.last_regime.value,
                 "active_route_id": self.fast.active_route_id,
                 "signal_topics": list(self.fast.signal_topics),
+                "cooldown_remaining": self.fast.cooldown_remaining,
             },
             "medium": {
                 "adaptive_state": adaptive,
@@ -645,21 +672,30 @@ class DynamicalTickTrace:
     activity: float
     inhibited: bool
     reason: str
+    inactive_decay_route_id: str | None = None
 
     def __post_init__(self) -> None:
         _integer(self.tick, "tick")
-        for name in (
-            "event_ids",
-            "delivered_signal_ids",
-            "mismatch_ids",
-            "noncreditable_settlement_ids",
+        for name, maximum in (
+            ("event_ids", MAX_TICK_EVENTS),
+            ("delivered_signal_ids", MAX_TICK_EVENTS),
+            ("mismatch_ids", MAX_TICK_EVENTS),
+            ("noncreditable_settlement_ids", MAX_TICK_EVENTS),
         ):
-            values = tuple(getattr(self, name))
+            values = _bounded_tuple(getattr(self, name), maximum, name)
             if not all(isinstance(v, str) and v for v in values):
                 raise DynamicalSubstrateValidationError(f"{name} is invalid")
             object.__setattr__(self, name, values)
-        object.__setattr__(self, "adaptive_audits", tuple(self.adaptive_audits))
-        object.__setattr__(self, "withheld_events", tuple(self.withheld_events))
+        object.__setattr__(
+            self,
+            "adaptive_audits",
+            _bounded_tuple(self.adaptive_audits, MAX_TICK_EVENTS, "adaptive_audits"),
+        )
+        object.__setattr__(
+            self,
+            "withheld_events",
+            _bounded_tuple(self.withheld_events, MAX_TICK_EVENTS, "withheld_events"),
+        )
         if not all(isinstance(item, WithheldEvent) for item in self.withheld_events):
             raise DynamicalSubstrateValidationError("withheld trace events are invalid")
         if not all(isinstance(item, AdaptiveAudit) for item in self.adaptive_audits):
@@ -672,6 +708,8 @@ class DynamicalTickTrace:
         if not isinstance(self.inhibited, bool):
             raise DynamicalSubstrateValidationError("inhibited must be boolean")
         _text(self.reason, "reason")
+        if self.inactive_decay_route_id is not None:
+            _identifier(self.inactive_decay_route_id, "inactive_decay_route_id")
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -689,6 +727,7 @@ class DynamicalTickTrace:
             "activity": self.activity,
             "inhibited": self.inhibited,
             "reason": self.reason,
+            "inactive_decay_route_id": self.inactive_decay_route_id,
         }
 
 
@@ -705,9 +744,9 @@ class DynamicalEventFabric:
 
     @classmethod
     def order(cls, events: Iterable[DynamicalEvent]) -> tuple[DynamicalEvent, ...]:
-        ordered = tuple(events)
-        if len(ordered) > MAX_TICK_EVENTS:
-            raise DynamicalSubstrateValidationError("event fabric budget exceeded")
+        ordered = _bounded_tuple(events, MAX_TICK_EVENTS, "event fabric")
+        if not all(isinstance(event, DynamicalEvent) for event in ordered):
+            raise DynamicalSubstrateValidationError("event fabric received invalid event")
         if len({event.event_id for event in ordered}) != len(ordered):
             raise DynamicalSubstrateValidationError("event fabric received duplicate ids")
         return tuple(sorted(ordered, key=lambda item: (cls._ORDER[item.kind], item.event_id)))
@@ -775,12 +814,55 @@ def _withheld_settlement(
         task_state_id=record.provenance.get("task_state_id"),
         task_state_version=record.provenance.get("task_state_version"),
         route_id=record.provenance.get("route_id"),
-        evidence_ids=tuple(record.provenance.get("evidence_ids", ())),
+        evidence_ids=record.provenance.get("evidence_ids", ()),
         epistemic_class=(
             verified.epistemic_class.value if verified is not None else None
         ),
         operation=event.operation,
     )
+
+
+def _decay_inactive_route(
+    adaptive: AdaptiveState, active_route_id: str | None
+) -> tuple[AdaptiveState, str | None]:
+    """Fade one inactive candidate preference toward neutral without credit.
+
+    This is an explicit tick effect over caller-owned state.  It does not add a
+    settlement, evidence identity, audit, connection, tactic, or update budget
+    entry; it only prevents a previously selected candidate preference from
+    retaining excess influence while its caller continues to submit empty ticks.
+    """
+
+    if active_route_id is None:
+        return adaptive, None
+    route = next(
+        (
+            item
+            for item in adaptive.route_topology.routes
+            if item.route_id == active_route_id
+        ),
+        None,
+    )
+    if route is None:
+        return adaptive, None
+    delta = min(MAX_ROUTE_DECAY, abs(route.weight - BASELINE_WEIGHT))
+    if delta == 0.0:
+        return adaptive, None
+    next_weight = round(
+        route.weight - delta if route.weight > BASELINE_WEIGHT else route.weight + delta,
+        6,
+    )
+    next_topology = replace(
+        adaptive.route_topology,
+        version=adaptive.route_topology.version + 1,
+        routes=tuple(
+            replace(item, weight=next_weight)
+            if item.route_id == active_route_id
+            else item
+            for item in adaptive.route_topology.routes
+        ),
+    )
+    return replace(adaptive, route_topology=next_topology), active_route_id
 
 
 def reduce_dynamical_tick(
@@ -846,12 +928,15 @@ def reduce_dynamical_tick(
         state.task_state_id,
         state.task_state_version,
         memory_pressure=provisional_inhibition,
-        routing_pressure=state.medium.adaptive_state.failure_streak / 3.0,
+        routing_pressure=min(
+            1.0, state.medium.adaptive_state.failure_streak / 3.0
+        ),
         backlog_pressure=min(1.0, len(ordered) / MAX_TICK_EVENTS),
         contradiction_density=surprise,
         resource_pressure=resource,
         protected_reserve=1.0 - resource,
         prior_regime=state.fast.last_regime,
+        cooldown_remaining=state.fast.cooldown_remaining,
     )
     physiology = evaluate_physiology(
         snapshot,
@@ -890,8 +975,8 @@ def reduce_dynamical_tick(
                     f"rollback reducer rejected {event.event_id}: {exc}"
                 ) from exc
             audits.append(audit)
-            rollback_events += 1
-            turnover += 1
+            rollback_events = _increment(rollback_events, MAX_EVENT_COUNTER)
+            turnover = _increment(turnover, MAX_EVENT_COUNTER)
             continue
         if event.settlement is None:
             continue
@@ -945,10 +1030,18 @@ def reduce_dynamical_tick(
             ) from exc
         audits.append(audit)
         route_id = audit.route_id
-        turnover += 1
-        plasticity_events += 1
+        turnover = _increment(turnover, MAX_EVENT_COUNTER)
+        plasticity_events = _increment(plasticity_events, MAX_EVENT_COUNTER)
         if audit.operation == "decay":
-            decay_events += 1
+            decay_events = _increment(decay_events, MAX_EVENT_COUNTER)
+
+    inactive_decay_route_id: str | None = None
+    if not ordered and route_id is not None:
+        adaptive, inactive_decay_route_id = _decay_inactive_route(adaptive, route_id)
+        if inactive_decay_route_id is not None:
+            turnover = _increment(turnover, MAX_EVENT_COUNTER)
+            decay_events = _increment(decay_events, MAX_EVENT_COUNTER)
+            plasticity_events = _increment(plasticity_events, MAX_EVENT_COUNTER)
 
     route_history = state.medium.route_history
     if route_id is not None:
@@ -962,7 +1055,7 @@ def reduce_dynamical_tick(
     diversity = round(len(set(topics)) / MAX_SIGNAL_TOPICS, 6)
     entropy = _entropy(route_history)
     recurrence = (
-        state.slow.recurrence + 1
+        _increment(state.slow.recurrence, MAX_TICKS)
         if route_id is not None and route_history.count(route_id) >= 2
         else 0
     )
@@ -977,7 +1070,11 @@ def reduce_dynamical_tick(
         ],
     )
     activity = min(1.0, round((len(ordered) + len(audits)) / MAX_TICK_EVENTS, 6))
-    stagnation = state.instrumentation.stagnation_ticks + 1 if not ordered else 0
+    stagnation = (
+        _increment(state.instrumentation.stagnation_ticks, MAX_TICKS)
+        if not ordered
+        else 0
+    )
     instrumentation = SubstrateInstrumentation(
         activity=activity,
         diversity=diversity,
@@ -988,7 +1085,11 @@ def reduce_dynamical_tick(
         decay_events=decay_events,
         plasticity_events=plasticity_events,
         rollback_events=rollback_events,
-        inhibition_events=state.instrumentation.inhibition_events + int(inhibited),
+        inhibition_events=_increment(
+            state.instrumentation.inhibition_events,
+            MAX_TICKS,
+            int(inhibited),
+        ),
         stagnation_ticks=stagnation,
         resource_pressure=resource,
         coherence_recurrence=recurrence,
@@ -1001,6 +1102,14 @@ def reduce_dynamical_tick(
         last_regime=physiology.decision.regime,
         active_route_id=route_id,
         signal_topics=topics,
+        cooldown_remaining=(
+            max(0, state.fast.cooldown_remaining - 1)
+            if physiology.decision.cooldown_applied
+            else MAX_PHYSIOLOGY_COOLDOWN
+            if physiology.decision.regime
+            in {OperatingRegime.RECOVERY, OperatingRegime.CRITICAL}
+            else 0
+        ),
     )
     next_state = DynamicalState(
         state.substrate_id,
@@ -1032,8 +1141,11 @@ def reduce_dynamical_tick(
         (
             "advisory physiology inhibited candidate adaptation"
             if inhibited
+            else "inactive candidate influence decayed toward neutral"
+            if inactive_decay_route_id is not None
             else "bounded tick reduced signals, observations, physiology, and candidate state"
         ),
+        inactive_decay_route_id,
     )
     return next_state, trace
 
@@ -1072,6 +1184,7 @@ __all__ = [
     "DynamicalTick",
     "DynamicalTickTrace",
     "FastState",
+    "MAX_EVENT_COUNTER",
     "MAX_EVENT_LOG",
     "MAX_TICK_EVENTS",
     "MediumState",

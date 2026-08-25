@@ -267,6 +267,24 @@ def test_connection_limits_tactic_switch_and_advisory_signals() -> None:
     assert all(signal.payload["advisory_only"] is True for signal in signals)
 
 
+def test_connection_floor_is_retained_and_cannot_consume_noop_credit() -> None:
+    state = AdaptiveState.fixture()
+    success = _route_record(state, "adaptive-floor-success")
+    state, _ = form_grounded_connection(state, success)
+    connection_id = state.connections[0].connection_id
+
+    for index in range(3):
+        failure = _route_record(state, f"adaptive-floor-failure-{index}", passing=False)
+        state, audit = weaken_grounded_connection(state, failure, connection_id)
+        assert audit.operation == "weaken_connection"
+
+    assert len(state.connections) == 1
+    assert state.connections[0].weight == pytest.approx(0.25)
+    at_floor = _route_record(state, "adaptive-floor-noop", passing=False)
+    with pytest.raises(AdaptiveSubstrateValidationError, match="retained at its minimum"):
+        weaken_grounded_connection(state, at_floor, connection_id)
+
+
 def test_duplicate_record_remains_rejected_after_rollback() -> None:
     state = AdaptiveState.fixture()
     record = _route_record(state, "adaptive-rollback")
