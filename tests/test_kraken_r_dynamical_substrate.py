@@ -25,6 +25,7 @@ from kraken_r import (
     run_constitutional_cycle,
     select_candidate_route,
 )
+from kraken_r.dynamical_substrate import MAX_TICKS
 
 
 def _grounded_record(
@@ -346,3 +347,24 @@ def test_event_identity_and_tick_order_fail_closed() -> None:
         reduce_dynamical_tick(state, DynamicalTick(2, (event,)))
     with pytest.raises(DynamicalSubstrateValidationError, match="exactly one"):
         reduce_dynamical_tick(initial, DynamicalTick(2))
+
+
+def test_generator_boundaries_fail_closed_without_eager_materialization() -> None:
+    def too_many_events():
+        for index in range(17):
+            yield DynamicalEvent.resource_event(f"generator-event-{index}", 0.20)
+        raise AssertionError("event generator was consumed beyond its bounded budget")
+
+    with pytest.raises(DynamicalSubstrateValidationError, match="tick event budget exceeded"):
+        DynamicalTick(1, too_many_events())
+
+    initial = DynamicalState.fixture()
+
+    def too_many_ticks():
+        for tick in range(1, MAX_TICKS + 1):
+            yield DynamicalTick(tick)
+        yield object()
+        raise AssertionError("tick generator was consumed beyond its bounded budget")
+
+    with pytest.raises(DynamicalSubstrateValidationError, match="replay tick budget exceeded"):
+        replay_dynamical_ticks(initial, too_many_ticks())
