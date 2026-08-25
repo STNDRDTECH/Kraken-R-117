@@ -7,4 +7,4 @@ The parent test environment and the interpreter selected for the isolated ground
 
 **Why:** This is an environment prerequisite, not evidence that the candidate reducer or its replay semantics are wrong. Treating setup failure as task failure would violate the grounded epistemic boundary.
 
-**How to apply:** During fresh-checkout validation, distinguish pure substrate tests from grounded execution prerequisites. Keep grounded-path tests strict when the child dependency is present, and skip only those tests when the verifier explicitly reports unavailable child pytest; the runtime-reliability work should address installation/environment provisioning separately.
+**How to apply:** During fresh-checkout validation, distinguish pure substrate tests from grounded execution prerequisites. Keep grounded-path tests strict when the child dependency is present, and classify an explicitly unavailable child pytest dependency as setup failure.
