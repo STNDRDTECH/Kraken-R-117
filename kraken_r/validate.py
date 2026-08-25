@@ -1459,6 +1459,59 @@ def validate_dynamical_substrate() -> tuple[str, ...]:
         pass
     else:
         errors.append("out-of-sequence tick did not fail closed")
+    stale_objective = contracts.Objective(
+        state.objective_id,
+        "Keep stale candidate settlement lineage non-creditable.",
+        provenance={"transaction_id": state.transaction_id},
+    )
+    stale_trace = run_constitutional_cycle(stale_objective)
+    topology = state.medium.adaptive_state.route_topology
+    stale_state = replace(
+        state,
+        fast=replace(state.fast, active_route_id=topology.routes[0].route_id),
+        medium=replace(
+            state.medium,
+            adaptive_state=replace(
+                state.medium.adaptive_state,
+                route_topology=replace(
+                    topology,
+                    routes=(
+                        replace(topology.routes[0], weight=0.65),
+                        *topology.routes[1:],
+                    ),
+                ),
+            ),
+        ),
+    )
+    stale_record = _route_record(
+        stale_state.medium.adaptive_state.route_topology,
+        stale_trace,
+        record_id="validator-stale-settlement",
+    )
+    try:
+        decayed, _ = reduce_dynamical_tick(stale_state, DynamicalTick(1))
+        withheld, stale_tick = reduce_dynamical_tick(
+            decayed,
+            DynamicalTick(
+                2,
+                (
+                    DynamicalEvent.settlement_event(
+                        "validator-stale-settlement-event", stale_record
+                    ),
+                ),
+            ),
+        )
+    except DynamicalSubstrateValidationError as exc:
+        errors.append(f"stale settlement fixture failed: {exc}")
+    else:
+        if (
+            stale_tick.noncreditable_settlement_ids != (stale_record.record_id,)
+            or withheld.medium != decayed.medium
+            or withheld.fast != decayed.fast
+            or withheld.slow != decayed.slow
+            or withheld.instrumentation != decayed.instrumentation
+        ):
+            errors.append("stale settlement altered current dynamical state")
     return tuple(errors)
 
 

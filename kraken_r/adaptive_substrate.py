@@ -408,6 +408,7 @@ class AdaptiveState:
     failure_streak: int = 0
     tactic_streak: int = 0
     invalidated_record_ids: tuple[str, ...] = ()
+    consumed_settlement_ids: tuple[str, ...] = ()
 
     def __post_init__(self) -> None:
         _identifier(self.substrate_id, "substrate_id")
@@ -463,12 +464,14 @@ class AdaptiveState:
         for name, values, limit in (
             ("applied_record_ids", self.applied_record_ids, MAX_TRACKED_RECORDS),
             ("invalidated_record_ids", self.invalidated_record_ids, MAX_TRACKED_RECORDS),
+            ("consumed_settlement_ids", self.consumed_settlement_ids, MAX_TRACKED_RECORDS),
             ("audits", self.audits, MAX_ADAPTIVE_AUDIT),
             ("checkpoints", self.checkpoints, MAX_CHECKPOINTS),
         ):
             bounded_values[name] = _bounded_tuple(values, limit, name)
         applied_record_ids = bounded_values["applied_record_ids"]
         invalidated_record_ids = bounded_values["invalidated_record_ids"]
+        consumed_settlement_ids = bounded_values["consumed_settlement_ids"]
         audits = bounded_values["audits"]
         checkpoints = bounded_values["checkpoints"]
         if len(set(applied_record_ids)) != len(applied_record_ids):
@@ -490,6 +493,14 @@ class AdaptiveState:
             raise AdaptiveSubstrateValidationError(
                 "invalidated identities must remain applied identities"
             )
+        if len(set(consumed_settlement_ids)) != len(consumed_settlement_ids):
+            raise AdaptiveSubstrateValidationError(
+                "consumed settlement identities must not repeat"
+            )
+        if any(not isinstance(item, str) or not item for item in consumed_settlement_ids):
+            raise AdaptiveSubstrateValidationError(
+                "consumed settlement identities are invalid"
+            )
         if any(not isinstance(item, AdaptiveAudit) for item in audits):
             raise AdaptiveSubstrateValidationError("adaptive audit entries are invalid")
         if any(not isinstance(item, AdaptiveCheckpoint) for item in checkpoints):
@@ -508,6 +519,7 @@ class AdaptiveState:
         object.__setattr__(self, "tactic_scores", scores)
         object.__setattr__(self, "applied_record_ids", applied_record_ids)
         object.__setattr__(self, "invalidated_record_ids", invalidated_record_ids)
+        object.__setattr__(self, "consumed_settlement_ids", consumed_settlement_ids)
         object.__setattr__(self, "audits", audits)
         object.__setattr__(self, "checkpoints", checkpoints)
 
@@ -560,6 +572,7 @@ class AdaptiveState:
             "failure_streak": self.failure_streak,
             "tactic_streak": self.tactic_streak,
             "invalidated_record_ids": list(self.invalidated_record_ids),
+            "consumed_settlement_ids": list(self.consumed_settlement_ids),
             "authority": Authority.KRAKEN_CANDIDATE.value,
         }
 
@@ -709,12 +722,9 @@ def _checkpoint(state: AdaptiveState) -> AdaptiveCheckpoint:
 
 
 def _prepare_update(
-    state: AdaptiveState, record_id: str
+    state: AdaptiveState, record: SettlementRouteRecord
 ) -> tuple[AdaptiveCheckpoint, int]:
-    if record_id in state.applied_record_ids:
-        raise AdaptiveSubstrateValidationError(
-            "adaptive record identity was already applied, including after rollback"
-        )
+    _reject_duplicate_record(state, record)
     if state.updates_applied >= MAX_ADAPTIVE_UPDATES:
         raise AdaptiveSubstrateValidationError(
             "adaptive generation update budget is exhausted"
@@ -723,7 +733,7 @@ def _prepare_update(
         raise AdaptiveSubstrateValidationError(
             "adaptive record identity retention is exhausted; reset is required"
         )
-    _identifier(record_id, "record_id")
+    _identifier(record.record_id, "record_id")
     return _checkpoint(state), state.updates_applied + 1
 
 
@@ -736,12 +746,17 @@ def _reject_duplicate_record(state: AdaptiveState, record: object) -> None:
         raise AdaptiveSubstrateValidationError(
             "adaptive record identity was already applied, including after rollback"
         )
+    settlement_id = record.settlement.settlement_id
+    if settlement_id in state.consumed_settlement_ids:
+        raise AdaptiveSubstrateValidationError(
+            "settlement identity was already consumed, including after rollback or invalidation"
+        )
 
 
 def _finish_update(
     state: AdaptiveState,
     checkpoint: AdaptiveCheckpoint,
-    record_id: str,
+    record: SettlementRouteRecord,
     operation: str,
     *,
     route_id: str,
@@ -756,7 +771,7 @@ def _finish_update(
     next_generation = state.generation
     audit = AdaptiveAudit(
         f"{state.substrate_id}-audit-{state.generation}-{state.updates_applied + 1}",
-        record_id,
+        record.record_id,
         operation,
         state.generation,
         next_generation,
@@ -773,7 +788,10 @@ def _finish_update(
         state,
         audits=(state.audits + (audit,))[-MAX_ADAPTIVE_AUDIT:],
         checkpoints=next_checkpoints,
-        applied_record_ids=state.applied_record_ids + (record_id,),
+        applied_record_ids=state.applied_record_ids + (record.record_id,),
+        consumed_settlement_ids=(
+            state.consumed_settlement_ids + (record.settlement.settlement_id,)
+        ),
         updates_applied=state.updates_applied + 1,
         **changes,
     )
@@ -835,7 +853,7 @@ def apply_grounded_adaptation(
         raise AdaptiveSubstrateValidationError(
             f"{operation} cannot contradict the settled grounded {outcome} outcome"
         )
-    checkpoint, _ = _prepare_update(state, record.record_id)
+    checkpoint, _ = _prepare_update(state, record)
     if operation == "strengthen":
         next_weight = min(
             MAX_ADAPTIVE_ROUTE_WEIGHT, route.weight + MAX_CONNECTION_CHANGE
@@ -858,7 +876,7 @@ def apply_grounded_adaptation(
     next_state, audit = _finish_update(
         state,
         checkpoint,
-        record.record_id,
+        record,
         operation,
         route_id=route.route_id,
         weight_before=route.weight,
@@ -906,12 +924,12 @@ def form_grounded_connection(
         or degree.get(route.target, 0) >= MAX_CONNECTION_DEGREE
     ):
         raise AdaptiveSubstrateValidationError("candidate connection degree limit reached")
-    checkpoint, _ = _prepare_update(state, record.record_id)
+    checkpoint, _ = _prepare_update(state, record)
     connection = CandidateConnection.for_route(route, generation=state.generation)
     next_state, audit = _finish_update(
         state,
         checkpoint,
-        record.record_id,
+        record,
         "form_connection",
         route_id=route.route_id,
         connection_id=connection.connection_id,
@@ -951,7 +969,7 @@ def weaken_grounded_connection(
         raise AdaptiveSubstrateValidationError(
             "candidate connection is retained at its minimum weight floor"
         )
-    checkpoint, _ = _prepare_update(state, record.record_id)
+    checkpoint, _ = _prepare_update(state, record)
     next_weight = max(MIN_WEIGHT, round(connection.weight - MAX_CONNECTION_CHANGE, 6))
     next_connections = tuple(
         replace(item, weight=next_weight)
@@ -962,7 +980,7 @@ def weaken_grounded_connection(
     next_state, audit = _finish_update(
         state,
         checkpoint,
-        record.record_id,
+        record,
         "weaken_connection",
         route_id=route.route_id,
         connection_id=connection_id,
@@ -988,7 +1006,7 @@ def switch_grounded_tactic(
     _reject_duplicate_record(state, record)
     _validate_pressure(pressure, record)
     _, evidence_ids, epistemic_class = _require_grounded_credit(state, record)
-    checkpoint, _ = _prepare_update(state, record.record_id)
+    checkpoint, _ = _prepare_update(state, record)
     ordered = sorted(state.tactics, key=lambda item: (item.ordinal, item.tactic_id))
     current_index = next(
         index for index, item in enumerate(ordered)
@@ -1010,7 +1028,7 @@ def switch_grounded_tactic(
     next_state, audit = _finish_update(
         state,
         checkpoint,
-        record.record_id,
+        record,
         "switch_tactic",
         route_id=record.selection.route_id,
         reason=(
@@ -1050,6 +1068,13 @@ def rollback_adaptive_state(
     )
     if checkpoint is None:
         raise AdaptiveSubstrateValidationError("rollback checkpoint is not retained")
+    if (
+        checkpoint.generation != state.generation
+        or checkpoint.route_topology.generation != state.route_topology.generation
+    ):
+        raise AdaptiveSubstrateValidationError(
+            "rollback checkpoint lineage is stale for the current adaptive generation"
+        )
     if state.updates_applied >= MAX_ADAPTIVE_UPDATES:
         raise AdaptiveSubstrateValidationError("rollback budget is exhausted")
     if state.generation >= MAX_ADAPTIVE_GENERATIONS:
@@ -1086,6 +1111,9 @@ def rollback_adaptive_state(
         (state.audits + (audit,))[-MAX_ADAPTIVE_AUDIT:],
         state.checkpoints,
         state.failure_streak,
+        state.tactic_streak,
+        state.invalidated_record_ids,
+        state.consumed_settlement_ids,
     )
     return next_state, audit
 
@@ -1182,6 +1210,8 @@ def invalidate_grounded_adaptation(
         0,
         0,
         state.invalidated_record_ids + (target_record_id,),
+        state.consumed_settlement_ids
+        + (invalidating_record.settlement.settlement_id,),
     ), audit
 
 

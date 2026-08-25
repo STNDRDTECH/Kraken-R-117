@@ -14,9 +14,13 @@ from kraken_r import (
     MAX_EXPERIMENT_TICKS,
     MetastabilityAblation,
     MetastabilityValidationError,
+    Objective,
+    SettlementRouteRecord,
     compare_metastability,
     make_metastability_scenario,
     run_metastability_experiment,
+    run_constitutional_cycle,
+    select_candidate_route,
 )
 
 
@@ -188,4 +192,74 @@ def test_inhibition_ablation_sanitizes_authority_bearing_inputs_before_reduction
         "inhibiting-mismatch",
         "inhibiting-resource",
         "rollback-input",
+    )
+
+
+def test_full_baseline_stale_settlement_withholding_binds_every_ablation_arm() -> None:
+    initial = DynamicalState.fixture("metastability-stale-settlement")
+    topology = initial.medium.adaptive_state.route_topology
+    initial = replace(
+        initial,
+        fast=replace(initial.fast, active_route_id=topology.routes[0].route_id),
+        medium=replace(
+            initial.medium,
+            adaptive_state=replace(
+                initial.medium.adaptive_state,
+                route_topology=replace(
+                    topology,
+                    routes=(replace(topology.routes[0], weight=0.65), *topology.routes[1:]),
+                ),
+            ),
+        ),
+    )
+    objective = Objective(
+        initial.objective_id,
+        "Keep stale candidate records non-creditable.",
+        provenance={"transaction_id": initial.transaction_id},
+    )
+    trace = run_constitutional_cycle(objective)
+    selection = select_candidate_route(
+        initial.medium.adaptive_state.route_topology,
+        "candidate-work",
+        transaction_id=trace.transaction_id,
+        objective_id=trace.objective.objective_id,
+        task_state_id=trace.states[4].state_id,
+        task_state_version=trace.states[4].version,
+    )
+    stale_record = SettlementRouteRecord(
+        "metastability-stale-record",
+        selection,
+        trace,
+        provenance={
+            "transaction_id": trace.transaction_id,
+            "objective_id": trace.objective.objective_id,
+            "task_state_id": trace.states[4].state_id,
+            "task_state_version": trace.states[4].version,
+            "route_id": selection.route_id,
+            "settlement_id": trace.settlement.settlement_id,
+            "evidence_ids": tuple(item.evidence_id for item in trace.evidence),
+        },
+    )
+    comparison = compare_metastability(
+        initial,
+        (
+            DynamicalTick(1),
+            DynamicalTick(
+                2,
+                (DynamicalEvent.settlement_event("metastability-stale-event", stale_record),),
+            ),
+        ),
+        comparison_id="metastability-stale-comparison",
+        scenario=ExperimentScenario.STAGNATING,
+    )
+
+    assert all(
+        report.traces[1].adaptive_audits == ()
+        and report.traces[1].noncreditable_settlement_ids == (stale_record.record_id,)
+        and report.traces[1].withheld_events
+        for report in comparison.reports
+    )
+    assert all(
+        report.final_state.medium.adaptive_state.applied_record_ids == ()
+        for report in comparison.reports
     )
