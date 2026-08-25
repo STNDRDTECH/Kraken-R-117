@@ -20,3 +20,4 @@
 - [Controlled LLM proposal boundary](controlled-llm-boundary.md) — model output stays declared-only; provider calls, replay, and comparisons must fail closed without granting authority.
 - [GitHub publication verification](github-publication-verification.md) — Contents API writes may outlive a client replay error; verify refs and a fresh checkout independently.
 - [Provider-backed controlled trials](provider-backed-controlled-trial.md) — normalize base URLs and use token-stable routing codes; preserve and disclose every fail-closed provider result.
+- [Bounded plasticity resilience](bounded-plasticity-resilience.md) — recovery is a replayable checkpoint restore only after later verified task failure; consumed identities remain retained.
