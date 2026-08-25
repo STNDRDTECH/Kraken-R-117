@@ -59,6 +59,21 @@ class DynamicalSubstrateValidationError(ValueError):
     """Raised when a Stage 10.8 boundary or replay input is malformed."""
 
 
+def _bounded_tuple(values: Iterable[Any], maximum: int, name: str) -> tuple[Any, ...]:
+    """Collect no more than one item beyond an explicit public budget."""
+
+    try:
+        iterator = iter(values)
+    except TypeError as exc:
+        raise DynamicalSubstrateValidationError(f"{name} must be iterable") from exc
+    items: list[Any] = []
+    for item in iterator:
+        if len(items) >= maximum:
+            raise DynamicalSubstrateValidationError(f"{name} budget exceeded")
+        items.append(item)
+    return tuple(items)
+
+
 class DynamicalEventKind(str, Enum):
     SIGNAL = "signal"
     OBSERVATION = "observation"
@@ -308,9 +323,11 @@ class DynamicalTick:
 
     def __post_init__(self) -> None:
         _integer(self.tick, "tick", maximum=MAX_TICKS)
-        object.__setattr__(self, "events", tuple(self.events))
-        if len(self.events) > MAX_TICK_EVENTS:
-            raise DynamicalSubstrateValidationError("tick event budget exceeded")
+        object.__setattr__(
+            self,
+            "events",
+            _bounded_tuple(self.events, MAX_TICK_EVENTS, "tick event"),
+        )
         if not all(isinstance(item, DynamicalEvent) for item in self.events):
             raise DynamicalSubstrateValidationError("tick events are invalid")
         ids = tuple(item.event_id for item in self.events)
@@ -1029,9 +1046,16 @@ def replay_dynamical_ticks(
 ) -> tuple[DynamicalState, tuple[DynamicalTickTrace, ...]]:
     """Replay the same explicit tick stream without clocks or hidden state."""
 
+    try:
+        iterator = iter(ticks)
+    except TypeError as exc:
+        raise DynamicalSubstrateValidationError("replay ticks must be iterable") from exc
     state = initial
     traces: list[DynamicalTickTrace] = []
-    for tick in tuple(ticks):
+    remaining_ticks = MAX_TICKS - state.tick
+    for tick in iterator:
+        if len(traces) >= remaining_ticks:
+            raise DynamicalSubstrateValidationError("replay tick budget exceeded")
         state, trace = reduce_dynamical_tick(
             state, tick, signal_network=signal_network
         )
