@@ -108,11 +108,15 @@ primitive promotion path, or alternate runtime.
 
 The substrate has three strictly bounded timescales. Fast state records
 activation, inhibition, typed prediction/observation mismatch surprise,
-resource pressure, and declared signal delivery. Medium state can invoke only
-the pre-existing settlement-grounded immutable reducers for routes, connections,
-tactics, bounded decay, and rollback. Slow state records minimal coherence and
-recurrence observations; it has no authority over evidence, topology, tactics,
-physiology, learning, or promotion.
+resource pressure, declared signal delivery, and an explicit bounded physiology
+cooldown. Medium state can invoke only the pre-existing settlement-grounded
+immutable reducers for routes, connections, tactics, bounded decay, and
+rollback. A caller-supplied inactive tick may move a previously selected
+candidate route one fixed small step toward neutral preference; this
+non-evidentiary turnover does not create a settlement, audit credit, new
+connection, tactic, or learning update. Slow state records minimal coherence
+and recurrence observations; it has no authority over evidence, topology,
+tactics, physiology, learning, or promotion.
 
 Signals, surprise, advisory endogenous physiology, coherence, and
 instrumentation are non-evidentiary. A task success or failure can affect

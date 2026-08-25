@@ -300,8 +300,12 @@ event identity, retained only in a bounded audit window, and replayed by passing
 the same records to the same pure reducer.
 
 Fast state contains only activation, inhibition, surprise, resource pressure,
-and delivered signal topics. Medium state wraps the existing immutable
-settlement-gated routes, connections, tactics, decay, and rollback reducers.
+delivered signal topics, and a bounded carried physiology cooldown. Medium state
+wraps the existing immutable settlement-gated routes, connections, tactics,
+decay, and rollback reducers. On a caller-supplied inactive tick, a previously
+selected route may move one fixed small step toward neutral preference; this is
+explicit traceable candidate turnover, not evidence, settlement credit, or a
+learning update.
 Slow state records a minimal coherence/recurrence observation only; it cannot
 be used as an evidence source, controller, or learning credit. Endogenous
 physiology is derived only from bounded candidate state and remains advisory.
@@ -350,6 +354,13 @@ non-creditable settlements never earn adaptive credit. Setup/infrastructure,
 timeout/resource, execution, contradiction, insufficient-evidence, stale, and
 inhibited outcomes retain provenance but cannot reshape topology, connections,
 tactics, homeostasis, or learning.
+
+Every public tick/state collection checks its fixed retention budget
+incrementally before freezing it. Retained tick counters saturate at documented
+finite bounds, and a candidate connection remains present at its minimum weight
+floor rather than being removed implicitly. The physiology cooldown is carried
+only as immutable fast state from one explicit caller-supplied tick to the next;
+there is no timer, background controller, or hidden state.
 
 The cycle can also be exercised directly:
 
