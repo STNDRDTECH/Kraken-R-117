@@ -80,6 +80,21 @@ from .adaptive_substrate import (
     HomeostaticSnapshot,
     run_orzhaal_experiment,
 )
+from .task_integrity import (
+    BeliefState,
+    CandidateClaim,
+    CandidateResult,
+    LossKind,
+    OriginalTask,
+    RequirementKind,
+    ReviewRole,
+    TaskHypothesis,
+    TaskIntegrityValidationError,
+    TaskPlan,
+    TaskRequirement,
+    TaskSpecification,
+    replay_task_integrity,
+)
 
 
 CANONICAL_CONTRACTS = (
@@ -1221,6 +1236,149 @@ def validate_adaptive_substrate() -> tuple[str, ...]:
     return tuple(errors)
 
 
+def validate_task_integrity() -> tuple[str, ...]:
+    """Exercise the immutable, proposal-only Stage 10.7 task boundary."""
+
+    errors: list[str] = []
+    try:
+        original = OriginalTask(
+            "validator-integrity-task",
+            "Preserve requirements, avoid runtime wiring, and verify independently.",
+            "validator_fixture",
+            {"scope": "candidate_only"},
+        )
+        requirements = (
+            TaskRequirement("integrity-ask", RequirementKind.ASK, "Preserve requirements."),
+            TaskRequirement(
+                "integrity-constraint",
+                RequirementKind.CONSTRAINT,
+                "Avoid runtime wiring.",
+            ),
+            TaskRequirement(
+                "integrity-evidence",
+                RequirementKind.REQUIRED_EVIDENCE,
+                "Verify independently.",
+            ),
+        )
+        specification = TaskSpecification.from_task(
+            "validator-integrity-spec",
+            original,
+            requirements,
+            "Preserve every structured clause as a candidate-only requirement.",
+        )
+        hypothesis = TaskHypothesis(
+            "validator-integrity-hypothesis",
+            specification.specification_id,
+            "A pure boundary can preserve every requirement.",
+            specification.requirement_ids,
+        )
+        belief = BeliefState(
+            "validator-integrity-belief",
+            specification.specification_id,
+            (hypothesis,),
+        )
+        plan = TaskPlan(
+            "validator-integrity-plan",
+            specification.specification_id,
+            (hypothesis.hypothesis_id,),
+            specification.requirement_ids,
+            ("Preserve clause lineage.", "Review only declared output."),
+        )
+        claim = CandidateClaim(
+            "validator-integrity-claim",
+            "All requirements are addressed.",
+            specification.requirement_ids,
+        )
+        result = CandidateResult(
+            "validator-integrity-result",
+            specification.specification_id,
+            plan.plan_id,
+            (hypothesis.hypothesis_id,),
+            specification.requirement_ids,
+            claims=(claim,),
+            conclusion_claim_ids=(claim.claim_id,),
+        )
+        before = result.to_dict()
+        trace = replay_task_integrity(original, specification, belief, plan, result)
+        replayed = replay_task_integrity(original, specification, belief, plan, result)
+    except TaskIntegrityValidationError as exc:
+        return (f"task-integrity fixture failed: {exc}",)
+    if trace.to_dict() != replayed.to_dict():
+        errors.append("task-integrity replay is not deterministic")
+    if (
+        trace.loss_report.findings
+        or trace.review_findings
+        or trace.verification_questions
+        or result.to_dict() != before
+    ):
+        errors.append("correct candidate changed under non-actionable review")
+    if (
+        trace.to_dict()["creates_evidence"]
+        or trace.to_dict()["changes_adaptive_state"]
+        or any(item.to_dict()["evidence_grade"] != "none" for item in trace.review_findings)
+    ):
+        errors.append("task-integrity review crossed its proposal-only boundary")
+
+    missing_dependency = replace(
+        result,
+        claims=(
+            CandidateClaim(
+                claim.claim_id,
+                "A conclusion names an absent reverse dependency.",
+                ("integrity-ask",),
+                dependency_claim_ids=("validator-integrity-absent-claim",),
+            ),
+        ),
+    )
+    try:
+        reverse_trace = replay_task_integrity(
+            original,
+            specification,
+            belief,
+            plan,
+            missing_dependency,
+            roles=(ReviewRole.ANTIMETABOLE,),
+        )
+    except TaskIntegrityValidationError as exc:
+        errors.append(f"reverse-dependency review failed: {exc}")
+    else:
+        if not any(
+            item.kind is LossKind.UNSUPPORTED_DEPENDENCY
+            for item in reverse_trace.loss_report.findings
+        ):
+            errors.append("unsupported reverse dependency was not surfaced")
+        if (
+            len(reverse_trace.review_findings) != 1
+            or reverse_trace.review_findings[0].role is not ReviewRole.ANTIMETABOLE
+            or len(reverse_trace.verification_questions) != 1
+        ):
+            errors.append("reverse-dependency review did not remain selective and bounded")
+
+    omitted = replace(
+        result,
+        addressed_requirement_ids=("integrity-ask",),
+        compressed_requirement_ids=("integrity-constraint",),
+    )
+    try:
+        angel_trace = replay_task_integrity(
+            original, specification, belief, plan, omitted, roles=(ReviewRole.ANGEL,)
+        )
+    except TaskIntegrityValidationError as exc:
+        errors.append(f"omission review failed: {exc}")
+    else:
+        kinds = {item.kind for item in angel_trace.loss_report.findings}
+        if LossKind.OMITTED not in kinds or LossKind.COMPRESSED not in kinds:
+            errors.append("omission or compression loss was not reported")
+        if any(item.role is not ReviewRole.ANGEL for item in angel_trace.review_findings):
+            errors.append("selective Angel review leaked another role")
+        if any(
+            "original_text" in item.payload or "evidence" in item.payload
+            for item in angel_trace.projections
+        ):
+            errors.append("review projection leaked correlated runtime context")
+    return tuple(errors)
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         description="Validate the isolated, candidate-only Kraken-R foundation."
@@ -1267,6 +1425,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     grounded_execution_errors = validate_grounded_execution()
     interaction_errors = validate_interaction_boundaries()
     adaptive_substrate_errors = validate_adaptive_substrate()
+    task_integrity_errors = validate_task_integrity()
     legacy_runtime_errors = validate_legacy_runtime_boundary()
     report = {
         "ok": (
@@ -1282,6 +1441,7 @@ def main(argv: Sequence[str] | None = None) -> int:
             and not grounded_execution_errors
             and not interaction_errors
             and not adaptive_substrate_errors
+            and not task_integrity_errors
             and not legacy_runtime_errors
         ),
         "contracts_ok": not contract_errors,
@@ -1338,6 +1498,11 @@ def main(argv: Sequence[str] | None = None) -> int:
             "errors": list(adaptive_substrate_errors),
             "authority": "grounded_candidate_reducers_and_disposable_experiments_only",
         },
+        "task_integrity": {
+            "ok": not task_integrity_errors,
+            "errors": list(task_integrity_errors),
+            "authority": "proposal_only_candidate_task_integrity",
+        },
         "constitution": {
             "ok": True,
             "version": constitution["version"],
@@ -1363,6 +1528,7 @@ def main(argv: Sequence[str] | None = None) -> int:
             *metadata_errors,
             *contract_errors,
             *cycle_errors,
+            *task_integrity_errors,
             *registry_report.errors,
         ):
             print(f"- {error}")

@@ -26,6 +26,9 @@ second runtime.
   executor attestation, independent verification, and structural replay.
 - `kraken_r/interactions.py` — stateless validation that existing bounded
   modules compose without creating a new runtime authority.
+- `kraken_r/task_integrity.py` — immutable original-task preservation,
+  bounded structured interpretation and beliefs, information-loss accounting,
+  and selective proposal-only adversarial review.
 - `kraken_r/constitution.json` — machine-readable constitution metadata
   validated alongside the registry.
 - `kraken_r/architecture_registry.schema.json` — machine-readable JSON schema.
@@ -51,7 +54,9 @@ pytest -q \
    tests/test_kraken_r_llm_adapter.py \
    tests/test_kraken_r_controlled_evaluation.py \
    tests/test_kraken_r_grounded_execution.py \
-   tests/test_kraken_r_interactions.py
+   tests/test_kraken_r_interactions.py \
+   tests/test_kraken_r_adaptive_substrate.py \
+   tests/test_kraken_r_task_integrity.py
 ```
 
 The command reads the bundled JSON, imports the isolated package, and executes
@@ -201,6 +206,79 @@ and a bounded tactic streak forces a deterministic alternate tactic. Advisory
 physiology remains non-evidentiary, and setup/infrastructure failures cannot
 trigger recovery, topology changes, or learning credit. Stage 11 mechanisms
 remain excluded.
+
+## Stage 10.7 task integrity
+
+`kraken_r.task_integrity` is a pure inspection boundary for retaining the
+original caller task throughout structured interpretation, bounded competing
+hypotheses, a declared plan, candidate results, and adversarial review. It does
+not create an action, provider request, execution, evidence, settlement,
+learning update, authority, topology change, adaptive state, durable memory, or
+runtime wiring.
+
+```python
+from kraken_r import (
+    BeliefState,
+    CandidateResult,
+    OriginalTask,
+    RequirementKind,
+    TaskHypothesis,
+    TaskPlan,
+    TaskRequirement,
+    TaskSpecification,
+    replay_task_integrity,
+)
+
+task = OriginalTask(
+    "integrity-demo",
+    "Preserve all requirements and verify independently.",
+    "caller",
+    {},
+)
+specification = TaskSpecification.from_task(
+    "integrity-demo-spec",
+    task,
+    (
+        TaskRequirement("ask", RequirementKind.ASK, "Preserve all requirements."),
+        TaskRequirement("evidence", RequirementKind.REQUIRED_EVIDENCE, "Verify independently."),
+    ),
+    "Keep both clauses explicit.",
+)
+hypothesis = TaskHypothesis(
+    "integrity-demo-hypothesis",
+    specification.specification_id,
+    "The candidate can preserve both clauses.",
+    specification.requirement_ids,
+)
+belief = BeliefState("integrity-demo-belief", specification.specification_id, (hypothesis,))
+plan = TaskPlan(
+    "integrity-demo-plan",
+    specification.specification_id,
+    (hypothesis.hypothesis_id,),
+    specification.requirement_ids,
+    ("Preserve clause lineage.",),
+)
+result = CandidateResult(
+    "integrity-demo-result",
+    specification.specification_id,
+    plan.plan_id,
+    (hypothesis.hypothesis_id,),
+    specification.requirement_ids,
+)
+trace = replay_task_integrity(task, specification, belief, plan, result)
+assert trace.to_dict()["creates_evidence"] is False
+assert trace.to_dict()["changes_adaptive_state"] is False
+```
+
+Loss accounting reports omissions, declared compression, underweighting, and
+unsupported reverse dependencies without repairing or mutating the candidate.
+Angel gets only requirement coverage, Nemesis gets only declared hypothesis
+status/dependencies, and Antimetabole gets only conclusion-to-claim structure.
+Their bounded findings and verification questions are proposal-only and require
+later independent grounding. Ambiguity, infrastructure/setup, timeout/resource,
+execution, contradiction, and insufficient-evidence remain non-creditable.
+Stage 11 provider reputation/routing, probes, higher-order circuits, workers,
+recursion, and automatic promotion remain excluded.
 
 The cycle can also be exercised directly:
 

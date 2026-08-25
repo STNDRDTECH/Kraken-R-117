@@ -1,7 +1,7 @@
 # Kraken-R Constitution
 
 **Status:** candidate-only foundation  
-**Version:** 1.9
+**Version:** 1.10.7
 **Effective boundary:** documentation, standalone validation, deterministic fixture
 execution, and independently verified bounded candidate execution observations
 
@@ -23,12 +23,13 @@ actuators remain unchanged and authoritative for their current behavior.
 
 The `kraken_r` package is candidate-only. Its deterministic cycle,
 recorded-execution replay, bounded signal propagation, bounded advisory
-physiology, settlement-grounded route-preference reducer, proposal-only LLM
-adapter, narrow verified execution observer, and static interaction validator
-have no daemon entrypoint, runtime writer, event subscription, general command
-surface, router, ledger, homeostasis controller, or mutation actuator. Loading,
-validating, or running them must not start ROGAL, contact an LLM, open live
-stores, or change `.rogal/` runtime state.
+physiology, settlement-grounded route-preference reducer, immutable
+task-integrity inspection, proposal-only LLM adapter, narrow verified execution
+observer, and static interaction validator have no daemon entrypoint, runtime
+writer, event subscription, general command surface, router, ledger,
+homeostasis controller, or mutation actuator. Loading, validating, or running
+them must not start ROGAL, contact an LLM, open live stores, or change
+`.rogal/` runtime state.
 
 ## Canonical lifecycle
 
@@ -396,3 +397,35 @@ specialist daemons, event buses, background workers, live controllers,
 permanent self-modification, organ evolution, broad lattice composition,
 chemistry, Redstone, HOP, ALU systems, and alternate reasoning runtimes remain
 excluded.
+
+## Stage 10.7 task integrity
+
+Stage 10.7 adds a pure, bounded inspection boundary for preserving the exact
+caller-supplied task while making interpretation losses visible. `OriginalTask`
+is immutable and hash-bound to a `TaskSpecification`; every structured
+requirement keeps a source clause identity and can be traced through declared
+competing hypotheses, a proposal-only plan, and a candidate result.
+
+`BeliefState` keeps a finite set of candidate interpretations with declared
+support, contradiction, unresolved dependencies, and status. Those fields are
+not evidence grades and cannot settle a task, alter authority, create topology,
+or change adaptive state. `InformationLossReport` deterministically reports
+omitted, compressed, underweighted, and unsupported reverse dependencies across
+the specification, belief, plan, and result. It never repairs or mutates those
+inputs.
+
+Angel receives only requirement identities, kinds, weights, and declared
+coverage to look for omissions. Nemesis receives only hypothesis status and
+declared contradiction/dependency identities to request falsification.
+Antimetabole receives only conclusion-to-claim dependency structure to request
+reverse checks. The original raw task, provenance, execution, evidence,
+settlement, authority, and adaptive context are excluded from all projections.
+Each role is selective and returns only bounded proposal-only findings plus
+questions for a later independent tool, execution, or retrieval boundary.
+
+Neither a review finding nor a verification question is evidence. Ambiguous,
+infrastructure/setup, timeout/resource, execution, contradiction, and
+insufficient-evidence outcomes remain non-creditable. This stage does not add
+a provider, execution path, persistent memory, adaptive reducer, controller,
+daemon, routing reputation, open-weight probe, recursive circuit, or any Stage
+11 functionality.

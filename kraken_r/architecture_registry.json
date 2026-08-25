@@ -1,11 +1,11 @@
 {
   "registry_kind": "kraken_r_architecture",
   "registry_id": "kraken-r-foundation",
-  "version": "1.10.6",
+  "version": "1.10.7",
   "last_reviewed": "2026-08-25",
   "authority_boundary": {
     "legacy_reference": "rogal_core.daemon.ROGALDaemon and rogal_core.autonomous_cycle.AutonomousCycle remain the deployed reference runtime.",
-    "kraken_candidate": "The deterministic Kraken-R cycle, read-only recorded-execution replay, bounded in-memory signal propagation, advisory bounded physiology, settlement-grounded bounded route preference, grounded bounded adaptive reducers, disposable isolated Orzhaal experiments, proposal-only LLM adapter, verified bounded execution observer, and static interaction validation are executable candidate infrastructure only; they have no authority over the deployed runtime.",
+    "kraken_candidate": "The deterministic Kraken-R cycle, read-only recorded-execution replay, bounded in-memory signal propagation, advisory bounded physiology, settlement-grounded bounded route preference, grounded bounded adaptive reducers, immutable task-integrity inspection, disposable isolated Orzhaal experiments, proposal-only LLM adapter, verified bounded execution observer, and static interaction validation are executable candidate infrastructure only; they have no authority over the deployed runtime.",
     "preservation": "Legacy, alternate, dormant, and forgotten mechanisms are classified and preserved, never deleted by this foundation."
   },
   "mechanisms": [
@@ -152,6 +152,22 @@
       "source_refs": ["docs/kraken_r/CONSTITUTION.md"],
       "planned": false,
       "notes": "An Orzhaal result is structured disposable experiment output only. It has no canonical write, promotion, evidence, settlement, learning, topology, provider, runtime, or persistent-state authority; adaptation of adaptation rules remains excluded from Kraken-R ordinary operation."
+    },
+    {
+      "mechanism_id": "kraken_r_task_integrity_boundary",
+      "category": "task_state_reasoning",
+      "name": "Bounded immutable task-integrity boundary",
+      "intended_role": "Preserve an original task through a bounded structured specification, declared competing hypotheses, information-loss accounting, and selectively invoked proposal-only adversarial review.",
+      "current_status": "infrastructure",
+      "dependencies": ["kraken_r_constitutional_cycle", "kraken_r_bounded_adaptive_substrate"],
+      "authority": "kraken_candidate",
+      "evidence_grade": "implemented",
+      "evidence_refs": ["kraken_r/task_integrity.py", "tests/test_kraken_r_task_integrity.py", "kraken_r/validate.py"],
+      "duplicates": [],
+      "disposition": "keep",
+      "source_refs": ["docs/kraken_r/CONSTITUTION.md", "docs/kraken_r/README.md"],
+      "planned": false,
+      "notes": "Pure immutable inspection only. Original task text, structured clause identities, hypotheses, plan, candidate result, loss findings, and role-specific minimal projections remain caller-owned and replayable. Angel, Nemesis, and Antimetabole findings are proposal-only verification questions; they cannot create evidence, settlement, authority, topology credit, adaptive changes, persistence, provider routing, execution, or durable memory. Infrastructure, timeout/resource, execution, contradiction, ambiguity, and insufficient-evidence outcomes remain non-creditable."
     },
     {
       "mechanism_id": "kraken_r_controlled_llm_proposal_adapter",
