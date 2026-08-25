@@ -88,6 +88,13 @@ from .dynamical_substrate import (
     reduce_dynamical_tick,
     replay_dynamical_ticks,
 )
+from .metastability import (
+    ExperimentScenario,
+    MetastabilityValidationError,
+    compare_metastability,
+    make_metastability_scenario,
+    run_metastability_experiment,
+)
 from .task_integrity import (
     BeliefState,
     CandidateClaim,
@@ -1455,6 +1462,70 @@ def validate_dynamical_substrate() -> tuple[str, ...]:
     return tuple(errors)
 
 
+def validate_metastability_experiments() -> tuple[str, ...]:
+    """Exercise Stage 10.9's bounded, non-authoritative comparison layer."""
+
+    errors: list[str] = []
+    state = DynamicalState.fixture("validator-metastability")
+    ticks = make_metastability_scenario(
+        state, ExperimentScenario.NOISY_NONCREDITABLE, ticks=12
+    )
+    try:
+        first = run_metastability_experiment(
+            state,
+            ticks,
+            experiment_id="validator-metastability-first",
+            scenario=ExperimentScenario.NOISY_NONCREDITABLE,
+        )
+        second = run_metastability_experiment(
+            state,
+            ticks,
+            experiment_id="validator-metastability-second",
+            scenario=ExperimentScenario.NOISY_NONCREDITABLE,
+        )
+        comparison = compare_metastability(
+            state,
+            ticks,
+            comparison_id="validator-metastability",
+            scenario=ExperimentScenario.NOISY_NONCREDITABLE,
+        )
+    except (MetastabilityValidationError, DynamicalSubstrateValidationError) as exc:
+        return (f"metastability fixture failed: {exc}",)
+    if first.to_dict()["final_state"] != second.to_dict()["final_state"]:
+        errors.append("metastability replay is not deterministic")
+    if first.metrics.noncreditable_events != 0:
+        errors.append("non-creditable scenario invented settlement outcomes")
+    if first.final_state.medium.adaptive_state != state.medium.adaptive_state:
+        errors.append("non-creditable observations changed adaptive topology")
+    if len(comparison.reports) != 6 or not all(
+        report.input_digest == comparison.baseline.input_digest
+        and report.metrics.tick_count == comparison.baseline.metrics.tick_count
+        for report in comparison.reports
+    ):
+        errors.append("metastability ablations did not retain matched inputs and budgets")
+    without_surprise = next(
+        report for report in comparison.reports if report.ablation.label == "without_surprise"
+    )
+    if without_surprise.metrics.surprise_peak != 0.0:
+        errors.append("surprise ablation retained mismatch pressure")
+    without_inhibition = next(
+        report for report in comparison.reports if report.ablation.label == "without_inhibition"
+    )
+    if without_inhibition.metrics.inhibition_rate != 0.0:
+        errors.append("inhibition ablation retained action inhibition")
+    try:
+        run_metastability_experiment(
+            state,
+            (item for item in ticks for _ in range(30)),
+            scenario=ExperimentScenario.STABLE,
+        )
+    except MetastabilityValidationError:
+        pass
+    else:
+        errors.append("oversized experiment generator did not fail closed")
+    return tuple(errors)
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         description="Validate the isolated, candidate-only Kraken-R foundation."
@@ -1503,6 +1574,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     adaptive_substrate_errors = validate_adaptive_substrate()
     task_integrity_errors = validate_task_integrity()
     dynamical_substrate_errors = validate_dynamical_substrate()
+    metastability_errors = validate_metastability_experiments()
     legacy_runtime_errors = validate_legacy_runtime_boundary()
     report = {
         "ok": (
@@ -1520,6 +1592,7 @@ def main(argv: Sequence[str] | None = None) -> int:
             and not adaptive_substrate_errors
             and not task_integrity_errors
             and not dynamical_substrate_errors
+            and not metastability_errors
             and not legacy_runtime_errors
         ),
         "contracts_ok": not contract_errors,
@@ -1585,6 +1658,11 @@ def main(argv: Sequence[str] | None = None) -> int:
             "ok": not dynamical_substrate_errors,
             "errors": list(dynamical_substrate_errors),
             "authority": "bounded_immutable_replayable_candidate_ticks_only",
+        },
+        "metastability": {
+            "ok": not metastability_errors,
+            "errors": list(metastability_errors),
+            "authority": "bounded_candidate_experiment_observation_only",
         },
         "constitution": {
             "ok": True,

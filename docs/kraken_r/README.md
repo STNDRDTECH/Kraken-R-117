@@ -32,6 +32,9 @@ second runtime.
 - `kraken_r/dynamical_substrate.py` — explicit bounded event batches reduced
   into immutable, replayable fast/medium/slow candidate state; it is not a
   scheduler, daemon, persistent cognitive store, or controller.
+- `kraken_r/metastability.py` — bounded, deterministic full-versus-ablation
+  measurements over caller-owned dynamical ticks; reports are disposable
+  observations, never evidence, credit, promotion, or runtime authority.
 - `kraken_r/constitution.json` — machine-readable constitution metadata
   validated alongside the registry.
 - `kraken_r/architecture_registry.schema.json` — machine-readable JSON schema.
@@ -59,8 +62,9 @@ pytest -q \
    tests/test_kraken_r_grounded_execution.py \
    tests/test_kraken_r_interactions.py \
    tests/test_kraken_r_adaptive_substrate.py \
-    tests/test_kraken_r_task_integrity.py \
-    tests/test_kraken_r_dynamical_substrate.py
+     tests/test_kraken_r_task_integrity.py \
+     tests/test_kraken_r_dynamical_substrate.py \
+     tests/test_kraken_r_metastability.py
 ```
 
 The command reads the bundled JSON, imports the isolated package, and executes
@@ -361,6 +365,60 @@ finite bounds, and a candidate connection remains present at its minimum weight
 floor rather than being removed implicitly. The physiology cooldown is carried
 only as immutable fast state from one explicit caller-supplied tick to the next;
 there is no timer, background controller, or hidden state.
+
+## Stage 10.9 metastability experiments
+
+`kraken_r.metastability` is a measurement layer over the Stage 10.8 pure
+reducer, not a new dynamical runtime. It accepts a finite caller-owned tick
+stream, starts every arm from the same immutable tick-zero state, and records
+descriptive route diversity/entropy, dominant-route share, topology turnover,
+plasticity, decay, rollback, inhibition, surprise, recurrence, coherence,
+stagnation, resource pressure, grounded task-performance observations, and
+regime transitions.
+
+The six deterministic scenario factories are `stable`, `regime_change`,
+`noisy_noncreditable`, `oscillatory`, `monopolizing`, and `stagnating`.
+They make no claim that any one regime, entropy, topology, or threshold is
+ideal. `operating_region` and `failure_modes` are bounded descriptive labels
+for the supplied trace, not criticality targets or optimization objectives.
+
+```python
+from kraken_r import (
+    DynamicalState,
+    ExperimentScenario,
+    compare_metastability,
+    make_metastability_scenario,
+)
+
+initial = DynamicalState.fixture("metastability-demo")
+ticks = make_metastability_scenario(
+    initial, ExperimentScenario.OSCILLATORY, ticks=32
+)
+comparison = compare_metastability(
+    initial, ticks, scenario=ExperimentScenario.OSCILLATORY
+)
+assert comparison.to_dict()["matched_budget"] is True
+assert comparison.baseline.ablation.label == "full"
+```
+
+The comparison set has a full arm and one selectively neutralized arm each for
+homeostasis, inactivity decay, action inhibition, mismatch surprise, and the
+anti-monopoly route-selection control. Arms retain the same raw tick digest and
+tick budget. A private comparison-only reducer path applies the same bounded
+reducer logic to those raw records while retaining the original physiology
+decision as the authority gate: an inhibition ablation may alter its measured
+candidate-action state, but it can never allow an inhibited settlement or
+rollback to receive credit. Anti-monopoly is an explicit route-choice comparison
+and never changes the canonical topology cap.
+
+No experiment report is evidence, a settlement, a learning update, an adaptive
+audit, or a proposal for promotion. Only pre-existing independently verified
+grounded `task_success`/`task_failure` settlement records can reach the
+adaptive reducer. Setup, infrastructure, ambiguous, timeout, execution,
+contradiction, insufficient-evidence, non-creditable, and physiology-inhibited
+outcomes remain withheld. There are no daemons, schedulers, persistence,
+subprocesses, providers, recursive modifications, consolidation, primitive
+promotion, or hidden mutable state.
 
 The cycle can also be exercised directly:
 

@@ -16,7 +16,7 @@ from __future__ import annotations
 from dataclasses import dataclass, replace
 from enum import Enum
 import math
-from typing import Any, Iterable
+from typing import Any, Iterable, Mapping
 
 from .adaptive_substrate import (
     AdaptiveAudit,
@@ -56,6 +56,12 @@ MAX_SURPRISE = 1.0
 MAX_TICKS = 256
 MAX_EVENT_COUNTER = MAX_TICKS * MAX_TICK_EVENTS
 MAX_PHYSIOLOGY_COOLDOWN = 2
+_EXPERIMENT_COUNTERFORCES = (
+    "homeostasis",
+    "decay",
+    "inhibition",
+    "surprise",
+)
 
 
 class DynamicalSubstrateValidationError(ValueError):
@@ -126,6 +132,20 @@ def _increment(value: int, maximum: int, amount: int = 1) -> int:
     """Saturate a retained count rather than allowing a long replay to grow it."""
 
     return min(maximum, value + amount)
+
+
+def _experiment_counterforce_controls(
+    controls: Mapping[str, bool] | None,
+) -> dict[str, bool]:
+    if controls is None:
+        return {name: True for name in _EXPERIMENT_COUNTERFORCES}
+    if not isinstance(controls, Mapping) or set(controls) != set(
+        _EXPERIMENT_COUNTERFORCES
+    ):
+        raise DynamicalSubstrateValidationError("experiment counterforce controls are invalid")
+    if any(not isinstance(value, bool) for value in controls.values()):
+        raise DynamicalSubstrateValidationError("experiment counterforce controls must be boolean")
+    return dict(controls)
 
 
 @dataclass(frozen=True)
@@ -865,13 +885,16 @@ def _decay_inactive_route(
     return replace(adaptive, route_topology=next_topology), active_route_id
 
 
-def reduce_dynamical_tick(
+def _reduce_dynamical_tick_counterfactual(
     state: DynamicalState,
     tick: DynamicalTick,
     *,
     signal_network: SignalNetwork | None = None,
+    counterforce_controls: Mapping[str, bool] | None = None,
+    authority_inhibited: bool | None = None,
+    canonical_withheld_event_ids: tuple[str, ...] | None = None,
 ) -> tuple[DynamicalState, DynamicalTickTrace]:
-    """Reduce one explicit tick without clocks, side effects, or persistence."""
+    """Private Stage 10.9 comparison reducer; never exports authority controls."""
 
     if not isinstance(state, DynamicalState):
         raise DynamicalSubstrateValidationError("reduction requires DynamicalState")
@@ -881,6 +904,19 @@ def reduce_dynamical_tick(
         raise DynamicalSubstrateValidationError("tick must advance by exactly one")
     if signal_network is not None and not isinstance(signal_network, SignalNetwork):
         raise DynamicalSubstrateValidationError("signal_network is invalid")
+    controls = _experiment_counterforce_controls(counterforce_controls)
+    if canonical_withheld_event_ids is None:
+        if any(not enabled for enabled in controls.values()):
+            raise DynamicalSubstrateValidationError(
+                "counterfactual controls require canonical withholding decisions"
+            )
+        canonical_withheld_event_ids = ()
+    elif (
+        not isinstance(canonical_withheld_event_ids, tuple)
+        or not all(isinstance(event_id, str) and event_id for event_id in canonical_withheld_event_ids)
+    ):
+        raise DynamicalSubstrateValidationError("canonical withheld event ids are invalid")
+    canonical_withheld = frozenset(canonical_withheld_event_ids)
     ordered = DynamicalEventFabric.order(tick.events)
     if any(event.event_id in state.consumed_event_ids for event in ordered):
         raise DynamicalSubstrateValidationError("event was already consumed")
@@ -904,6 +940,8 @@ def reduce_dynamical_tick(
         (item.magnitude for item in observations),
         default=state.fast.surprise * 0.80,
     )
+    if not controls["surprise"]:
+        surprise = 0.0
     topics = tuple(
         dict.fromkeys(
             state.fast.signal_topics
@@ -927,16 +965,24 @@ def reduce_dynamical_tick(
         state.objective_id,
         state.task_state_id,
         state.task_state_version,
-        memory_pressure=provisional_inhibition,
-        routing_pressure=min(
-            1.0, state.medium.adaptive_state.failure_streak / 3.0
+        memory_pressure=provisional_inhibition if controls["homeostasis"] else 0.0,
+        routing_pressure=(
+            min(1.0, state.medium.adaptive_state.failure_streak / 3.0)
+            if controls["homeostasis"]
+            else 0.0
         ),
-        backlog_pressure=min(1.0, len(ordered) / MAX_TICK_EVENTS),
+        backlog_pressure=(
+            min(1.0, len(ordered) / MAX_TICK_EVENTS)
+            if controls["homeostasis"]
+            else 0.0
+        ),
         contradiction_density=surprise,
-        resource_pressure=resource,
-        protected_reserve=1.0 - resource,
-        prior_regime=state.fast.last_regime,
-        cooldown_remaining=state.fast.cooldown_remaining,
+        resource_pressure=resource if controls["homeostasis"] else 0.0,
+        protected_reserve=1.0 - resource if controls["homeostasis"] else 1.0,
+        prior_regime=(
+            state.fast.last_regime if controls["homeostasis"] else OperatingRegime.PRODUCTIVE
+        ),
+        cooldown_remaining=state.fast.cooldown_remaining if controls["homeostasis"] else 0,
     )
     physiology = evaluate_physiology(
         snapshot,
@@ -945,6 +991,25 @@ def reduce_dynamical_tick(
         task_state_id=state.task_state_id,
         task_state_version=state.task_state_version,
     )
+    derived_authority_inhibited = physiology.decision.action_inhibited
+    if authority_inhibited is not None and not isinstance(authority_inhibited, bool):
+        raise DynamicalSubstrateValidationError("authority_inhibited must be boolean")
+    authority_inhibited = (
+        derived_authority_inhibited
+        if authority_inhibited is None
+        else authority_inhibited
+    )
+    if not controls["inhibition"] and derived_authority_inhibited:
+        physiology = replace(
+            physiology,
+            decision=replace(
+                physiology.decision,
+                effect="allow",
+                action_inhibited=False,
+                reason="inhibition counterforce neutralized for comparison measurement",
+                cooldown_applied=False,
+            ),
+        )
     inhibited = physiology.decision.action_inhibited
     adaptive = state.medium.adaptive_state
     audits: list[AdaptiveAudit] = []
@@ -957,7 +1022,18 @@ def reduce_dynamical_tick(
     rollback_events = state.instrumentation.rollback_events
     for event in ordered:
         if event.checkpoint_id is not None:
-            if inhibited:
+            if event.event_id in canonical_withheld:
+                withheld.append(
+                    WithheldEvent(
+                        event.event_id,
+                        event.kind,
+                        "canonical comparison gate withheld candidate rollback",
+                        operation="rollback",
+                        checkpoint_id=event.checkpoint_id,
+                    )
+                )
+                continue
+            if authority_inhibited:
                 withheld.append(
                     WithheldEvent(
                         event.event_id,
@@ -981,13 +1057,23 @@ def reduce_dynamical_tick(
         if event.settlement is None:
             continue
         record = event.settlement
+        if event.event_id in canonical_withheld:
+            noncreditable.append(record.record_id)
+            withheld.append(
+                _withheld_settlement(
+                    event,
+                    record,
+                    "canonical comparison gate withheld candidate adaptation",
+                )
+            )
+            continue
         _context_match(state, record)
         learning = apply_settlement_learning(adaptive.route_topology, record)[1]
         if learning.disposition != "accepted":
             noncreditable.append(record.record_id)
             withheld.append(_withheld_settlement(event, record, learning.reason))
             continue
-        if inhibited:
+        if authority_inhibited:
             noncreditable.append(record.record_id)
             withheld.append(
                 _withheld_settlement(
@@ -1036,7 +1122,7 @@ def reduce_dynamical_tick(
             decay_events = _increment(decay_events, MAX_EVENT_COUNTER)
 
     inactive_decay_route_id: str | None = None
-    if not ordered and route_id is not None:
+    if controls["decay"] and not ordered and route_id is not None:
         adaptive, inactive_decay_route_id = _decay_inactive_route(adaptive, route_id)
         if inactive_decay_route_id is not None:
             turnover = _increment(turnover, MAX_EVENT_COUNTER)
@@ -1148,6 +1234,21 @@ def reduce_dynamical_tick(
         inactive_decay_route_id,
     )
     return next_state, trace
+
+
+def reduce_dynamical_tick(
+    state: DynamicalState,
+    tick: DynamicalTick,
+    *,
+    signal_network: SignalNetwork | None = None,
+) -> tuple[DynamicalState, DynamicalTickTrace]:
+    """Reduce one explicit tick without clocks, side effects, or persistence."""
+
+    return _reduce_dynamical_tick_counterfactual(
+        state,
+        tick,
+        signal_network=signal_network,
+    )
 
 
 def replay_dynamical_ticks(
