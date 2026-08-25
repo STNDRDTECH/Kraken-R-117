@@ -1,11 +1,11 @@
 {
   "registry_kind": "kraken_r_architecture",
   "registry_id": "kraken-r-foundation",
-  "version": "1.7",
+  "version": "1.9",
   "last_reviewed": "2026-08-24",
   "authority_boundary": {
     "legacy_reference": "rogal_core.daemon.ROGALDaemon and rogal_core.autonomous_cycle.AutonomousCycle remain the deployed reference runtime.",
-    "kraken_candidate": "The deterministic Kraken-R cycle, read-only recorded-execution replay, bounded in-memory signal propagation, advisory bounded physiology, settlement-grounded bounded route preference, and proposal-only LLM adapter are executable candidate infrastructure only; they have no authority over the deployed runtime.",
+    "kraken_candidate": "The deterministic Kraken-R cycle, read-only recorded-execution replay, bounded in-memory signal propagation, advisory bounded physiology, settlement-grounded bounded route preference, proposal-only LLM adapter, verified bounded execution observer, and static interaction validation are executable candidate infrastructure only; they have no authority over the deployed runtime.",
     "preservation": "Legacy, alternate, dormant, and forgotten mechanisms are classified and preserved, never deleted by this foundation."
   },
   "mechanisms": [
@@ -136,6 +136,22 @@
       "source_refs": ["docs/kraken_r/CONSTITUTION.md", "docs/kraken_r/SALVAGE_DECISIONS.md", "rogal_core/llm/open_llm_bridge.py", "rogal_core/llm/llm_intuition.py", "rogal_core/llm/claude_intuition.py", "rogal_core/cognition/model_comparison_runner.py"],
       "planned": false,
       "notes": "Stateless injected-provider leaf with strict proposal/reasoning/route-hint JSON only. Inputs are bound to a cycle task state; outputs are declared-only and cannot become evidence, settlement, goal, persistence, execution, controller state, or learning credit. Provider identity and model provenance are bound to the injected request; enforced deadlines, provider errors, malformed output, self-report fields, invalid provenance, and out-of-bound route hints fail closed. Generation is marked nondeterministic while input/output hashes and structural replay (including received malformed output) are deterministic. The evaluator holds task, model configuration, provider identity, template, temperature, and output budget fixed across base, mediated, and reset-routing conditions, checks normalized prompt length and available provider-reported input-token counts, reports descriptive observed deltas, and never makes a performance claim."
+    },
+    {
+      "mechanism_id": "kraken_r_static_interaction_validation",
+      "category": "operator_surfaces",
+      "name": "Static bounded interaction validation",
+      "intended_role": "Validate caller-supplied immutable candidate traces across inhibition, grounded execution, settlement, route credit, delivery order, replay, and declared model provenance.",
+      "current_status": "infrastructure",
+      "dependencies": ["kraken_r_constitutional_cycle", "kraken_r_bounded_nervous_system", "kraken_r_bounded_physiology", "kraken_r_settlement_grounded_plastic_routing", "kraken_r_controlled_llm_proposal_adapter"],
+      "authority": "kraken_candidate",
+      "evidence_grade": "implemented",
+      "evidence_refs": ["kraken_r/interactions.py", "tests/test_kraken_r_interactions.py", "kraken_r/validate.py"],
+      "duplicates": [],
+      "disposition": "keep",
+      "source_refs": ["docs/kraken_r/CONSTITUTION.md"],
+      "planned": false,
+      "notes": "Stateless acceptance validator only. It owns no live main-instance responsibility and cannot run code, contact providers, mutate topology, persist receipts, dispatch signals, retry work, or promote a capability. The legacy daemon and AutonomousCycle retain all live lifecycle, bus, store, queue, controller, executor, actuator, and promotion responsibilities; later-stage recursive, specialist, lattice, organ, evolution, chemistry, HOP, Redstone, and alternate reasoning mechanisms remain quarantined or planned-only."
     },
     {
       "mechanism_id": "legacy_daemon",

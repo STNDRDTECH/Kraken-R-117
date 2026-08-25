@@ -48,6 +48,7 @@ from .llm_adapter import (
     CandidateModelContext,
     FixtureModelProvider,
     ModelAdapter,
+    ModelAdapterValidationError,
     replay_model_invocation,
 )
 from .controlled_evaluation import (
@@ -70,6 +71,7 @@ from .replay import (
     ReplayValidationError,
     replay_recorded_execution,
 )
+from .interactions import InteractionValidationError, validate_interaction_chain
 from .registry import load_default_registry, load_registry
 
 
@@ -1074,6 +1076,89 @@ def validate_grounded_execution() -> tuple[str, ...]:
     return tuple(errors)
 
 
+def validate_interaction_boundaries() -> tuple[str, ...]:
+    """Exercise static cross-module boundary checks without creating a runtime."""
+
+    errors: list[str] = []
+    objective = contracts.Objective(
+        "validator-interaction-objective",
+        "Validate conservative candidate interaction boundaries.",
+        provenance={"transaction_id": "validator-interaction-transaction"},
+    )
+    uncertainty = make_bound_signal(
+        "validator-interaction-uncertainty",
+        "candidate.uncertainty",
+        transaction_id="validator-interaction-transaction",
+        objective_id=objective.objective_id,
+        task_state_id=f"{objective.objective_id}-state-4",
+        task_state_version=4,
+    )
+    critical = PhysiologySnapshot(
+        "validator-interaction-critical",
+        "validator-interaction-transaction",
+        objective.objective_id,
+        f"{objective.objective_id}-state-4",
+        4,
+        contradiction_density=0.90,
+        resource_pressure=0.95,
+        protected_reserve=0.05,
+    )
+    try:
+        inhibited = run_constitutional_cycle(
+            objective, signals=(uncertainty,), physiology=critical
+        )
+        report = validate_interaction_chain(inhibited)
+    except (CycleInvariantError, InteractionValidationError) as exc:
+        return (f"conservative interaction validation failed: {exc}",)
+    if (
+        not report.action_inhibited
+        or report.grounded_execution
+        or report.delivery_stages
+        or inhibited.evidence
+        or inhibited.learning_update is not None
+    ):
+        errors.append("combined signal and physiology inhibition was not conservative")
+
+    proposal_trace = run_constitutional_cycle(
+        contracts.Objective(
+            "validator-interaction-proposal-objective",
+            "Validate proposal provenance remains non-evidentiary.",
+            provenance={"transaction_id": "validator-interaction-proposal-transaction"},
+        ),
+        mode=CycleMode.INSUFFICIENT_EVIDENCE,
+    )
+    try:
+        context = CandidateModelContext.from_cycle_trace(
+            proposal_trace,
+            context_id="validator-interaction-proposal-context",
+            allowed_route_ids=("path-alpha",),
+            route_scores=(("path-alpha", 0.50),),
+        )
+        result = ModelAdapter(
+            FixtureModelProvider(
+                lambda _: (
+                    '{"proposal":"inspect candidate route",'
+                    '"reasoning":"declared-only provenance",'
+                    '"route_hint":"path-alpha"}'
+                )
+            )
+        ).invoke(
+            context,
+            request_id="validator-interaction-proposal-request",
+            prompt="Return only the bounded proposal JSON.",
+            model_id="validator-interaction-model",
+        )
+        proposal_report = validate_interaction_chain(
+            proposal_trace, model_invocation=result.invocation
+        )
+    except (ModelAdapterValidationError, InteractionValidationError) as exc:
+        errors.append(f"model interaction validation failed: {exc}")
+    else:
+        if proposal_report.proposal_id is None:
+            errors.append("accepted declared proposal lost provenance")
+    return tuple(errors)
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         description="Validate the isolated, candidate-only Kraken-R foundation."
@@ -1102,6 +1187,14 @@ def main(argv: Sequence[str] | None = None) -> int:
     registry = load_registry(args.registry) if args.registry else load_default_registry()
     constitution = load_constitution_metadata(args.constitution)
     registry_report = registry.validate()
+    metadata_errors = (
+        ()
+        if constitution["version"] == registry.version
+        else (
+            "constitution and architecture registry versions must match "
+            f"({constitution['version']} != {registry.version})",
+        )
+    )
     contract_errors = validate_contract_catalog()
     cycle_errors = validate_cycle_execution()
     replay_errors = validate_recorded_execution_replay()
@@ -1110,10 +1203,12 @@ def main(argv: Sequence[str] | None = None) -> int:
     plastic_routing_errors = validate_plastic_routing()
     llm_adapter_errors = validate_controlled_llm_adapter()
     grounded_execution_errors = validate_grounded_execution()
+    interaction_errors = validate_interaction_boundaries()
     legacy_runtime_errors = validate_legacy_runtime_boundary()
     report = {
         "ok": (
             registry_report.ok
+            and not metadata_errors
             and not contract_errors
             and not cycle_errors
             and not replay_errors
@@ -1122,10 +1217,17 @@ def main(argv: Sequence[str] | None = None) -> int:
             and not plastic_routing_errors
             and not llm_adapter_errors
             and not grounded_execution_errors
+            and not interaction_errors
             and not legacy_runtime_errors
         ),
         "contracts_ok": not contract_errors,
         "contract_errors": list(contract_errors),
+        "metadata_versions": {
+            "ok": not metadata_errors,
+            "constitution": constitution["version"],
+            "registry": registry.version,
+            "errors": list(metadata_errors),
+        },
         "cycle": {
             "ok": not cycle_errors,
             "errors": list(cycle_errors),
@@ -1162,6 +1264,11 @@ def main(argv: Sequence[str] | None = None) -> int:
             "errors": list(grounded_execution_errors),
             "authority": "verified_candidate_execution_only",
         },
+        "interactions": {
+            "ok": not interaction_errors,
+            "errors": list(interaction_errors),
+            "authority": "static_candidate_validation_only",
+        },
         "constitution": {
             "ok": True,
             "version": constitution["version"],
@@ -1183,7 +1290,12 @@ def main(argv: Sequence[str] | None = None) -> int:
             f"{registry_report.category_count} categories, "
             f"{registry_report.planned_count} planned)"
         )
-        for error in (*contract_errors, *cycle_errors, *registry_report.errors):
+        for error in (
+            *metadata_errors,
+            *contract_errors,
+            *cycle_errors,
+            *registry_report.errors,
+        ):
             print(f"- {error}")
     return 0 if report["ok"] else 1
 

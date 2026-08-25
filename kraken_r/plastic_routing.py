@@ -19,6 +19,12 @@ from typing import Any, Mapping
 
 from .contracts import Evidence, EvidenceGrade, LearningUpdate, Settlement
 from .cycle import ConstitutionalCycle, CycleInvariantError, CycleTrace
+from .grounded_execution import (
+    GroundedExecutionRejected,
+    GroundedExecutionRequest,
+    GroundedExecutionVerifier,
+    VerifiedGroundedExecution,
+)
 
 
 class PlasticRoutingValidationError(ValueError):
@@ -247,6 +253,9 @@ class SettlementRouteRecord:
     selection: RouteSelection
     constitutional_trace: CycleTrace
     provenance: Mapping[str, Any] = field(default_factory=dict)
+    grounded_execution: VerifiedGroundedExecution | None = None
+    grounded_request: GroundedExecutionRequest | None = None
+    grounded_verifier: GroundedExecutionVerifier | None = None
 
     def __post_init__(self) -> None:
         _identifier(self.record_id, "record_id")
@@ -256,6 +265,23 @@ class SettlementRouteRecord:
             raise PlasticRoutingValidationError("record requires a CycleTrace")
         if not isinstance(self.provenance, Mapping):
             raise PlasticRoutingValidationError("record provenance must be a mapping")
+        grounded_inputs = (
+            self.grounded_execution,
+            self.grounded_request,
+            self.grounded_verifier,
+        )
+        is_grounded_trace = (
+            self.constitutional_trace.provenance.get("source")
+            == "grounded_execution_verifier"
+        )
+        if is_grounded_trace != any(item is not None for item in grounded_inputs):
+            raise PlasticRoutingValidationError(
+                "grounded trace and grounded route inputs must agree"
+            )
+        if is_grounded_trace and not all(item is not None for item in grounded_inputs):
+            raise PlasticRoutingValidationError(
+                "grounded route record requires execution, request, and verifier"
+            )
         object.__setattr__(self, "provenance", _freeze(self.provenance))
 
     @property
@@ -431,6 +457,7 @@ def _validate_record_binding(topology: RouteTopology, record: SettlementRouteRec
     if trace.provenance.get("source") not in {
         "deterministic_fixture",
         "recorded_execution_replay",
+        "grounded_execution_verifier",
     }:
         raise PlasticRoutingValidationError(
             "constitutional trace provenance does not name an accepted observation source"
@@ -451,7 +478,74 @@ def _validate_record_binding(topology: RouteTopology, record: SettlementRouteRec
         raise PlasticRoutingValidationError("record provenance evidence ids do not match evidence")
     if tuple(record.settlement.evidence_ids) != evidence_ids:
         raise PlasticRoutingValidationError("settlement evidence ids do not match evidence")
+    _validate_grounded_route_binding(trace, record)
     return route
+
+
+def _validate_grounded_route_binding(
+    trace: CycleTrace, record: SettlementRouteRecord
+) -> None:
+    """Require independently verified record lineage before grounded credit."""
+
+    is_grounded_trace = (
+        trace.provenance.get("source") == "grounded_execution_verifier"
+    )
+    grounded_inputs = (
+        record.grounded_execution,
+        record.grounded_request,
+        record.grounded_verifier,
+    )
+    if not is_grounded_trace:
+        if any(item is not None for item in grounded_inputs):
+            raise PlasticRoutingValidationError(
+                "non-grounded route record cannot carry grounded execution inputs"
+            )
+        return
+    if not all(item is not None for item in grounded_inputs):
+        raise PlasticRoutingValidationError(
+            "grounded route record requires execution, request, and verifier"
+        )
+    assert record.grounded_execution is not None
+    assert record.grounded_request is not None
+    assert record.grounded_verifier is not None
+    request = record.grounded_request
+    if (
+        request.transaction_id != trace.transaction_id
+        or request.objective_id != trace.objective.objective_id
+        or request.task_state_id != trace.states[4].state_id
+        or request.task_state_version != trace.states[4].version
+    ):
+        raise PlasticRoutingValidationError(
+            "grounded request identity does not match constitutional trace"
+        )
+    try:
+        verified = record.grounded_verifier.verify(
+            record.grounded_execution.record,
+            request=request,
+            authorized_state=trace.states[4],
+        )
+    except GroundedExecutionRejected as exc:
+        raise PlasticRoutingValidationError(
+            f"grounded route record cannot be independently reverified: {exc}"
+        ) from exc
+    if verified != record.grounded_execution:
+        raise PlasticRoutingValidationError(
+            "grounded route verification result changed during learning"
+        )
+    record_hash = record.grounded_execution.record.record_hash
+    if trace.execution.observations.get("record_hash") != record_hash:
+        raise PlasticRoutingValidationError(
+            "grounded execution lineage does not match cycle observation"
+        )
+    if any(
+        item.grade is not EvidenceGrade.GROUNDED
+        or item.provenance.get("observation_origin") != "grounded_execution"
+        or item.provenance.get("record_hash") != record_hash
+        for item in record.evidence
+    ):
+        raise PlasticRoutingValidationError(
+            "grounded route evidence does not match the verified record"
+        )
 
 
 def _is_grounded_evidence(evidence: tuple[Evidence, ...]) -> bool:
@@ -459,7 +553,7 @@ def _is_grounded_evidence(evidence: tuple[Evidence, ...]) -> bool:
         item.grade in {EvidenceGrade.OPERATIONAL, EvidenceGrade.GROUNDED}
         and item.execution_id is not None
         and item.provenance.get("observation_origin")
-        in {"execution_result", "recorded_execution"}
+        in {"execution_result", "recorded_execution", "grounded_execution"}
         for item in evidence
     )
 

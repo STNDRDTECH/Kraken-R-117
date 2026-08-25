@@ -145,6 +145,12 @@ from .replay import (
     ReplayValidationError,
     replay_recorded_execution,
 )
+from .interactions import (
+    DeliveryStage,
+    InteractionReport,
+    InteractionValidationError,
+    validate_interaction_chain,
+)
 
 __all__ = [
     "Action",
@@ -164,6 +170,7 @@ __all__ = [
     "CycleTrace",
     "DeterministicCycle",
     "Decision",
+    "DeliveryStage",
     "Event",
     "Evidence",
     "EvidenceGrade",
@@ -190,6 +197,8 @@ __all__ = [
     "GroundTruth",
     "Hypothesis",
     "HeldOutTask",
+    "InteractionReport",
+    "InteractionValidationError",
     "LearningUpdate",
     "Lineage",
     "MAX_AUDIT_LINKS",
@@ -266,4 +275,5 @@ __all__ = [
     "task_state_to_json",
     "run_cycle",
     "select_candidate_route",
+    "validate_interaction_chain",
 ]

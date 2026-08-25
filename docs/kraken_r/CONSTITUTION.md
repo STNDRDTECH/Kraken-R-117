@@ -1,7 +1,7 @@
 # Kraken-R Constitution
 
 **Status:** candidate-only foundation  
-**Version:** 1.8
+**Version:** 1.9
 **Effective boundary:** documentation, standalone validation, deterministic fixture
 execution, and independently verified bounded candidate execution observations
 
@@ -24,11 +24,11 @@ actuators remain unchanged and authoritative for their current behavior.
 The `kraken_r` package is candidate-only. Its deterministic cycle,
 recorded-execution replay, bounded signal propagation, bounded advisory
 physiology, settlement-grounded route-preference reducer, proposal-only LLM
-adapter, and narrow verified execution observer have no daemon entrypoint,
-runtime writer, event subscription, general command surface, router, ledger,
-homeostasis controller, or mutation actuator. Loading, validating, or running
-them must not start ROGAL, contact an LLM, open live stores, or change
-`.rogal/` runtime state.
+adapter, narrow verified execution observer, and static interaction validator
+have no daemon entrypoint, runtime writer, event subscription, general command
+surface, router, ledger, homeostasis controller, or mutation actuator. Loading,
+validating, or running them must not start ROGAL, contact an LLM, open live
+stores, or change `.rogal/` runtime state.
 
 ## Canonical lifecycle
 
@@ -297,6 +297,40 @@ counts, unequal counts are surfaced as a failed control rather than hidden.
 The report is descriptive only: it records observed task-label deltas but makes
 no performance claim because proposal output is not independent execution
 settlement.
+
+## Stage 9 interaction validation
+
+`kraken_r.interactions` is a stateless, standalone acceptance validator for
+existing immutable records. It does not add a circuit, scheduler, persistent
+ledger, controller, or execution path. It rechecks that independently verified
+grounded execution, constitutional settlement, route-credit provenance,
+signal/physiology inhibition, replay, and model proposal provenance can compose
+without granting new authority.
+
+The validator accepts only caller-supplied traces and records. It requires a
+grounded trace to be independently reverified against the same sealed request
+and authorized state, checks its evidence lineage against the record hash, and
+requires the only representable delivery sequence to be
+`execution → evidence → settlement → learning` (with later stages absent when
+there is no observed evidence). Replays remain read-only; the existing bounded
+receipt ledger remains the only duplicate-delivery guard.
+
+Any signal or physiology inhibition is conservative: neither source can
+authorize execution, evidence, settlement support, or learning. A model
+invocation can be structurally replayed only as declared proposal provenance;
+proposal output cannot appear in execution evidence or influence route credit.
+For a grounded settlement, the route reducer itself also requires the same
+sealed request, verified record, and verifier before it can issue bounded
+credit; it rejects a ground-evidence label without that proof. The reducer
+remains a pure, bounded caller-owned transformation.
+
+The deployed main instance remains responsible for all live runtime work:
+daemon lifecycle, buses, stores, queues, retries, controllers, executors,
+actuators, live observations, and any future promotion. The following remain
+quarantined or planned-only after Stage 9: permanent specialist daemons,
+autonomous recursion, ALU/resonant-lattice composition, organ evolution,
+chemistry, HOP/Redstone stacks, alternate reasoning runtimes, and broad
+cognitive features.
 
 The provider-backed [controlled trial archive](CONTROLLED_MODEL_TRIAL_COMPARABLE.md)
 stores immutable invocation envelopes and structural replay records beside its

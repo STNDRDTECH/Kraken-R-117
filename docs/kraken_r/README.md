@@ -24,6 +24,8 @@ second runtime.
 - `kraken_r/grounded_execution.py` — sealed, disposable-workspace candidate test
   observation with explicit limits, executor attestation, independent
   verification, and structural replay.
+- `kraken_r/interactions.py` — stateless validation that existing bounded
+  modules compose without creating a new runtime authority.
 - `kraken_r/constitution.json` — machine-readable constitution metadata
   validated alongside the registry.
 - `kraken_r/architecture_registry.schema.json` — machine-readable JSON schema.
@@ -48,7 +50,8 @@ pytest -q \
    tests/test_kraken_r_plastic_routing.py \
    tests/test_kraken_r_llm_adapter.py \
    tests/test_kraken_r_controlled_evaluation.py \
-   tests/test_kraken_r_grounded_execution.py
+   tests/test_kraken_r_grounded_execution.py \
+   tests/test_kraken_r_interactions.py
 ```
 
 The command reads the bundled JSON, imports the isolated package, and executes
