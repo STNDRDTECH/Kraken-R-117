@@ -14,7 +14,7 @@
 - [Evolution baseline wrong by 5.6x](evolution-baseline-wrong.md) — regression_comparisons calibrated to baseline_resolve_rate=0.02127 (1/47 at calibration time); actual rate=0.0038 (4/1045); all 63 comparisons use wrong baseline.
 - [Goal queue contains hallucination goals and test artifacts](goal-queue-contamination.md) — 37/84 active goals are meta_diagnose_* with LLM-generated content lacking source code; one goal text contains truncated LLM refusal "I don't"; meta_diagnose_foo test artifact in live queue.
 - [GitHub empty-repository publishing](github-empty-repository-publishing.md) — the GitHub connector’s Git-object API rejects blobs on an empty repo; establish and then replace a bootstrap ref with the verified root tree.
-- [Kraken-R bounded nervous system](kraken-r-nervous-system.md) — candidate signals stay static, bounded, replayable, and non-evidentiary; adaptive routing remains quarantined.
+- [Stage 10.8 explicit inactivity](stage-10-8-explicit-inactivity.md) — candidate route neutralization is limited to empty caller-supplied batches; non-creditable ticks cannot reshape topology.
 - [Bounded candidate physiology](round-five-physiology.md) — physiology is explicit immutable context with advisory candidate-action inhibition only; never a live controller or evidence authority.
 - [Settlement-grounded plastic routing](round-six-plastic-routing.md) — route preference requires a validated constitutional trace and generation-scoped bounded credit; never raw signals or confidence.
 - [Controlled LLM proposal boundary](controlled-llm-boundary.md) — model output stays declared-only; provider calls, replay, and comparisons must fail closed without granting authority.
