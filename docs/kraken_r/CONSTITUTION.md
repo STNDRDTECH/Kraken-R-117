@@ -1,7 +1,7 @@
 # Kraken-R Constitution
 
 **Status:** candidate-only foundation  
-**Version:** 1.10.8
+**Version:** 1.10.9
 **Effective boundary:** documentation, standalone validation, deterministic fixture
 execution, and independently verified bounded candidate execution observations
 
@@ -24,7 +24,7 @@ actuators remain unchanged and authoritative for their current behavior.
 The `kraken_r` package is candidate-only. Its deterministic cycle,
 recorded-execution replay, bounded signal propagation, bounded advisory
 physiology, settlement-grounded route-preference reducer, immutable replayable
-dynamical substrate, immutable task-integrity inspection, proposal-only LLM
+dynamical substrate, bounded metastability experiment observations, immutable task-integrity inspection, proposal-only LLM
 adapter, narrow verified execution observer, and static interaction validator
 have no daemon entrypoint, runtime writer, event subscription, general command
 surface, router, ledger, homeostasis controller, or mutation actuator. Loading,
@@ -125,6 +125,31 @@ constitutional settlement and execution-class gates. Setup/infrastructure,
 timeout/resource, execution, contradiction, insufficient-evidence, stale, and
 physiology-inhibited outcomes preserve their provenance but cannot gain credit
 or reshape candidate topology, tactics, connections, homeostasis, or learning.
+
+## Bounded metastability experiment observations
+
+Stage 10.9 adds only a deterministic comparison and measurement layer over the
+Stage 10.8 reducer. It accepts caller-owned finite immutable ticks and a
+tick-zero immutable candidate state; it returns bounded trace-derived
+observations. It is not a target-seeking criticality controller, a topology
+optimizer, an evidence source, a new learning boundary, or a second runtime.
+
+Full and ablated arms must retain the same raw inputs and tick budget. The
+allowed counterfactual controls selectively neutralize advisory homeostasis,
+empty-batch inactivity decay, action inhibition, mismatch surprise, or the
+experiment's explicit anti-monopoly route-choice guard. They are comparison
+inputs only. They cannot rewrite the canonical route cap, mutate a caller's
+state, create a settlement, or bypass the existing grounded-credit gates.
+
+Route entropy/diversity, dominance, turnover, plasticity, decay, rollback,
+inhibition, surprise, recurrence, coherence, stagnation, resource pressure,
+grounded task-performance observations, and regime transitions are descriptive
+measurements only. Labels such as settling, oscillatory, stagnating, or
+monopolizing do not establish an ideal topology or a magic criticality target.
+Experiment output is not evidence, truth, confidence, promotion authority, or
+adaptive credit. Non-creditable, setup/infrastructure, timeout/resource,
+execution, contradiction, insufficient-evidence, and inhibited outcomes remain
+non-creditable in every arm.
 
 ## Acceptance
 

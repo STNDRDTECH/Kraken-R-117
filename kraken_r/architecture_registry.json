@@ -1,7 +1,7 @@
 {
   "registry_kind": "kraken_r_architecture",
   "registry_id": "kraken-r-foundation",
-  "version": "1.10.8",
+  "version": "1.10.9",
   "last_reviewed": "2026-08-25",
   "authority_boundary": {
     "legacy_reference": "rogal_core.daemon.ROGALDaemon and rogal_core.autonomous_cycle.AutonomousCycle remain the deployed reference runtime.",
@@ -162,12 +162,12 @@
       "dependencies": ["kraken_r_bounded_nervous_system", "kraken_r_bounded_physiology", "kraken_r_bounded_adaptive_substrate"],
       "authority": "kraken_candidate",
       "evidence_grade": "implemented",
-      "evidence_refs": ["kraken_r/dynamical_substrate.py", "tests/test_kraken_r_dynamical_substrate.py", "kraken_r/validate.py"],
+      "evidence_refs": ["kraken_r/dynamical_substrate.py", "kraken_r/metastability.py", "tests/test_kraken_r_dynamical_substrate.py", "tests/test_kraken_r_metastability.py", "kraken_r/validate.py"],
       "duplicates": [],
       "disposition": "keep",
       "source_refs": ["docs/kraken_r/CONSTITUTION.md", "docs/kraken_r/README.md"],
       "planned": false,
-      "notes": "A pure caller-owned transition function over explicit event records; it has no clock, scheduler, daemon, bus, subscriber, persistence, executor, provider, primitive creation, topology authority, or promotion path. Declared signals and typed mismatch observations only affect bounded fast state and advisory endogenous physiology. The only medium-state changes reuse the pre-existing independently verified settlement gates exactly. Infrastructure, timeout/resource, execution, contradiction, insufficient-evidence, and inhibited outcomes retain provenance but cannot reshape routes, tactics, connections, homeostasis, or learning. Slow coherence is instrumentation only."
+      "notes": "A pure caller-owned transition function over explicit event records; it has no clock, scheduler, daemon, bus, subscriber, persistence, executor, provider, primitive creation, topology authority, or promotion path. Declared signals and typed mismatch observations only affect bounded fast state and advisory endogenous physiology. The only medium-state changes reuse the pre-existing independently verified settlement gates exactly. Stage 10.9 can compare matched full and explicitly ablated immutable runs, but its trace-derived measurements are descriptive only and cannot create evidence, credit, topology authority, or a criticality target. Infrastructure, timeout/resource, execution, contradiction, insufficient-evidence, and inhibited outcomes retain provenance but cannot reshape routes, tactics, connections, homeostasis, or learning. Slow coherence is instrumentation only."
     },
     {
       "mechanism_id": "kraken_r_task_integrity_boundary",
