@@ -29,6 +29,9 @@ second runtime.
 - `kraken_r/task_integrity.py` — immutable original-task preservation,
   bounded structured interpretation and beliefs, information-loss accounting,
   and selective proposal-only adversarial review.
+- `kraken_r/dynamical_substrate.py` — explicit bounded event batches reduced
+  into immutable, replayable fast/medium/slow candidate state; it is not a
+  scheduler, daemon, persistent cognitive store, or controller.
 - `kraken_r/constitution.json` — machine-readable constitution metadata
   validated alongside the registry.
 - `kraken_r/architecture_registry.schema.json` — machine-readable JSON schema.
@@ -56,7 +59,8 @@ pytest -q \
    tests/test_kraken_r_grounded_execution.py \
    tests/test_kraken_r_interactions.py \
    tests/test_kraken_r_adaptive_substrate.py \
-   tests/test_kraken_r_task_integrity.py
+    tests/test_kraken_r_task_integrity.py \
+    tests/test_kraken_r_dynamical_substrate.py
 ```
 
 The command reads the bundled JSON, imports the isolated package, and executes
@@ -279,6 +283,73 @@ later independent grounding. Ambiguity, infrastructure/setup, timeout/resource,
 execution, contradiction, and insufficient-evidence remain non-creditable.
 Stage 11 provider reputation/routing, probes, higher-order circuits, workers,
 recursion, and automatic promotion remain excluded.
+
+## Stage 10.8 dynamical substrate
+
+`kraken_r.dynamical_substrate` composes the already-approved candidate
+mechanisms into an explicit immutable transition:
+
+```text
+state at tick t + caller-owned events at tick t+1 -> state at tick t+1
+```
+
+There is no clock, scheduler, event subscription, worker, daemon, store,
+subprocess, provider, primitive creation, model knowledge, or promotion path.
+Every event batch is finite, ordered deterministically by its typed phase and
+event identity, retained only in a bounded audit window, and replayed by passing
+the same records to the same pure reducer.
+
+Fast state contains only activation, inhibition, surprise, resource pressure,
+and delivered signal topics. Medium state wraps the existing immutable
+settlement-gated routes, connections, tactics, decay, and rollback reducers.
+Slow state records a minimal coherence/recurrence observation only; it cannot
+be used as an evidence source, controller, or learning credit. Endogenous
+physiology is derived only from bounded candidate state and remains advisory.
+
+```python
+from kraken_r import (
+    DynamicalEvent,
+    DynamicalState,
+    DynamicalTick,
+    make_bound_signal,
+    replay_dynamical_ticks,
+)
+
+state = DynamicalState.fixture()
+urgency = make_bound_signal(
+    "dynamical-demo-urgency",
+    "candidate.urgency",
+    transaction_id=state.transaction_id,
+    objective_id=state.objective_id,
+    task_state_id=state.task_state_id,
+    task_state_version=state.task_state_version,
+    source="demo",
+    cause="declared-input",
+)
+ticks = (
+    DynamicalTick(
+        1,
+        (
+            DynamicalEvent.signal_event("dynamical-demo-signal", urgency),
+            DynamicalEvent.observation_event(
+                "dynamical-demo-observation", 0.50, 0.50
+            ),
+        ),
+    ),
+)
+next_state, traces = replay_dynamical_ticks(state, ticks)
+assert next_state.tick == 1
+assert traces[0].adaptive_audits == ()
+```
+
+Prediction/observation mismatch is typed and bounded. Surprise, resource
+pressure, homeostatic inhibition, decay, and rollback change the candidate
+trajectory and bounded instrumentation rather than merely producing logs.
+Declared signals, mismatch observations, physiology, coherence, reviews, and
+non-creditable settlements never earn adaptive credit. Setup/infrastructure,
+timeout/resource, execution, contradiction, insufficient-evidence, stale, and
+inhibited outcomes retain provenance but cannot reshape topology, connections,
+tactics, homeostasis, or learning.
 
 The cycle can also be exercised directly:
 

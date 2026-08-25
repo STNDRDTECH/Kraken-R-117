@@ -80,6 +80,14 @@ from .adaptive_substrate import (
     HomeostaticSnapshot,
     run_orzhaal_experiment,
 )
+from .dynamical_substrate import (
+    DynamicalEvent,
+    DynamicalState,
+    DynamicalTick,
+    DynamicalSubstrateValidationError,
+    reduce_dynamical_tick,
+    replay_dynamical_ticks,
+)
 from .task_integrity import (
     BeliefState,
     CandidateClaim,
@@ -1379,6 +1387,74 @@ def validate_task_integrity() -> tuple[str, ...]:
     return tuple(errors)
 
 
+def validate_dynamical_substrate() -> tuple[str, ...]:
+    """Exercise the immutable, bounded Stage 10.8 tick boundary."""
+
+    errors: list[str] = []
+    state = DynamicalState.fixture("validator-dynamical")
+    signal = make_bound_signal(
+        "validator-dynamical-signal",
+        "candidate.urgency",
+        transaction_id=state.transaction_id,
+        objective_id=state.objective_id,
+        task_state_id=state.task_state_id,
+        task_state_version=state.task_state_version,
+        source="validator",
+        cause="bounded-fixture",
+    )
+    ticks = (
+        DynamicalTick(
+            1,
+            (
+                DynamicalEvent.signal_event("validator-signal-event", signal),
+                DynamicalEvent.observation_event(
+                    "validator-observation-event", 0.50, 0.50
+                ),
+            ),
+        ),
+        DynamicalTick(2, (DynamicalEvent.resource_event("validator-resource", 0.20),)),
+    )
+    try:
+        first, first_traces = replay_dynamical_ticks(state, ticks)
+        second, second_traces = replay_dynamical_ticks(state, ticks)
+    except DynamicalSubstrateValidationError as exc:
+        return (f"dynamical substrate fixture failed: {exc}",)
+    if first.to_dict() != second.to_dict() or tuple(
+        item.to_dict() for item in first_traces
+    ) != tuple(item.to_dict() for item in second_traces):
+        errors.append("dynamical tick replay is not deterministic")
+    if first.medium.adaptive_state != state.medium.adaptive_state:
+        errors.append("unsettled signals or observations changed adaptive topology")
+    try:
+        surprised, surprise_trace = reduce_dynamical_tick(
+            state,
+            DynamicalTick(
+                1,
+                (
+                    DynamicalEvent.observation_event(
+                        "validator-surprise", 0.0, 1.0
+                    ),
+                ),
+            ),
+        )
+    except DynamicalSubstrateValidationError as exc:
+        errors.append(f"surprise fixture failed: {exc}")
+    else:
+        if (
+            not surprise_trace.inhibited
+            or surprised.fast.surprise != 1.0
+            or surprised.instrumentation.inhibition_events != 1
+        ):
+            errors.append("surprise failed to alter bounded physiology dynamics")
+    try:
+        reduce_dynamical_tick(state, DynamicalTick(2))
+    except DynamicalSubstrateValidationError:
+        pass
+    else:
+        errors.append("out-of-sequence tick did not fail closed")
+    return tuple(errors)
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         description="Validate the isolated, candidate-only Kraken-R foundation."
@@ -1426,6 +1502,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     interaction_errors = validate_interaction_boundaries()
     adaptive_substrate_errors = validate_adaptive_substrate()
     task_integrity_errors = validate_task_integrity()
+    dynamical_substrate_errors = validate_dynamical_substrate()
     legacy_runtime_errors = validate_legacy_runtime_boundary()
     report = {
         "ok": (
@@ -1442,6 +1519,7 @@ def main(argv: Sequence[str] | None = None) -> int:
             and not interaction_errors
             and not adaptive_substrate_errors
             and not task_integrity_errors
+            and not dynamical_substrate_errors
             and not legacy_runtime_errors
         ),
         "contracts_ok": not contract_errors,
@@ -1502,6 +1580,11 @@ def main(argv: Sequence[str] | None = None) -> int:
             "ok": not task_integrity_errors,
             "errors": list(task_integrity_errors),
             "authority": "proposal_only_candidate_task_integrity",
+        },
+        "dynamical_substrate": {
+            "ok": not dynamical_substrate_errors,
+            "errors": list(dynamical_substrate_errors),
+            "authority": "bounded_immutable_replayable_candidate_ticks_only",
         },
         "constitution": {
             "ok": True,

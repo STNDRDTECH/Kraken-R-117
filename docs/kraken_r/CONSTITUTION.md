@@ -1,7 +1,7 @@
 # Kraken-R Constitution
 
 **Status:** candidate-only foundation  
-**Version:** 1.10.7
+**Version:** 1.10.8
 **Effective boundary:** documentation, standalone validation, deterministic fixture
 execution, and independently verified bounded candidate execution observations
 
@@ -23,13 +23,13 @@ actuators remain unchanged and authoritative for their current behavior.
 
 The `kraken_r` package is candidate-only. Its deterministic cycle,
 recorded-execution replay, bounded signal propagation, bounded advisory
-physiology, settlement-grounded route-preference reducer, immutable
-task-integrity inspection, proposal-only LLM adapter, narrow verified execution
-observer, and static interaction validator have no daemon entrypoint, runtime
-writer, event subscription, general command surface, router, ledger,
-homeostasis controller, or mutation actuator. Loading, validating, or running
-them must not start ROGAL, contact an LLM, open live stores, or change
-`.rogal/` runtime state.
+physiology, settlement-grounded route-preference reducer, immutable replayable
+dynamical substrate, immutable task-integrity inspection, proposal-only LLM
+adapter, narrow verified execution observer, and static interaction validator
+have no daemon entrypoint, runtime writer, event subscription, general command
+surface, router, ledger, homeostasis controller, or mutation actuator. Loading,
+validating, or running them must not start ROGAL, contact an LLM, open live
+stores, or change `.rogal/` runtime state.
 
 ## Canonical lifecycle
 
@@ -96,6 +96,31 @@ experiments, developmental specialization, hyperdimensional associative
 state, and hierarchical learning levels are catalogued as planned-only. They
 are not implemented, reachable, authoritative, or evidence-backed by this
 foundation.
+
+## Bounded replayable dynamical substrate
+
+Stage 10.8 permits only an explicit, caller-owned, finite tick transition:
+immutable candidate state and declared events at one tick produce a new
+immutable candidate state at the next tick. It is not permission to start a
+clock, scheduler, daemon, queue, subscriber, bus, store, worker, subprocess,
+controller, provider, persistent cognitive memory, circuit/motif mechanism,
+primitive promotion path, or alternate runtime.
+
+The substrate has three strictly bounded timescales. Fast state records
+activation, inhibition, typed prediction/observation mismatch surprise,
+resource pressure, and declared signal delivery. Medium state can invoke only
+the pre-existing settlement-grounded immutable reducers for routes, connections,
+tactics, bounded decay, and rollback. Slow state records minimal coherence and
+recurrence observations; it has no authority over evidence, topology, tactics,
+physiology, learning, or promotion.
+
+Signals, surprise, advisory endogenous physiology, coherence, and
+instrumentation are non-evidentiary. A task success or failure can affect
+medium state only by satisfying the existing independently verified
+constitutional settlement and execution-class gates. Setup/infrastructure,
+timeout/resource, execution, contradiction, insufficient-evidence, stale, and
+physiology-inhibited outcomes preserve their provenance but cannot gain credit
+or reshape candidate topology, tactics, connections, homeostasis, or learning.
 
 ## Acceptance
 
