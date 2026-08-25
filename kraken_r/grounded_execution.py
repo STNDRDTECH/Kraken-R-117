@@ -50,6 +50,7 @@ class ExecutionStatus(str, Enum):
     FAILED = "failed"
     TIMEOUT = "timeout"
     SETUP_FAILED = "setup_failed"
+    EXECUTION_FAILED = "execution_failed"
 
 
 class ExecutionFailureCode(str, Enum):
@@ -60,6 +61,72 @@ class ExecutionFailureCode(str, Enum):
     TIMEOUT = "timeout"
     SETUP_FAILED = "setup_failed"
     RUNNER_FAILURE = "runner_failure"
+
+
+class EpistemicOutcomeClass(str, Enum):
+    """The only outcomes a verified bounded observation can represent."""
+
+    TASK_SUCCESS = "task_success"
+    TASK_FAILURE = "task_failure"
+    INFRASTRUCTURE_SETUP_FAILURE = "infrastructure_setup_failure"
+    TIMEOUT_RESOURCE_FAILURE = "timeout_resource_failure"
+    EXECUTION_FAILURE = "execution_failure"
+    CONTRADICTION = "contradiction"
+    INSUFFICIENT_EVIDENCE = "insufficient_evidence"
+
+
+_CREDITABLE_OUTCOME_CLASSES = {
+    EpistemicOutcomeClass.TASK_SUCCESS,
+    EpistemicOutcomeClass.TASK_FAILURE,
+}
+
+
+def _expected_epistemic_class(
+    status: ExecutionStatus,
+    failure_code: ExecutionFailureCode | None,
+    *,
+    execution_completed: bool,
+    tests_run: int,
+    tests_passed: int,
+    tests_failed: int,
+) -> EpistemicOutcomeClass:
+    """Derive the class from executor facts, never a caller-provided label."""
+
+    if status is ExecutionStatus.COMPLETED:
+        if (
+            failure_code is None
+            and execution_completed
+            and tests_run > 0
+            and tests_passed == tests_run
+            and tests_failed == 0
+        ):
+            return EpistemicOutcomeClass.TASK_SUCCESS
+    elif status is ExecutionStatus.FAILED:
+        if (
+            failure_code is ExecutionFailureCode.TEST_FAILURE
+            and execution_completed
+            and tests_run > 0
+            and tests_failed > 0
+        ):
+            return EpistemicOutcomeClass.TASK_FAILURE
+        if (
+            failure_code is ExecutionFailureCode.NO_TESTS_EXECUTED
+            and execution_completed
+            and tests_run == 0
+        ):
+            return EpistemicOutcomeClass.INSUFFICIENT_EVIDENCE
+    elif status is ExecutionStatus.TIMEOUT:
+        if failure_code is ExecutionFailureCode.TIMEOUT and not execution_completed:
+            return EpistemicOutcomeClass.TIMEOUT_RESOURCE_FAILURE
+    elif status is ExecutionStatus.SETUP_FAILED:
+        if failure_code is ExecutionFailureCode.SETUP_FAILED and not execution_completed:
+            return EpistemicOutcomeClass.INFRASTRUCTURE_SETUP_FAILURE
+    elif status is ExecutionStatus.EXECUTION_FAILED:
+        if failure_code is ExecutionFailureCode.RUNNER_FAILURE:
+            return EpistemicOutcomeClass.EXECUTION_FAILURE
+    raise GroundedExecutionError(
+        "execution facts do not establish one canonical epistemic outcome class"
+    )
 
 
 def _freeze_mapping(value: Mapping[str, Any], field_name: str) -> Mapping[str, Any]:
@@ -326,6 +393,7 @@ class ExecutionObservation:
     stderr: str
     elapsed_seconds: float
     failure_code: ExecutionFailureCode | None = None
+    epistemic_class: EpistemicOutcomeClass | None = None
 
     def __post_init__(self) -> None:
         if not isinstance(self.status, ExecutionStatus):
@@ -350,6 +418,26 @@ class ExecutionObservation:
             object.__setattr__(
                 self, "failure_code", ExecutionFailureCode(self.failure_code)
             )
+        expected_class = _expected_epistemic_class(
+            self.status,
+            self.failure_code,
+            execution_completed=self.execution_completed,
+            tests_run=self.tests_run,
+            tests_passed=self.tests_passed,
+            tests_failed=self.tests_failed,
+        )
+        if self.epistemic_class is None:
+            object.__setattr__(self, "epistemic_class", expected_class)
+        elif not isinstance(self.epistemic_class, EpistemicOutcomeClass):
+            object.__setattr__(
+                self,
+                "epistemic_class",
+                EpistemicOutcomeClass(self.epistemic_class),
+            )
+        if self.epistemic_class is not expected_class:
+            raise GroundedExecutionError(
+                "execution epistemic class does not match attested process facts"
+            )
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -365,6 +453,7 @@ class ExecutionObservation:
             "failure_code": (
                 self.failure_code.value if self.failure_code is not None else None
             ),
+            "epistemic_class": self.epistemic_class.value,
         }
 
     @classmethod
@@ -381,6 +470,7 @@ class ExecutionObservation:
                 payload["stderr"],
                 payload["elapsed_seconds"],
                 payload.get("failure_code"),
+                payload.get("epistemic_class"),
             )
         except (KeyError, TypeError, ValueError) as exc:
             raise GroundedExecutionError("serialized execution observation is invalid") from exc
@@ -395,18 +485,35 @@ class ExecutionProvenance:
     resource_limits_enforced: bool
     cleanup_verified: bool
     workspace_hash: str
+    child_runtime_verified: bool = False
+    child_runtime_fingerprint: str | None = None
 
     def __post_init__(self) -> None:
         if self.isolation != "user_mount_network_pid_namespace":
             raise GroundedExecutionError("unknown execution isolation boundary")
         if not isinstance(self.resource_limits_enforced, bool) or not isinstance(
             self.cleanup_verified, bool
+        ) or not isinstance(
+            self.child_runtime_verified, bool
         ):
             raise GroundedExecutionError("execution provenance booleans are required")
         for field_name in ("executor_id", "workspace_hash"):
             value = getattr(self, field_name)
             if not isinstance(value, str) or not value:
                 raise GroundedExecutionError(f"{field_name} must be non-empty")
+        if self.child_runtime_verified:
+            if (
+                not isinstance(self.child_runtime_fingerprint, str)
+                or len(self.child_runtime_fingerprint) != 64
+                or any(char not in "0123456789abcdef" for char in self.child_runtime_fingerprint)
+            ):
+                raise GroundedExecutionError(
+                    "verified child runtime requires a canonical fingerprint"
+                )
+        elif self.child_runtime_fingerprint is not None:
+            raise GroundedExecutionError(
+                "unverified child runtime cannot carry a runtime fingerprint"
+            )
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -415,10 +522,19 @@ class ExecutionProvenance:
             "resource_limits_enforced": self.resource_limits_enforced,
             "cleanup_verified": self.cleanup_verified,
             "workspace_hash": self.workspace_hash,
+            "child_runtime_verified": self.child_runtime_verified,
+            "child_runtime_fingerprint": self.child_runtime_fingerprint,
         }
 
     @classmethod
     def from_dict(cls, payload: Mapping[str, Any]) -> "ExecutionProvenance":
+        if (
+            "child_runtime_verified" not in payload
+            or "child_runtime_fingerprint" not in payload
+        ):
+            raise GroundedExecutionError(
+                "serialized execution provenance predates the child runtime contract"
+            )
         try:
             return cls(
                 payload["executor_id"],
@@ -426,6 +542,8 @@ class ExecutionProvenance:
                 payload["resource_limits_enforced"],
                 payload["cleanup_verified"],
                 payload["workspace_hash"],
+                payload["child_runtime_verified"],
+                payload["child_runtime_fingerprint"],
             )
         except (KeyError, TypeError, ValueError) as exc:
             raise GroundedExecutionError("serialized execution provenance is invalid") from exc
@@ -880,9 +998,9 @@ def _observation_from_isolated_result(result: Any) -> ExecutionObservation:
             result.elapsed_seconds,
             ExecutionFailureCode.SETUP_FAILED,
         )
-    if not result.test_outcomes_complete:
+    if not result.runtime_verified:
         return ExecutionObservation(
-            ExecutionStatus.SETUP_FAILED,
+            ExecutionStatus.EXECUTION_FAILED,
             result.exit_code,
             False,
             0,
@@ -891,7 +1009,20 @@ def _observation_from_isolated_result(result: Any) -> ExecutionObservation:
             result.stdout,
             result.stderr,
             result.elapsed_seconds,
-            ExecutionFailureCode.SETUP_FAILED,
+            ExecutionFailureCode.RUNNER_FAILURE,
+        )
+    if not result.test_outcomes_complete:
+        return ExecutionObservation(
+            ExecutionStatus.EXECUTION_FAILED,
+            result.exit_code,
+            False,
+            0,
+            0,
+            0,
+            result.stdout,
+            result.stderr,
+            result.elapsed_seconds,
+            ExecutionFailureCode.RUNNER_FAILURE,
         )
     tests_run = result.tests_run
     tests_passed = result.tests_passed
@@ -985,6 +1116,8 @@ class GroundedExecutionExecutor:
         *,
         resource_limits_enforced: bool,
         cleanup_verified: bool,
+        child_runtime_verified: bool,
+        child_runtime_fingerprint: str | None,
     ) -> GroundedExecutionRecord:
         provenance = ExecutionProvenance(
             self.executor_id,
@@ -992,6 +1125,8 @@ class GroundedExecutionExecutor:
             resource_limits_enforced,
             cleanup_verified,
             workspace_hash,
+            child_runtime_verified,
+            child_runtime_fingerprint,
         )
         base = {
             "record_id": f"{request.request_id}-record",
@@ -1060,6 +1195,8 @@ class GroundedExecutionExecutor:
             workspace_hash,
             resource_limits_enforced=isolated_result.resource_limits_enforced,
             cleanup_verified=isolated_result.cleanup_verified,
+            child_runtime_verified=isolated_result.runtime_verified,
+            child_runtime_fingerprint=isolated_result.runtime_fingerprint,
         )
 
 
@@ -1070,12 +1207,38 @@ class VerifiedGroundedExecution:
     record: GroundedExecutionRecord
     observed_outcome: str
     verified: bool = True
+    epistemic_class: EpistemicOutcomeClass | None = None
 
     def __post_init__(self) -> None:
         if self.observed_outcome not in {"success", "failure", "not_observed"}:
             raise GroundedExecutionError("invalid grounded observed outcome")
         if self.verified is not True:
             raise GroundedExecutionError("verified execution must be verifier-issued")
+        expected_outcome = (
+            "success"
+            if self.record.observation.epistemic_class
+            is EpistemicOutcomeClass.TASK_SUCCESS
+            else "failure"
+            if self.record.observation.epistemic_class
+            is EpistemicOutcomeClass.TASK_FAILURE
+            else "not_observed"
+        )
+        if self.observed_outcome != expected_outcome:
+            raise GroundedExecutionError(
+                "verified outcome does not match the attested epistemic class"
+            )
+        if self.epistemic_class is None:
+            object.__setattr__(
+                self, "epistemic_class", self.record.observation.epistemic_class
+            )
+        elif not isinstance(self.epistemic_class, EpistemicOutcomeClass):
+            object.__setattr__(
+                self, "epistemic_class", EpistemicOutcomeClass(self.epistemic_class)
+            )
+        if self.epistemic_class is not self.record.observation.epistemic_class:
+            raise GroundedExecutionError(
+                "verified epistemic class does not match attested execution facts"
+            )
 
     @property
     def action(self) -> Action:
@@ -1160,6 +1323,14 @@ class GroundedExecutionVerifier:
             raise GroundedExecutionRejected("record lacks a valid executor attestation")
 
         observation = record.observation
+        outcome_class = observation.epistemic_class
+        if outcome_class in _CREDITABLE_OUTCOME_CLASSES and not (
+            record.provenance.child_runtime_verified
+            and record.provenance.child_runtime_fingerprint
+        ):
+            raise GroundedExecutionRejected(
+                "creditable record lacks verified child runtime provenance"
+            )
         if observation.status is ExecutionStatus.COMPLETED:
             if not (
                 observation.execution_completed
@@ -1179,11 +1350,12 @@ class GroundedExecutionVerifier:
         elif observation.status in {
             ExecutionStatus.TIMEOUT,
             ExecutionStatus.SETUP_FAILED,
+            ExecutionStatus.EXECUTION_FAILED,
         }:
             outcome = "not_observed"
         else:  # pragma: no cover - enum exhaustiveness guard.
             raise GroundedExecutionRejected("unknown execution status")
-        return VerifiedGroundedExecution(record, outcome)
+        return VerifiedGroundedExecution(record, outcome, epistemic_class=outcome_class)
 
 
 def replay_grounded_execution(

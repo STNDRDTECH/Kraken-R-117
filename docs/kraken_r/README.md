@@ -22,8 +22,8 @@ second runtime.
 - `kraken_r/controlled_evaluation.py` — base/mediated/reset held-out comparison
   with fixed provider/model/prompt-budget controls and no performance claim.
 - `kraken_r/grounded_execution.py` — sealed, disposable-workspace candidate test
-  observation with explicit limits, executor attestation, independent
-  verification, and structural replay.
+  observation with explicit limits, reproducible child-runtime provenance,
+  executor attestation, independent verification, and structural replay.
 - `kraken_r/interactions.py` — stateless validation that existing bounded
   modules compose without creating a new runtime authority.
 - `kraken_r/constitution.json` — machine-readable constitution metadata
@@ -179,6 +179,15 @@ rejects duplicate execution, evidence, settlement, and learning delivery after
 restart until the configured receipt expiry; it grants no controller authority.
 The host runner measures the applied resource limits and confirms the sandbox
 process group is gone before marking cleanup provenance as verified.
+Stage 10.5 additionally selects an explicit local Python runtime, requires
+pytest inside the child, binds its declared interpreter/pytest facts to that
+selection, and rejects absolute, traversal, or symlink-escaping test paths.
+Grounded observations
+are classed as `task_success`, `task_failure`, setup/infrastructure failure,
+timeout/resource failure, execution failure, contradiction, or insufficient
+evidence. Only the first two classes can become learning credit; every
+adaptive audit retains the exact creditable class and child-runtime
+fingerprint. Stage 11 remains unstarted.
 
 The cycle can also be exercised directly:
 

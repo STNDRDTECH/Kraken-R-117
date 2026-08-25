@@ -15,6 +15,7 @@ from kraken_r import (
     GroundedDeliveryLedger,
     GroundedExecutionExecutor,
     GroundedExecutionRequest,
+    EpistemicOutcomeClass,
     HomeostaticSnapshot,
     MAX_ADAPTIVE_GENERATIONS,
     Objective,
@@ -34,7 +35,12 @@ from kraken_r import (
 )
 
 
-def _grounded_record(label: str, *, passing: bool = True):
+def _grounded_record(
+    label: str,
+    *,
+    passing: bool = True,
+    files: dict[str, str] | None = None,
+):
     objective = Objective(
         f"{label}-objective",
         "Produce an independently verified bounded outcome.",
@@ -48,6 +54,14 @@ def _grounded_record(label: str, *, passing: bool = True):
         "authorized",
         values={"action_id": action.action_id},
     )
+    workspace_files = files or {
+        "subject.py": f"def answer():\n    return {42 if passing else 0}\n",
+        "test_subject.py": (
+            "from subject import answer\n\n"
+            "def test_answer():\n"
+            "    assert answer() == 42\n"
+        ),
+    }
     request = GroundedExecutionRequest(
         f"{label}-request",
         f"{label}-transaction",
@@ -55,15 +69,8 @@ def _grounded_record(label: str, *, passing: bool = True):
         authorized_state.state_id,
         authorized_state.version,
         action,
-        {
-            "subject.py": f"def answer():\n    return {42 if passing else 0}\n",
-            "test_subject.py": (
-                "from subject import answer\n\n"
-                "def test_answer():\n"
-                "    assert answer() == 42\n"
-            ),
-        },
-        ("test_subject.py",),
+        workspace_files,
+        tuple(path for path in workspace_files if path.startswith("test")),
     )
     ledger = GroundedDeliveryLedger(
         Path(tempfile.mkdtemp(prefix="kraken-r-stage10-receipts-")) / "receipts.json"
@@ -112,6 +119,35 @@ def _route_record(state: AdaptiveState, label: str, *, passing: bool = True):
     )
 
 
+def _route_record_from_execution(
+    state: AdaptiveState, label: str, *, files: dict[str, str]
+) -> SettlementRouteRecord:
+    request, verifier, verified, trace = _grounded_record(label, files=files)
+    selection = select_candidate_route(
+        state.route_topology,
+        "candidate-work",
+        transaction_id=trace.transaction_id,
+        objective_id=trace.objective.objective_id,
+        task_state_id=trace.states[4].state_id,
+        task_state_version=trace.states[4].version,
+    )
+    return SettlementRouteRecord(
+        f"{label}-adaptive-record",
+        selection,
+        trace,
+        provenance={
+            "transaction_id": trace.transaction_id,
+            "objective_id": trace.objective.objective_id,
+            "task_state_id": trace.states[4].state_id,
+            "task_state_version": trace.states[4].version,
+            "route_id": selection.route_id,
+            "settlement_id": trace.settlement.settlement_id,
+            "evidence_ids": tuple(item.evidence_id for item in trace.evidence),
+        },
+        grounded_execution=verified,
+        grounded_request=request,
+        grounded_verifier=verifier,
+    )
 def _pressure(record: SettlementRouteRecord, *, high: bool = False) -> HomeostaticSnapshot:
     trace = record.constitutional_trace
     return HomeostaticSnapshot(
@@ -241,6 +277,30 @@ def test_duplicate_record_remains_rejected_after_rollback() -> None:
         apply_grounded_adaptation(rolled_back, record)
     with pytest.raises(AdaptiveSubstrateValidationError, match="generation limit"):
         replace(rolled_back, generation=MAX_ADAPTIVE_GENERATIONS + 1)
+
+
+def test_infrastructure_and_execution_failures_cannot_reshape_adaptation() -> None:
+    state = AdaptiveState.fixture("non-creditable-adaptive")
+    malformed = _route_record_from_execution(
+        state,
+        "adaptive-malformed-child",
+        files={"test_broken.py": "def test_broken(:\n    pass\n"},
+    )
+
+    assert (
+        malformed.grounded_execution.epistemic_class
+        is EpistemicOutcomeClass.EXECUTION_FAILURE
+    )
+    assert malformed.constitutional_trace.evidence == ()
+    assert malformed.constitutional_trace.learning_update is None
+    before = state.to_dict()
+    with pytest.raises(AdaptiveSubstrateValidationError, match="non-creditable"):
+        apply_grounded_adaptation(state, malformed)
+    with pytest.raises(AdaptiveSubstrateValidationError, match="non-creditable"):
+        form_grounded_connection(state, malformed)
+    with pytest.raises(AdaptiveSubstrateValidationError, match="non-creditable"):
+        switch_grounded_tactic(state, malformed, _pressure(malformed, high=True))
+    assert state.to_dict() == before
 
 
 def test_orzhaal_is_disposable_and_never_promotable() -> None:

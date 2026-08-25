@@ -33,6 +33,7 @@ from .grounded_execution import (
     GroundedExecutionRejected,
     GroundedExecutionRequest,
     GroundedExecutionVerifier,
+    EpistemicOutcomeClass,
     VerifiedGroundedExecution,
 )
 from .nervous_system import PropagationTrace, SignalNetwork, SignalPropagationError
@@ -530,6 +531,16 @@ class ConstitutionalCycle:
                     if grounded_execution is not None
                     else "execution_result"
                 ),
+                **(
+                    {
+                        "epistemic_class": grounded_execution.epistemic_class.value,
+                        "child_runtime_fingerprint": (
+                            grounded_execution.record.provenance.child_runtime_fingerprint
+                        ),
+                    }
+                    if grounded_execution is not None
+                    else {}
+                ),
             },
             signal_trace=signal_trace,
             physiology_trace=physiology_trace,
@@ -666,6 +677,9 @@ class ConstitutionalCycle:
             "tests_failed": record.observation.tests_failed,
             "resource_limits_enforced": record.provenance.resource_limits_enforced,
             "cleanup_verified": record.provenance.cleanup_verified,
+            "child_runtime_verified": record.provenance.child_runtime_verified,
+            "child_runtime_fingerprint": record.provenance.child_runtime_fingerprint,
+            "epistemic_class": verified_execution.epistemic_class.value,
         }
         return ExecutionResult(
             f"{record.record_id}-execution",
@@ -688,6 +702,7 @@ class ConstitutionalCycle:
         common = {
             "source_kind": "observed_execution",
             "execution_status": execution.status,
+            "epistemic_class": execution.observations.get("epistemic_class"),
         }
         provenance = (
             {
@@ -696,6 +711,7 @@ class ConstitutionalCycle:
                 "observation_origin": "grounded_execution",
                 "execution_record_id": execution.observations["execution_record_id"],
                 "record_hash": execution.observations["record_hash"],
+                "epistemic_class": execution.observations["epistemic_class"],
             }
             if grounded
             else {
@@ -830,6 +846,38 @@ class ConstitutionalCycle:
             for evidence in trace.evidence
         ):
             raise CycleInvariantError("evidence is not grounded in observed execution")
+        if trace.provenance.get("source") == "grounded_execution_verifier":
+            try:
+                epistemic_class = EpistemicOutcomeClass(
+                    trace.execution.observations.get("epistemic_class")
+                )
+            except (TypeError, ValueError) as exc:
+                raise CycleInvariantError(
+                    "grounded execution lacks a canonical epistemic class"
+                ) from exc
+            if trace.provenance.get("epistemic_class") != epistemic_class.value:
+                raise CycleInvariantError(
+                    "grounded trace provenance does not match the execution class"
+                )
+            creditable = epistemic_class in {
+                EpistemicOutcomeClass.TASK_SUCCESS,
+                EpistemicOutcomeClass.TASK_FAILURE,
+            }
+            if bool(trace.execution.observations.get("observed")) != creditable:
+                raise CycleInvariantError(
+                    "grounded observation eligibility does not match its epistemic class"
+                )
+            if not creditable and trace.evidence:
+                raise CycleInvariantError(
+                    "non-creditable grounded execution cannot become evidence"
+                )
+            if creditable and any(
+                item.provenance.get("epistemic_class") != epistemic_class.value
+                for item in trace.evidence
+            ):
+                raise CycleInvariantError(
+                    "grounded evidence class does not match verified execution"
+                )
         if trace.signal_trace is not None:
             if (
                 trace.signal_trace.transaction_id != trace.transaction_id

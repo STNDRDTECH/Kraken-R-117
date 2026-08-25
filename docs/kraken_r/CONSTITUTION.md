@@ -62,6 +62,12 @@ explicit `Decision(outcome="stop")`.
   requires a sealed execution request, disposable-workspace observation,
   complete provenance and hashes, executor attestation, and separate verifier
   acceptance.
+- A grounded child must declare facts that match the executor-selected Python
+  and pytest runtime exactly. Only `task_success` and `task_failure` are
+  creditable classes. Setup/infrastructure, timeout/resource, execution,
+  contradiction, and insufficient-evidence classes are preserved in
+  provenance but cannot create evidence, settlement learning, route credit,
+  topology changes, tactic changes, or homeostatic pressure.
 - Regression comparisons require a named baseline and evidence references.
 
 ## Authority and mutation rules
@@ -197,6 +203,10 @@ is a source/authority ablation only and carries no performance claim. A
  measured by the host runner: the sandbox is a fresh user/mount/network/PID
  namespace whose parent uses `unshare --kill-child=SIGKILL`; the runner confirms
  the whole namespace parent group has disappeared before it reports cleanup.
+Stage 10.5 binds the child runtime declaration to the executor-selected
+interpreter and pytest facts, rejects duplicate or mismatched declarations,
+and rejects absolute, traversal, and symlink-escaping test paths before the
+child is started.
 
 ## Bounded advisory physiology
 

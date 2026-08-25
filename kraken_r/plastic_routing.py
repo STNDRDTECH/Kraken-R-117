@@ -20,6 +20,7 @@ from typing import Any, Mapping
 from .contracts import Evidence, EvidenceGrade, LearningUpdate, Settlement
 from .cycle import ConstitutionalCycle, CycleInvariantError, CycleTrace
 from .grounded_execution import (
+    EpistemicOutcomeClass,
     GroundedExecutionRejected,
     GroundedExecutionRequest,
     GroundedExecutionVerifier,
@@ -532,6 +533,14 @@ def _validate_grounded_route_binding(
         raise PlasticRoutingValidationError(
             "grounded route verification result changed during learning"
         )
+    if (
+        trace.execution.observations.get("epistemic_class")
+        != verified.epistemic_class.value
+        or trace.provenance.get("epistemic_class") != verified.epistemic_class.value
+    ):
+        raise PlasticRoutingValidationError(
+            "grounded route record epistemic provenance does not match verification"
+        )
     record_hash = record.grounded_execution.record.record_hash
     if trace.execution.observations.get("record_hash") != record_hash:
         raise PlasticRoutingValidationError(
@@ -568,6 +577,25 @@ def apply_settlement_learning(
     route = _validate_record_binding(topology, record)
     settlement = record.settlement
     evidence_ids = tuple(item.evidence_id for item in record.evidence)
+    trace = record.constitutional_trace
+    if trace.provenance.get("source") == "grounded_execution_verifier":
+        epistemic_class = trace.execution.observations.get("epistemic_class")
+        if epistemic_class not in {
+            EpistemicOutcomeClass.TASK_SUCCESS.value,
+            EpistemicOutcomeClass.TASK_FAILURE.value,
+        }:
+            return topology, RouteLearningTrace(
+                record.record_id,
+                settlement.settlement_id,
+                route.route_id,
+                "withheld",
+                "none",
+                f"non-creditable grounded epistemic class: {epistemic_class!r}",
+                topology.version,
+                topology.version,
+                route.weight,
+                route.weight,
+            )
 
     if settlement.status != "settled":
         return topology, RouteLearningTrace(

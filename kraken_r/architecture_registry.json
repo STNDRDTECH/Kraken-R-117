@@ -1,7 +1,7 @@
 {
   "registry_kind": "kraken_r_architecture",
   "registry_id": "kraken-r-foundation",
-  "version": "1.10",
+  "version": "1.10.5",
   "last_reviewed": "2026-08-25",
   "authority_boundary": {
     "legacy_reference": "rogal_core.daemon.ROGALDaemon and rogal_core.autonomous_cycle.AutonomousCycle remain the deployed reference runtime.",
@@ -119,7 +119,7 @@
       "disposition": "keep",
       "source_refs": ["docs/kraken_r/CONSTITUTION.md", "docs/kraken_r/SALVAGE_DECISIONS.md", "rogal_core/emergence/plasticity.py", "rogal_core/emergence/pathway_tracker.py", "rogal_core/emergence/topology_tracker.py", "rogal_core/emergence/learning_integration.py", "rogal_core/emergence/online_learning.py"],
       "planned": false,
-      "notes": "Pure immutable reducer, not a router or controller. It adapts bounded strengthening/weakening, route topology, auditable pathway lineage, and reset concepts while rejecting legacy stores, globals, clocks, background loops, signal confidence, broad credit assignment, and cross-run persistence. Only settled success/failure with grounded observed execution evidence may adjust the selected route by a fixed bounded delta; contradiction, insufficient evidence, declared claims, stale selections, malformed provenance, and duplicate in-window settlements fail closed or explicitly withhold learning."
+      "notes": "Pure immutable reducer, not a router or controller. It adapts bounded strengthening/weakening, route topology, auditable pathway lineage, and reset concepts while rejecting legacy stores, globals, clocks, background loops, signal confidence, broad credit assignment, and cross-run persistence. Only settled task_success/task_failure with matching verified child-runtime, record, and execution-class provenance may adjust the selected route by a fixed bounded delta; setup/infrastructure, timeout/resource, execution, contradiction, insufficient-evidence, declared claims, stale selections, malformed provenance, and duplicate in-window settlements fail closed or explicitly withhold learning."
     },
     {
       "mechanism_id": "kraken_r_bounded_adaptive_substrate",
@@ -135,7 +135,7 @@
       "disposition": "keep",
       "source_refs": ["docs/kraken_r/CONSTITUTION.md", "docs/kraken_r/README.md"],
       "planned": false,
-      "notes": "Pure caller-owned immutable reducer. Settled independently verified execution with matching request, record, provenance, authorized state, and evidence hashes is required for every update. Signals, physiology, confidence, and declared model output cannot earn credit, form topology, or change tactics. The substrate has no dispatch, execution, persistence, subscription, goal-selection, controller, or live runtime authority."
+      "notes": "Pure caller-owned immutable reducer. Every ordinary update stores the exact creditable task_success/task_failure class and requires matching independently verified child-runtime, request, record, provenance, authorized state, and evidence hashes. Setup/infrastructure, timeout/resource, execution, contradiction, and insufficient-evidence classes cannot earn credit, form topology, alter tactics, or affect homeostasis. Signals, physiology, confidence, and declared model output cannot earn credit. The substrate has no dispatch, execution, persistence, subscription, goal-selection, controller, or live runtime authority."
     },
     {
       "mechanism_id": "kraken_r_orzhaal_disposable_experiments",

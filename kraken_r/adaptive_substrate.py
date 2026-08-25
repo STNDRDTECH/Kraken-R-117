@@ -19,6 +19,7 @@ from typing import Any, Mapping
 
 from .contracts import Authority, EvidenceGrade, Signal
 from .grounded_execution import (
+    EpistemicOutcomeClass,
     GroundedExecutionRejected,
     GroundedExecutionRequest,
     GroundedExecutionVerifier,
@@ -284,6 +285,7 @@ class AdaptiveAudit:
     weight_after: float | None
     reason: str
     evidence_ids: tuple[str, ...]
+    epistemic_class: str | None = None
 
     def __post_init__(self) -> None:
         for value, name in (
@@ -310,6 +312,18 @@ class AdaptiveAudit:
         object.__setattr__(self, "evidence_ids", tuple(self.evidence_ids))
         if not all(isinstance(item, str) and item for item in self.evidence_ids):
             raise AdaptiveSubstrateValidationError("audit evidence ids are invalid")
+        if self.operation == "rollback":
+            if self.epistemic_class is not None:
+                raise AdaptiveSubstrateValidationError(
+                    "rollback audit cannot claim an execution epistemic class"
+                )
+        elif self.epistemic_class not in {
+            EpistemicOutcomeClass.TASK_SUCCESS.value,
+            EpistemicOutcomeClass.TASK_FAILURE.value,
+        }:
+            raise AdaptiveSubstrateValidationError(
+                "adaptive audit requires a creditable verified epistemic class"
+            )
         if self.weight_before is not None:
             _weight(self.weight_before, "weight_before")
         if self.weight_after is not None:
@@ -335,6 +349,7 @@ class AdaptiveAudit:
             "weight_after": self.weight_after,
             "reason": self.reason,
             "evidence_ids": list(self.evidence_ids),
+            "epistemic_class": self.epistemic_class,
         }
 
 
@@ -489,7 +504,7 @@ def _validate_pressure(
 
 def _require_grounded_credit(
     state: AdaptiveState, record: SettlementRouteRecord
-) -> tuple[CandidateRoute, tuple[str, ...]]:
+) -> tuple[CandidateRoute, tuple[str, ...], EpistemicOutcomeClass]:
     """Require exact constitutional, execution, state, and hash lineage."""
 
     if not isinstance(record, SettlementRouteRecord):
@@ -535,6 +550,23 @@ def _require_grounded_credit(
         raise AdaptiveSubstrateValidationError(
             "grounded execution changed during adaptive validation"
         )
+    epistemic_class = execution.epistemic_class
+    if epistemic_class not in {
+        EpistemicOutcomeClass.TASK_SUCCESS,
+        EpistemicOutcomeClass.TASK_FAILURE,
+    }:
+        raise AdaptiveSubstrateValidationError(
+            "non-creditable grounded execution class cannot alter adaptive state"
+        )
+    if (
+        trace.execution.observations.get("epistemic_class") != epistemic_class.value
+        or trace.provenance.get("epistemic_class") != epistemic_class.value
+        or execution.record.provenance.child_runtime_verified is not True
+        or not execution.record.provenance.child_runtime_fingerprint
+    ):
+        raise AdaptiveSubstrateValidationError(
+            "adaptive credit requires matching verified child-runtime epistemic provenance"
+        )
     if execution.record.input_hash != request.input_hash:
         raise AdaptiveSubstrateValidationError(
             "grounded record input hash does not match the sealed request"
@@ -578,7 +610,7 @@ def _require_grounded_credit(
         item for item in state.route_topology.routes
         if item.route_id == record.selection.route_id
     )
-    return route, evidence_ids
+    return route, evidence_ids, epistemic_class
 
 
 def _checkpoint(state: AdaptiveState) -> AdaptiveCheckpoint:
@@ -639,6 +671,7 @@ def _finish_update(
     weight_after: float | None = None,
     reason: str,
     evidence_ids: tuple[str, ...],
+    epistemic_class: EpistemicOutcomeClass,
     **changes: Any,
 ) -> tuple[AdaptiveState, AdaptiveAudit]:
     next_generation = state.generation
@@ -654,6 +687,7 @@ def _finish_update(
         weight_after,
         reason,
         evidence_ids,
+        epistemic_class.value,
     )
     next_checkpoints = (state.checkpoints + (checkpoint,))[-MAX_CHECKPOINTS:]
     next_state = replace(
@@ -702,7 +736,7 @@ def apply_grounded_adaptation(
         raise AdaptiveSubstrateValidationError("adaptation requires AdaptiveState")
     _reject_duplicate_record(state, record)
     _validate_pressure(pressure, record)
-    route, evidence_ids = _require_grounded_credit(state, record)
+    route, evidence_ids, epistemic_class = _require_grounded_credit(state, record)
     if operation == "credit":
         operation = (
             "strengthen"
@@ -750,6 +784,7 @@ def apply_grounded_adaptation(
         weight_after=next_weight,
         reason=f"settled grounded {outcome} outcome",
         evidence_ids=evidence_ids,
+        epistemic_class=epistemic_class,
         route_topology=next_topology,
         failure_streak=(
             state.failure_streak + 1
@@ -768,11 +803,11 @@ def form_grounded_connection(
     if not isinstance(state, AdaptiveState):
         raise AdaptiveSubstrateValidationError("connection formation requires AdaptiveState")
     _reject_duplicate_record(state, record)
+    route, evidence_ids, epistemic_class = _require_grounded_credit(state, record)
     if record.settlement.observed_outcome != "success":
         raise AdaptiveSubstrateValidationError(
             "candidate connections form only after grounded success"
         )
-    route, evidence_ids = _require_grounded_credit(state, record)
     connection_id = _connection_id(route.source, route.target)
     if any(item.connection_id == connection_id for item in state.connections):
         raise AdaptiveSubstrateValidationError("candidate connection identity already exists")
@@ -798,6 +833,7 @@ def form_grounded_connection(
         connection_id=connection.connection_id,
         reason="settled grounded success formed one bounded candidate edge",
         evidence_ids=evidence_ids,
+        epistemic_class=epistemic_class,
         connections=state.connections + (connection,),
     )
     return next_state, audit
@@ -811,11 +847,11 @@ def weaken_grounded_connection(
     if not isinstance(state, AdaptiveState):
         raise AdaptiveSubstrateValidationError("connection weakening requires AdaptiveState")
     _reject_duplicate_record(state, record)
+    route, evidence_ids, epistemic_class = _require_grounded_credit(state, record)
     if record.settlement.observed_outcome != "failure":
         raise AdaptiveSubstrateValidationError(
             "candidate connections weaken only after grounded failure"
         )
-    route, evidence_ids = _require_grounded_credit(state, record)
     _identifier(connection_id, "connection_id")
     connection = next(
         (item for item in state.connections if item.connection_id == connection_id),
@@ -846,6 +882,7 @@ def weaken_grounded_connection(
         weight_after=next_weight,
         reason="settled grounded failure weakened one bounded candidate edge",
         evidence_ids=evidence_ids,
+        epistemic_class=epistemic_class,
         connections=next_connections,
     )
     return next_state, audit
@@ -862,7 +899,7 @@ def switch_grounded_tactic(
         raise AdaptiveSubstrateValidationError("tactic switching requires AdaptiveState")
     _reject_duplicate_record(state, record)
     _validate_pressure(pressure, record)
-    _, evidence_ids = _require_grounded_credit(state, record)
+    _, evidence_ids, epistemic_class = _require_grounded_credit(state, record)
     checkpoint, _ = _prepare_update(state, record.record_id)
     ordered = sorted(state.tactics, key=lambda item: (item.ordinal, item.tactic_id))
     current_index = next(
@@ -893,6 +930,7 @@ def switch_grounded_tactic(
             else "grounded outcome and bounded pressure retained the current tactic"
         ),
         evidence_ids=evidence_ids,
+        epistemic_class=epistemic_class,
         active_tactic_id=target.tactic_id,
         tactic_scores=tuple((item.tactic_id, scores[item.tactic_id]) for item in ordered),
     )
@@ -934,6 +972,7 @@ def rollback_adaptive_state(
         None,
         "restored immutable checkpoint without evicting applied identities",
         (),
+        None,
     )
     topology = replace(
         checkpoint.route_topology,

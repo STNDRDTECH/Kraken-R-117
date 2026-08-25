@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import replace
+import hashlib
 import json
 from pathlib import Path
 import subprocess
@@ -16,6 +17,7 @@ from kraken_r import (
     EvidenceGrade,
     ExecutionAttestation,
     ExecutionFailureCode,
+    EpistemicOutcomeClass,
     ExecutionLimits,
     ExecutionObservation,
     ExecutionStatus,
@@ -33,6 +35,7 @@ from kraken_r import (
     run_constitutional_cycle,
 )
 from kraken_r import grounded_execution as execution_module
+import bounded_execution_runner as runner_module
 
 
 def _request(
@@ -378,14 +381,8 @@ def test_failed_isolated_run_cannot_be_promoted_to_a_success_claim() -> None:
     )
     assert trace.decision.outcome == "failure"
     assert all(item.grade is EvidenceGrade.GROUNDED for item in trace.evidence)
-    forged_wrapper = VerifiedGroundedExecution(record, "success")
-    with pytest.raises(GroundedExecutionRejected, match="duplicate grounded evidence"):
-        run_constitutional_cycle(
-            objective,
-            grounded_execution=forged_wrapper,
-            grounded_request=request,
-            grounded_verifier=verifier,
-        )
+    with pytest.raises(Exception, match="epistemic class"):
+        VerifiedGroundedExecution(record, "success")
 
 
 def test_candidate_conftest_cannot_forge_a_grounded_success() -> None:
@@ -460,7 +457,11 @@ def test_timeout_and_malformed_test_output_withhold_evidence() -> None:
         "malformed-test",
         files=malformed_files,
     )
-    assert malformed.observation.status is ExecutionStatus.SETUP_FAILED
+    assert malformed.observation.status is ExecutionStatus.EXECUTION_FAILED
+    assert (
+        malformed.observation.epistemic_class
+        is EpistemicOutcomeClass.EXECUTION_FAILURE
+    )
     assert malformed_verified.observed_outcome == "not_observed"
     malformed_trace = run_constitutional_cycle(
         objective,
@@ -470,6 +471,93 @@ def test_timeout_and_malformed_test_output_withhold_evidence() -> None:
     )
     assert malformed_trace.evidence == ()
     assert malformed_trace.learning_update is None
+
+
+def test_child_runtime_contract_and_epistemic_taxonomy_fail_closed() -> None:
+    _, _, _, _, _, record, verified = _execute("runtime-contract")
+
+    assert record.provenance.child_runtime_verified is True
+    assert record.provenance.child_runtime_fingerprint is not None
+    assert (
+        record.observation.epistemic_class
+        is EpistemicOutcomeClass.TASK_SUCCESS
+    )
+    assert verified.epistemic_class is EpistemicOutcomeClass.TASK_SUCCESS
+
+    with pytest.raises(Exception, match="epistemic class"):
+        replace(
+            record.observation,
+            epistemic_class=EpistemicOutcomeClass.TASK_FAILURE,
+        )
+
+    malformed = ExecutionObservation(
+        ExecutionStatus.EXECUTION_FAILED,
+        2,
+        False,
+        0,
+        0,
+        0,
+        "",
+        "malformed child facts",
+        0.01,
+        ExecutionFailureCode.RUNNER_FAILURE,
+    )
+    assert malformed.epistemic_class is EpistemicOutcomeClass.EXECUTION_FAILURE
+    with pytest.raises(Exception, match="epistemic class"):
+        replace(malformed, epistemic_class=EpistemicOutcomeClass.TASK_FAILURE)
+
+
+def test_child_runtime_contract_rejects_forgery_and_workspace_escape() -> None:
+    expected = {
+        "contract": "kraken_r_isolated_pytest_v1",
+        "python_implementation": "CPython",
+        "python_version": "3.11.0",
+        "pytest_version": "8.4.2",
+    }
+    expected_fingerprint = hashlib.sha256(
+        json.dumps(expected, sort_keys=True, separators=(",", ":")).encode("utf-8")
+    ).hexdigest()
+    marker = "KRAKEN_CHILD_RUNTIME:" + json.dumps(expected, sort_keys=True)
+    assert runner_module._runtime_fingerprint(
+        marker, expected, expected_fingerprint
+    ) == (True, expected_fingerprint)
+    assert runner_module._runtime_fingerprint(
+        marker + "\n" + marker, expected, expected_fingerprint
+    ) == (False, None)
+    forged = dict(expected, pytest_version="0.0.0")
+    assert runner_module._runtime_fingerprint(
+        "KRAKEN_CHILD_RUNTIME:" + json.dumps(forged),
+        expected,
+        expected_fingerprint,
+    ) == (False, None)
+    for path in ("/etc/passwd", "../outside.py", "nested/../../outside.py"):
+        with pytest.raises(runner_module.IsolatedRunnerError, match="escapes"):
+            runner_module._workspace_relative_path(path, "test path")
+    with tempfile.TemporaryDirectory() as temp_dir:
+        workspace = Path(temp_dir)
+        (workspace / "tests").mkdir()
+        (workspace / "tests" / "escape.py").symlink_to("/etc/passwd")
+        with pytest.raises(runner_module.IsolatedRunnerError, match="outside"):
+            runner_module._workspace_test_paths(workspace, ("tests/escape.py",))
+
+    unverified = runner_module.IsolatedPytestResult(
+        exit_code=0,
+        tests_run=1,
+        tests_passed=1,
+        tests_failed=0,
+        stdout="1 passed",
+        stderr="",
+        elapsed_seconds=0.01,
+        timed_out=False,
+        sandbox_error=None,
+        resource_limits_enforced=True,
+        cleanup_verified=True,
+        test_outcomes_complete=True,
+        runtime_verified=False,
+    )
+    observed = execution_module._observation_from_isolated_result(unverified)
+    assert observed.status is ExecutionStatus.EXECUTION_FAILED
+    assert observed.epistemic_class is EpistemicOutcomeClass.EXECUTION_FAILURE
 
 
 def test_fixture_setup_failure_cannot_be_promoted_to_grounded_test_failure() -> None:

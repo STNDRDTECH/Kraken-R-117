@@ -57,6 +57,7 @@ from .controlled_evaluation import (
     HeldOutTask,
 )
 from .grounded_execution import (
+    EpistemicOutcomeClass,
     GroundedExecutionExecutor,
     GroundedDeliveryLedger,
     GroundedExecutionRejected,
@@ -1023,7 +1024,13 @@ def validate_grounded_execution() -> tuple[str, ...]:
         )
     except (GroundedExecutionRejected, OSError, RuntimeError) as exc:
         return (f"bounded grounded execution failed: {exc}",)
-    if verified.observed_outcome != "success" or replay != verified:
+    if (
+        verified.observed_outcome != "success"
+        or verified.epistemic_class is not EpistemicOutcomeClass.TASK_SUCCESS
+        or not record.provenance.child_runtime_verified
+        or not record.provenance.child_runtime_fingerprint
+        or replay != verified
+    ):
         errors.append("verified execution did not structurally replay as success")
     try:
         fresh_verifier = GroundedExecutionVerifier.from_record(
