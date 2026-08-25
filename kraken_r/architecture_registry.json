@@ -1,7 +1,7 @@
 {
   "registry_kind": "kraken_r_architecture",
   "registry_id": "kraken-r-foundation",
-  "version": "1.10.5",
+  "version": "1.10.6",
   "last_reviewed": "2026-08-25",
   "authority_boundary": {
     "legacy_reference": "rogal_core.daemon.ROGALDaemon and rogal_core.autonomous_cycle.AutonomousCycle remain the deployed reference runtime.",
@@ -135,7 +135,7 @@
       "disposition": "keep",
       "source_refs": ["docs/kraken_r/CONSTITUTION.md", "docs/kraken_r/README.md"],
       "planned": false,
-      "notes": "Pure caller-owned immutable reducer. Every ordinary update stores the exact creditable task_success/task_failure class and requires matching independently verified child-runtime, request, record, provenance, authorized state, and evidence hashes. Setup/infrastructure, timeout/resource, execution, contradiction, and insufficient-evidence classes cannot earn credit, form topology, alter tactics, or affect homeostasis. Signals, physiology, confidence, and declared model output cannot earn credit. The substrate has no dispatch, execution, persistence, subscription, goal-selection, controller, or live runtime authority."
+      "notes": "Pure caller-owned immutable reducer. Every ordinary update stores the exact creditable task_success/task_failure class and requires matching independently verified child-runtime, request, record, provenance, authorized state, and evidence hashes. Later grounded task failure can invalidate one retained prior reinforcement by restoring its bounded pre-update checkpoint while retaining both identities; fixed route caps, stale-selection rejection, rollback, decay/recovery, and tactic-streak escape prevent monopoly and lock-in. Setup/infrastructure, timeout/resource, execution, contradiction, and insufficient-evidence classes cannot earn credit, form topology, alter tactics, invalidate evidence, or affect homeostasis. Signals, physiology, confidence, and declared model output cannot earn credit. The substrate has no dispatch, execution, persistence, subscription, goal-selection, controller, or live runtime authority."
     },
     {
       "mechanism_id": "kraken_r_orzhaal_disposable_experiments",

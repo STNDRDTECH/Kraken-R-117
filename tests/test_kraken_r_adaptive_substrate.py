@@ -17,14 +17,18 @@ from kraken_r import (
     GroundedExecutionRequest,
     EpistemicOutcomeClass,
     HomeostaticSnapshot,
+    MAX_ADAPTIVE_ROUTE_WEIGHT,
     MAX_ADAPTIVE_GENERATIONS,
+    MAX_TACTIC_STREAK,
     Objective,
     SettlementRouteRecord,
     TaskState,
     apply_grounded_adaptation,
     form_grounded_connection,
+    invalidate_grounded_adaptation,
     make_grounded_action,
     replay_adaptive_updates,
+    replay_adaptive_invalidations,
     rollback_adaptive_state,
     run_constitutional_cycle,
     run_orzhaal_experiment,
@@ -301,6 +305,68 @@ def test_infrastructure_and_execution_failures_cannot_reshape_adaptation() -> No
     with pytest.raises(AdaptiveSubstrateValidationError, match="non-creditable"):
         switch_grounded_tactic(state, malformed, _pressure(malformed, high=True))
     assert state.to_dict() == before
+
+
+def test_later_grounded_failure_can_invalidate_bad_reinforcement() -> None:
+    initial = AdaptiveState.fixture("resilience-invalidation")
+    success = _route_record(initial, "resilience-prior-success")
+    reinforced, reinforcement_audit = apply_grounded_adaptation(initial, success)
+    assert reinforcement_audit.operation == "strengthen"
+    assert reinforced.route_topology.routes[0].weight == pytest.approx(0.60)
+
+    later_failure = _route_record(
+        reinforced, "resilience-later-failure", passing=False
+    )
+    recovered, invalidation = invalidate_grounded_adaptation(
+        reinforced,
+        success.record_id,
+        later_failure,
+        reason="later grounded outcome no longer supports prior reinforcement",
+    )
+
+    assert invalidation.operation == "invalidate_evidence"
+    assert invalidation.epistemic_class == EpistemicOutcomeClass.TASK_FAILURE.value
+    assert success.record_id in recovered.invalidated_record_ids
+    assert success.record_id in recovered.applied_record_ids
+    assert later_failure.record_id in recovered.applied_record_ids
+    assert recovered.route_topology.routes[0].weight == pytest.approx(0.50)
+    assert replay_adaptive_invalidations(
+        reinforced,
+        ((success.record_id, later_failure, "later grounded outcome no longer supports prior reinforcement"),),
+    ) == recovered
+    with pytest.raises(AdaptiveSubstrateValidationError, match="already invalidated"):
+        invalidate_grounded_adaptation(
+            recovered,
+            success.record_id,
+            _route_record(recovered, "resilience-repeat-failure", passing=False),
+            reason="repeat",
+        )
+    with pytest.raises(AdaptiveSubstrateValidationError, match="already applied"):
+        apply_grounded_adaptation(recovered, success)
+
+
+def test_resilience_caps_monopoly_escapes_lock_in_and_rejects_stale_selection() -> None:
+    state = AdaptiveState.fixture("resilience-bounds")
+    for label in ("first", "second", "third"):
+        state, _ = apply_grounded_adaptation(
+            state, _route_record(state, f"resilience-success-{label}")
+        )
+    selected = state.route_topology.routes[0]
+    assert selected.weight == pytest.approx(MAX_ADAPTIVE_ROUTE_WEIGHT)
+
+    stale = _route_record(state, "resilience-stale-selection")
+    advanced, _ = apply_grounded_adaptation(
+        state, _route_record(state, "resilience-advance", passing=False)
+    )
+    with pytest.raises(AdaptiveSubstrateValidationError, match="stale"):
+        apply_grounded_adaptation(advanced, stale)
+
+    locked = replace(advanced, tactic_streak=MAX_TACTIC_STREAK)
+    escape = _route_record(locked, "resilience-lock-in-escape")
+    escaped, audit = switch_grounded_tactic(locked, escape, _pressure(escape))
+    assert audit.operation == "switch_tactic"
+    assert escaped.active_tactic_id == "alternate"
+    assert escaped.tactic_streak == 0
 
 
 def test_orzhaal_is_disposable_and_never_promotable() -> None:

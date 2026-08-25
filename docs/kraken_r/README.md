@@ -189,6 +189,19 @@ evidence. Only the first two classes can become learning credit; every
 adaptive audit retains the exact creditable class and child-runtime
 fingerprint. Stage 11 remains unstarted.
 
+## Stage 10.6 plasticity resilience
+
+Stage 10.6 keeps adaptation domain-agnostic and immutable while adding bounded
+recovery from bad reinforcement. A later independently verified grounded task
+failure may invalidate one retained ordinary update and restore its nearest
+retained pre-update checkpoint; both the original and invalidating record
+identities remain consumed. Route preference is capped below the generic route
+maximum, stale selections are rejected instead of being repaired implicitly,
+and a bounded tactic streak forces a deterministic alternate tactic. Advisory
+physiology remains non-evidentiary, and setup/infrastructure failures cannot
+trigger recovery, topology changes, or learning credit. Stage 11 mechanisms
+remain excluded.
+
 The cycle can also be exercised directly:
 
 ```python
