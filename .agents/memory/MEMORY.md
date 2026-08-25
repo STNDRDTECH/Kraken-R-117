@@ -15,6 +15,7 @@
 - [Goal queue contains hallucination goals and test artifacts](goal-queue-contamination.md) — 37/84 active goals are meta_diagnose_* with LLM-generated content lacking source code; one goal text contains truncated LLM refusal "I don't"; meta_diagnose_foo test artifact in live queue.
 - [GitHub empty-repository publishing](github-empty-repository-publishing.md) — the GitHub connector’s Git-object API rejects blobs on an empty repo; establish and then replace a bootstrap ref with the verified root tree.
 - [Stage 10.8 explicit inactivity](stage-10-8-explicit-inactivity.md) — candidate route neutralization is limited to empty caller-supplied batches; non-creditable ticks cannot reshape topology.
+- [Stage 10.9 canonical ablation gates](stage-10-9-canonical-ablation-gates.md) — ablated measurements inherit full-baseline withholding; counterfactual state never decides credit eligibility.
 - [Bounded candidate physiology](round-five-physiology.md) — physiology is explicit immutable context with advisory candidate-action inhibition only; never a live controller or evidence authority.
 - [Settlement-grounded plastic routing](round-six-plastic-routing.md) — route preference requires a validated constitutional trace and generation-scoped bounded credit; never raw signals or confidence.
 - [Controlled LLM proposal boundary](controlled-llm-boundary.md) — model output stays declared-only; provider calls, replay, and comparisons must fail closed without granting authority.
