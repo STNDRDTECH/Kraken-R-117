@@ -819,6 +819,33 @@ def _is_current_lineage_error(error: ValueError) -> bool:
     )
 
 
+def _is_bounded_capacity_exhaustion_error(error: ValueError) -> bool:
+    """Identify a declared bounded-capacity ceiling with no free slot left.
+
+    Distinct from ``_is_current_lineage_error``: the record or checkpoint is
+    not stale, duplicate, or mismatched -- it is a perfectly legitimate
+    candidate input that simply arrives when a bounded pool (a generation's
+    update budget, the rollback budget, the adaptive generation ceiling,
+    tracked-record identity retention, or the topology's settlement-audit
+    retention) has no room left this generation. Like a lineage error, this
+    must become a deterministic, non-mutating withheld outcome rather than
+    an uncaught exception -- a fully legitimate declared limit must never
+    crash tick reduction. Every phrase below is raised verbatim by
+    ``adaptive_substrate`` or ``plastic_routing`` only for this class of
+    condition (checked against the current source, not assumed).
+    """
+
+    text = str(error).lower()
+    return any(
+        phrase in text
+        for phrase in (
+            "budget is exhausted",
+            "generation limit is exhausted",
+            "retention is exhausted",
+        )
+    )
+
+
 def _signal_trace(state: DynamicalState, signals: tuple[Signal, ...]) -> PropagationTrace | None:
     if not signals:
         return None
@@ -1098,6 +1125,18 @@ def _reduce_dynamical_tick_counterfactual(
                         )
                     )
                     continue
+                if _is_bounded_capacity_exhaustion_error(exc):
+                    provenance_only_event_ids.add(event.event_id)
+                    withheld.append(
+                        WithheldEvent(
+                            event.event_id,
+                            event.kind,
+                            f"bounded capacity limit withheld candidate rollback: {exc}",
+                            operation="rollback",
+                            checkpoint_id=event.checkpoint_id,
+                        )
+                    )
+                    continue
                 raise DynamicalSubstrateValidationError(
                     f"rollback reducer rejected {event.event_id}: {exc}"
                 ) from exc
@@ -1130,6 +1169,17 @@ def _reduce_dynamical_tick_counterfactual(
                         event,
                         record,
                         f"current-state lineage withheld candidate adaptation: {exc}",
+                    )
+                )
+                continue
+            if _is_bounded_capacity_exhaustion_error(exc):
+                provenance_only_event_ids.add(event.event_id)
+                noncreditable.append(record.record_id)
+                withheld.append(
+                    _withheld_settlement(
+                        event,
+                        record,
+                        f"bounded capacity limit withheld candidate adaptation: {exc}",
                     )
                 )
                 continue
@@ -1184,6 +1234,17 @@ def _reduce_dynamical_tick_counterfactual(
                         event,
                         record,
                         f"current-state lineage withheld candidate adaptation: {exc}",
+                    )
+                )
+                continue
+            if _is_bounded_capacity_exhaustion_error(exc):
+                provenance_only_event_ids.add(event.event_id)
+                noncreditable.append(record.record_id)
+                withheld.append(
+                    _withheld_settlement(
+                        event,
+                        record,
+                        f"bounded capacity limit withheld candidate adaptation: {exc}",
                     )
                 )
                 continue

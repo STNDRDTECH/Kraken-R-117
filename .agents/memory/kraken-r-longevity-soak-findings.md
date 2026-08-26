@@ -43,27 +43,50 @@ randomness.
   multi-context topology, not attempted in the first soak pass (judged out of
   proportion for a first hardening pass).
 
-## Discovered gap: capacity-exhaustion errors crash `reduce_dynamical_tick`
+## Fixed gap: capacity-exhaustion errors used to crash `reduce_dynamical_tick`
 
 `kraken_r/dynamical_substrate.py`'s `_is_current_lineage_error` classifies
 staleness/duplication messages (stale binding, already applied/consumed/
 invalidated, checkpoint not retained) into graceful `WithheldEvent`s during
-tick reduction. It does NOT recognize the sibling "budget exhausted"/"limit is
+tick reduction. It did NOT recognize the sibling "budget exhausted"/"limit is
 exhausted" messages from the same adaptive/plastic-routing layer — e.g.
 "topology settlement budget is exhausted", "adaptive generation update budget
 is exhausted", "rollback budget is exhausted", "adaptive generation limit is
 exhausted", "adaptive record identity retention is exhausted", "invalidation
-budget is exhausted". When one of these fires while processing a real event
-through `reduce_dynamical_tick`, a fully legitimate, correctly authorized,
-context-matched grounded settlement crashes the tick reduction with an
-uncaught exception instead of being withheld like every sibling boundary
-condition. Confirmed via direct reproduction (pre-fill
-`route_topology.applied_settlement_ids` to `MAX_AUDIT_LINKS`, then feed one
-real grounded task-success settlement through `reduce_dynamical_tick`) — see
-`test_topology_settlement_budget_exhaustion_crashes_the_dynamical_reducer`,
-which pins this as a known, not-yet-fixed regression baseline. Filed as a
-follow-up task rather than fixed inline, consistent with this project's
-established pattern of filing audit findings as separate reviewable tasks.
+budget is exhausted" — so a fully legitimate, correctly authorized,
+context-matched grounded settlement or rollback used to crash tick reduction
+with an uncaught exception instead of being withheld like every sibling
+boundary condition.
+
+Fixed by adding a sibling classifier, `_is_bounded_capacity_exhaustion_error`
+(matches `"budget is exhausted"` / `"generation limit is exhausted"` /
+`"retention is exhausted"`), applied alongside `_is_current_lineage_error` at
+all three tick-reducer try/except sites (rollback-event path,
+settlement-learning disposition check, settlement-reducer dispatch). Each
+recognized exhaustion becomes a non-mutating `WithheldEvent` via `continue`,
+exactly like a lineage error; anything else still raises (fail-closed
+preserved, no broad exception swallowing).
+
+One of the six messages — "invalidation budget is exhausted" — is
+structurally unreachable through `reduce_dynamical_tick`: `DynamicalEvent` has
+no invalidate-kind event or settlement `operation` that dispatches to
+`invalidate_grounded_adaptation`/`replay_adaptive_invalidations`; neither has
+any caller in `dynamical_substrate.py`. That one is covered only where it is
+actually reachable (a direct `adaptive_substrate` call) plus a classifier
+unit check — full-tick-reducer coverage does not exist for it and should not
+be claimed.
+
+Regression coverage lives in `tests/test_kraken_r_longevity_soak.py`: one
+test per reachable exhaustion mode (topology settlement budget, adaptive
+generation update budget, record-identity retention, rollback budget,
+generation ceiling via rollback), each asserting a withheld outcome, zero
+state mutation, and that replaying/retrying the identical rejected
+transition never consumes hidden state or changes the reason string. A
+second-pass bounded combinatorial soak drives seeded, deterministic mixes of
+event ordering / rollback distance / stale-state age / settlement saturation
+/ reset timing / invalidation timing / topology-selection age / resource
+saturation / contradictory observations across many sessions, re-checking
+global invariants every tick.
 
 ## Operational hazard: do not touch the `orzhaal_bubble_*` git stash stack
 

@@ -1,4 +1,4 @@
-"""First-pass long-horizon integrity soak for Kraken-R Stage 10.8/10.9.
+"""Long-horizon integrity soak for Kraken-R Stage 10.8/10.9, in two passes.
 
 This module exercises the immutable dynamical/adaptive/plastic-routing
 reducers across many more cycles than any existing acceptance test, without
@@ -19,6 +19,47 @@ Fail-closed classes explicitly covered here:
   4. duplicate settlement/evidence identity being credited twice
   5. rollback manufacturing credit instead of only undoing it
   6. illegal route/topology bounds
+  7. a legitimate declared bounded-capacity ceiling (a generation's update
+     budget, the rollback budget, the adaptive generation ceiling, tracked-
+     record identity retention, the topology's settlement-audit retention,
+     or the invalidation budget) crashing tick reduction instead of being
+     withheld like every other boundary condition
+
+The first pass (the 10,000-cycle chained soak and the exact-ceiling tests)
+discovered failure class 7 as an open gap: a fully legitimate settlement or
+rollback event crashed ``reduce_dynamical_tick`` with an uncaught exception
+whenever it happened to land on one of six declared bounded-capacity
+ceilings, instead of becoming a non-mutating ``WithheldEvent`` like every
+sibling boundary condition recognized by ``_is_current_lineage_error``. That
+gap is now closed by a sibling classifier, ``_is_bounded_capacity_exhaustion_
+error``, applied at the same three tick-reducer call sites. The dedicated
+regression tests below drive each of the five capacity-exhaustion modes that
+are actually reachable through ``reduce_dynamical_tick`` (topology settlement
+budget, adaptive generation update budget, record-identity retention,
+rollback budget, and the generation ceiling via rollback) through the full
+reducer and confirm: a withheld (never crashing) outcome, zero state
+mutation, a stable/deterministic reason string, and that replaying or
+retrying the identical rejected transition never consumes hidden state or
+changes the semantic rejection.
+
+One of the six named exhaustion messages -- "invalidation budget is
+exhausted" -- is a documented exception: ``invalidate_grounded_adaptation``
+has no corresponding event kind or settlement ``operation`` in
+``DynamicalEvent``'s vocabulary today, so it cannot be reached through
+``reduce_dynamical_tick`` at all (confirmed by inspection: no caller of
+``invalidate_grounded_adaptation``/``replay_adaptive_invalidations`` exists
+in ``dynamical_substrate.py``). It is covered here at the only place it is
+actually reachable -- direct calls into ``adaptive_substrate`` -- plus a
+direct check that the new classifier recognizes its exact message, rather
+than pretending full-tick-reducer coverage exists for a path that does not
+exist.
+
+The second pass adds a bounded combinatorial soak: a seeded, deterministic
+mix of legal and pathological conditions across nine independent dimensions
+(event ordering, rollback distance, stale-state age, settlement saturation,
+reset timing, invalidation timing, topology-selection age, resource
+saturation, and contradictory observations), run across many independent
+bounded sessions with every global invariant re-checked after every tick.
 
 Every reducer call in this file is a pure function over caller-owned
 immutable records; nothing here starts a clock, worker, or daemon, and no
@@ -36,6 +77,7 @@ from pathlib import Path
 import pytest
 
 from kraken_r import (
+    AdaptiveCheckpoint,
     AdaptiveState,
     AdaptiveSubstrateValidationError,
     BASELINE_WEIGHT,
@@ -61,6 +103,7 @@ from kraken_r import (
     apply_grounded_adaptation,
     apply_settlement_learning,
     form_grounded_connection,
+    invalidate_grounded_adaptation,
     make_bound_signal,
     make_grounded_action,
     reduce_dynamical_tick,
@@ -69,11 +112,13 @@ from kraken_r import (
     run_constitutional_cycle,
     select_candidate_route,
 )
+from kraken_r.adaptive_substrate import MAX_TRACKED_RECORDS
 from kraken_r.dynamical_substrate import (
     MAX_EVENT_COUNTER,
     MAX_EVENT_LOG,
     MAX_TICK_EVENTS,
     MAX_TICKS,
+    _is_bounded_capacity_exhaustion_error,
 )
 
 # ---------------------------------------------------------------------------
@@ -282,6 +327,78 @@ def _assert_dynamical_invariants(state: DynamicalState) -> None:
         assert route.success_count >= 0 and route.failure_count >= 0
     assert 0 <= state.medium.adaptive_state.generation <= MAX_ADAPTIVE_GENERATIONS
     assert 0 <= state.medium.adaptive_state.updates_applied <= MAX_ADAPTIVE_UPDATES
+
+
+def _synthetic_checkpoint(state: AdaptiveState, suffix: str) -> AdaptiveCheckpoint:
+    """A directly-constructed, valid pre-update checkpoint for one exact
+    adaptive state.
+
+    Rollback only ever requires a *retained* checkpoint matching the
+    current generation/topology lineage -- it never touches a settlement
+    record. Building one directly (instead of running a real grounded
+    credit cycle just to get a checkpoint as a side effect) keeps the
+    bounded-capacity regression tests below free of any subprocess cost."""
+
+    return AdaptiveCheckpoint(
+        f"{state.substrate_id}-synthetic-checkpoint-{suffix}",
+        state.generation,
+        state.route_topology,
+        state.connections,
+        state.active_tactic_id,
+        state.tactic_scores,
+        state.applied_record_ids,
+    )
+
+
+def _dynamical_state_with_adaptive(label: str, adaptive: AdaptiveState) -> DynamicalState:
+    """A fresh dynamical fixture with one field -- its adaptive substrate --
+    swapped for a directly-constructed pathological/boundary state."""
+
+    base = DynamicalState.fixture(label)
+    return replace(base, medium=replace(base.medium, adaptive_state=adaptive))
+
+
+def _assert_bounded_capacity_exhaustion_is_withheld_and_replay_safe(
+    state: DynamicalState,
+    event: DynamicalEvent,
+    *,
+    expected_reason_prefix: str,
+    expected_message_fragment: str,
+) -> None:
+    """Shared assertions for every reachable bounded-capacity exhaustion
+    mode: the tick reduces to a withheld, non-mutating outcome (never an
+    uncaught exception), the withheld reason is deterministic across
+    repeated evaluation of the identical starting state and tick, and
+    replaying the identical rejected transition in a later tick -- from the
+    still-unmutated resulting state -- changes neither the outcome nor any
+    hidden state."""
+
+    before = state.medium.adaptive_state
+    next_state, trace = reduce_dynamical_tick(state, DynamicalTick(state.tick + 1, (event,)))
+    assert len(trace.withheld_events) == 1
+    reason = trace.withheld_events[0].reason
+    assert reason.startswith(expected_reason_prefix)
+    assert expected_message_fragment in reason
+    assert next_state.medium.adaptive_state == before
+
+    # Determinism: replaying the identical starting state + tick yields a
+    # byte-identical withheld outcome, not just an equivalent one.
+    replay_state, replay_trace = reduce_dynamical_tick(
+        state, DynamicalTick(state.tick + 1, (event,))
+    )
+    assert replay_state == next_state
+    assert replay_trace.withheld_events[0].reason == reason
+
+    # Retrying the same rejected settlement/checkpoint in a later tick, from
+    # the still-unmutated resulting state, is refused identically -- no
+    # hidden state advances and the rejection reason never drifts.
+    retry_event = replace(event, event_id=f"{event.event_id}-retry")
+    retried_state, retried_trace = reduce_dynamical_tick(
+        next_state, DynamicalTick(next_state.tick + 1, (retry_event,))
+    )
+    assert len(retried_trace.withheld_events) == 1
+    assert retried_trace.withheld_events[0].reason == reason
+    assert retried_state.medium.adaptive_state == before
 
 
 NUM_SOAK_SESSIONS = 40
@@ -683,27 +800,22 @@ def test_duplicate_settlement_credit_through_the_full_dynamical_reducer_stack_is
     assert len(replayed.medium.adaptive_state.connections) == 1
 
 
-def test_topology_settlement_budget_exhaustion_crashes_the_dynamical_reducer() -> None:
-    """DISCOVERED GAP, pinned but not fixed by this pass (see the filed
-    follow-up task for the fix).
-
-    Every staleness/duplication condition recognized by
-    `_is_current_lineage_error` (stale binding, already-applied, already-
-    consumed, already-invalidated, checkpoint not retained) is gracefully
-    turned into a non-mutating WithheldEvent when it surfaces while
-    processing a real event through `reduce_dynamical_tick`. Capacity-
-    exhaustion conditions from the same adaptive/plastic-routing layer --
-    'topology settlement budget is exhausted', and by the same code path
-    'adaptive generation update budget is exhausted', 'rollback budget is
-    exhausted', 'adaptive generation limit is exhausted', 'adaptive record
-    identity retention is exhausted', 'invalidation budget is exhausted' --
-    are NOT in that phrase list. When one of them fires, a fully
-    legitimate, correctly authorized, context-matched, real grounded
-    task-success settlement crashes the entire tick reduction with an
-    uncaught exception instead of being withheld like every sibling
-    boundary condition. This test pins today's actual (undesirable) crash
-    so that fixing the classifier is a visible, deliberate change rather
-    than a silent one."""
+def test_topology_settlement_budget_exhaustion_is_withheld_not_crashed() -> None:
+    """FIXED GAP (previously pinned by this test as a crash): every
+    staleness/duplication condition recognized by `_is_current_lineage_error`
+    (stale binding, already-applied, already-consumed, already-invalidated,
+    checkpoint not retained) was already gracefully turned into a
+    non-mutating WithheldEvent when it surfaced while processing a real
+    event through `reduce_dynamical_tick`. Capacity-exhaustion conditions
+    from the same adaptive/plastic-routing layer -- 'topology settlement
+    budget is exhausted' among them -- were not, so a fully legitimate,
+    correctly authorized, context-matched, real grounded task-success
+    settlement used to crash the entire tick reduction with an uncaught
+    exception instead of being withheld like every sibling boundary
+    condition. A sibling classifier, `_is_bounded_capacity_exhaustion_error`,
+    now recognizes this and the other five declared bounded-capacity
+    ceilings at the same three tick-reducer call sites, so this exact
+    scenario must now resolve to a withheld, non-mutating outcome."""
 
     state = _grounded_dynamical_state("budget-gap-session")
     full_topology = replace(
@@ -720,11 +832,176 @@ def test_topology_settlement_budget_exhaustion_crashes_the_dynamical_reducer() -
     record = _grounded_route_record_from_dynamical(state, "budget-gap")
     _require_child_pytest(record)
 
+    _assert_bounded_capacity_exhaustion_is_withheld_and_replay_safe(
+        state,
+        DynamicalEvent.settlement_event("budget-gap-event", record),
+        expected_reason_prefix="bounded capacity limit withheld candidate adaptation",
+        expected_message_fragment="topology settlement budget is exhausted",
+    )
+
+
+def test_adaptive_generation_update_budget_exhaustion_is_withheld_not_crashed() -> None:
+    """Same fix, second reachable exhaustion mode: a fresh, never-before-seen
+    grounded settlement arriving after this generation's update budget
+    (`MAX_ADAPTIVE_UPDATES`) is already spent must be withheld, not crash
+    the reducer -- even though the topology itself still has room and the
+    record has never been applied before."""
+
+    state = _grounded_dynamical_state("update-budget-gap-session")
+    saturated_adaptive = replace(
+        state.medium.adaptive_state, updates_applied=MAX_ADAPTIVE_UPDATES
+    )
+    state = replace(state, medium=replace(state.medium, adaptive_state=saturated_adaptive))
+    record = _grounded_route_record_from_dynamical(state, "update-budget-gap")
+    _require_child_pytest(record)
+
+    _assert_bounded_capacity_exhaustion_is_withheld_and_replay_safe(
+        state,
+        DynamicalEvent.settlement_event("update-budget-gap-event", record),
+        expected_reason_prefix="bounded capacity limit withheld candidate adaptation",
+        expected_message_fragment="adaptive generation update budget is exhausted",
+    )
+
+
+def test_adaptive_record_identity_retention_exhaustion_is_withheld_not_crashed() -> None:
+    """Third reachable exhaustion mode: once `applied_record_ids` has
+    accumulated `MAX_TRACKED_RECORDS` identities (the bounded tracked-record
+    retention window, independent of the current generation's own update
+    budget), one more fresh grounded settlement must be withheld -- not
+    crash -- even though this generation's own update budget still has
+    room."""
+
+    state = _grounded_dynamical_state("retention-gap-session")
+    saturated_adaptive = replace(
+        state.medium.adaptive_state,
+        applied_record_ids=tuple(
+            f"retention-gap-synthetic-{index}" for index in range(MAX_TRACKED_RECORDS)
+        ),
+    )
+    state = replace(state, medium=replace(state.medium, adaptive_state=saturated_adaptive))
+    record = _grounded_route_record_from_dynamical(state, "retention-gap")
+    _require_child_pytest(record)
+
+    _assert_bounded_capacity_exhaustion_is_withheld_and_replay_safe(
+        state,
+        DynamicalEvent.settlement_event("retention-gap-event", record),
+        expected_reason_prefix="bounded capacity limit withheld candidate adaptation",
+        expected_message_fragment="adaptive record identity retention is exhausted",
+    )
+
+
+def test_rollback_budget_exhaustion_is_withheld_not_crashed() -> None:
+    """Fourth reachable exhaustion mode, via the rollback event path (a
+    distinct tick-reducer call site from the settlement path above): a
+    perfectly valid, retained, current-generation checkpoint must be
+    withheld -- not crash the reducer -- when this generation's own update
+    budget is already spent, since rollback itself consumes one update
+    slot. No real grounded record is needed here; rollback only ever
+    inspects checkpoints, never settlement records."""
+
+    base_adaptive = AdaptiveState.fixture("rollback-budget-gap-adaptive")
+    checkpoint = _synthetic_checkpoint(base_adaptive, "rollback-budget-gap")
+    saturated_adaptive = replace(
+        base_adaptive, updates_applied=MAX_ADAPTIVE_UPDATES, checkpoints=(checkpoint,)
+    )
+    state = _dynamical_state_with_adaptive("rollback-budget-gap-session", saturated_adaptive)
+
+    _assert_bounded_capacity_exhaustion_is_withheld_and_replay_safe(
+        state,
+        DynamicalEvent.rollback_event("rollback-budget-gap-event", checkpoint.checkpoint_id),
+        expected_reason_prefix="bounded capacity limit withheld candidate rollback",
+        expected_message_fragment="rollback budget is exhausted",
+    )
+
+
+def test_rollback_generation_limit_reached_is_withheld_not_crashed() -> None:
+    """Fifth reachable exhaustion mode, also via the rollback event path: a
+    valid, retained checkpoint whose lineage exactly matches the current
+    (already-maximal) generation must be withheld -- not crash the reducer
+    -- once the adaptive generation ceiling itself has been reached, even
+    though this generation's own update budget still has room (isolating
+    this check from the rollback-budget check above)."""
+
+    ceiling_topology = replace(
+        RouteTopology.fixture("rollback-generation-limit-gap-topology"),
+        generation=MAX_ADAPTIVE_GENERATIONS,
+    )
+    base_adaptive = replace(
+        AdaptiveState.fixture("rollback-generation-limit-gap-adaptive"),
+        generation=MAX_ADAPTIVE_GENERATIONS,
+        route_topology=ceiling_topology,
+    )
+    checkpoint = _synthetic_checkpoint(base_adaptive, "rollback-generation-limit-gap")
+    saturated_adaptive = replace(base_adaptive, checkpoints=(checkpoint,))
+    state = _dynamical_state_with_adaptive(
+        "rollback-generation-limit-gap-session", saturated_adaptive
+    )
+
+    _assert_bounded_capacity_exhaustion_is_withheld_and_replay_safe(
+        state,
+        DynamicalEvent.rollback_event(
+            "rollback-generation-limit-gap-event", checkpoint.checkpoint_id
+        ),
+        expected_reason_prefix="bounded capacity limit withheld candidate rollback",
+        expected_message_fragment="adaptive generation limit is exhausted",
+    )
+
+
+def test_invalidation_budget_exhaustion_scope_note_and_direct_regression() -> None:
+    """SCOPE NOTE: unlike the five modes above, 'invalidation budget is
+    exhausted' cannot be driven through `reduce_dynamical_tick` at all.
+    `DynamicalEvent` has no invalidate-kind event and no settlement
+    `operation` dispatches to `invalidate_grounded_adaptation`; grepping
+    `dynamical_substrate.py` confirms neither `invalidate_grounded_
+    adaptation` nor `replay_adaptive_invalidations` has any caller there.
+    This is a pre-existing structural fact, independent of this pass's fix
+    -- not something a test can honestly exercise 'through the full tick
+    reducer' without inventing a new reducer pathway, which is out of
+    scope. This test instead covers exactly what *is* real: the new
+    classifier recognizes this message (so the day a tick event is wired up
+    for it, the withhold behavior above would apply automatically), and the
+    only actual call path -- direct `adaptive_substrate` calls -- rejects
+    the exhausted-budget case deterministically and without mutating its
+    input, including on repeated retry."""
+
+    assert _is_bounded_capacity_exhaustion_error(
+        AdaptiveSubstrateValidationError("invalidation budget is exhausted")
+    )
+
+    base_adaptive = AdaptiveState.fixture("invalidation-budget-gap-adaptive")
+    target_record = _grounded_route_record(base_adaptive, "invalidation-budget-gap-target")
+    _require_child_pytest(target_record)
+    credited, _ = apply_grounded_adaptation(base_adaptive, target_record)
+    saturated = replace(credited, updates_applied=MAX_ADAPTIVE_UPDATES)
+
+    invalidating_record = _grounded_route_record_for_topology(
+        saturated.route_topology,
+        "invalidation-budget-gap-invalidator",
+        transaction_id=base_adaptive.substrate_id,
+        objective_id="invalidation-budget-gap-invalidator-objective",
+        passing=False,
+    )
+    _require_child_pytest(invalidating_record)
+
     with pytest.raises(
-        PlasticRoutingValidationError, match="topology settlement budget is exhausted"
+        AdaptiveSubstrateValidationError, match="invalidation budget is exhausted"
     ):
-        reduce_dynamical_tick(
-            state, DynamicalTick(1, (DynamicalEvent.settlement_event("budget-gap-event", record),))
+        invalidate_grounded_adaptation(
+            saturated,
+            target_record.record_id,
+            invalidating_record,
+            reason="later grounded failure",
+        )
+    # Deterministic and non-mutating: retrying the identical call against
+    # the identical (untouched) input raises the exact same way every time.
+    with pytest.raises(
+        AdaptiveSubstrateValidationError, match="invalidation budget is exhausted"
+    ):
+        invalidate_grounded_adaptation(
+            saturated,
+            target_record.record_id,
+            invalidating_record,
+            reason="later grounded failure",
         )
 
 
@@ -753,3 +1030,204 @@ def test_stale_task_state_version_settlement_is_withheld_even_after_many_interve
     assert trace.noncreditable_settlement_ids == (record.record_id,)
     assert "not bound to the substrate task state" in trace.withheld_events[0].reason
     assert final.medium.adaptive_state == before
+
+
+# ---------------------------------------------------------------------------
+# Second pass: bounded combinatorial soak across legal + pathological mixes
+# ---------------------------------------------------------------------------
+
+NUM_COMBINATORIAL_SESSIONS = 15
+TICKS_PER_COMBINATORIAL_SESSION = 80
+TOTAL_COMBINATORIAL_TICKS = NUM_COMBINATORIAL_SESSIONS * TICKS_PER_COMBINATORIAL_SESSION
+
+_COMBINATORIAL_DIMENSIONS = (
+    "event_ordering",
+    "rollback_distance",
+    "stale_state_age",
+    "settlement_saturation",
+    "reset_timing",
+    "invalidation_timing",
+    "topology_selection_age",
+    "resource_saturation",
+    "contradictory_observation",
+)
+
+
+def test_bounded_combinatorial_soak_across_legal_and_pathological_dimensions() -> None:
+    """Second-pass bounded combinatorial soak: a seeded, deterministic mix
+    of legal and pathological conditions across nine independent dimensions
+    -- event ordering, rollback distance, stale-state age, settlement
+    saturation, reset timing, invalidation timing, topology-selection age,
+    resource saturation, and contradictory observations -- run across many
+    independent bounded sessions with every global invariant re-checked
+    after every single tick.
+
+    Cost discipline matches the first pass: real subprocess grounded
+    execution is used only where a genuine grounded record is structurally
+    required (one reusable record per session for settlement saturation,
+    plus a small module-shared pool for the cross-session staleness/aging
+    dimensions), never once per combination.
+
+    Every pathological branch must resolve to a deterministic, non-mutating
+    withheld outcome or an explicit, expected fail-closed rejection --
+    nothing may silently succeed, corrupt state, or crash."""
+
+    rng = random.Random(20260826_02)
+
+    # A small pool of records shared across *every* session, built once.
+    # Because they are permanently bound to this template session's own
+    # transaction/objective/topology lineage, replaying them against any
+    # *other* session's independently-seeded state is unconditionally
+    # stale/mismatched -- exactly the cross-context aging behavior the
+    # stale-state-age and reset-timing dimensions need to stress, at the
+    # cost of only two subprocess calls for the whole test.
+    template_state = _grounded_dynamical_state("combo-template")
+    cross_context_record = _grounded_route_record_from_dynamical(
+        template_state, "combo-template-cross-context"
+    )
+    _require_child_pytest(cross_context_record)
+    aged_topology_record = _grounded_route_record_for_topology(
+        template_state.medium.adaptive_state.route_topology.reset(),
+        "combo-template-aged-topology",
+        transaction_id=template_state.transaction_id,
+        objective_id=template_state.objective_id,
+    )
+
+    total_ticks = 0
+    for session_index in range(NUM_COMBINATORIAL_SESSIONS):
+        state = _grounded_dynamical_state(f"combo-session-{session_index}")
+        # One real grounded record owned by *this* session, used to stress
+        # settlement saturation: it can genuinely succeed exactly once
+        # (real credit), after which every further replay in this same
+        # session must be withheld as already-applied -- cheap, deterministic
+        # saturation pressure from a single subprocess call per session.
+        session_credit_record = _grounded_route_record_from_dynamical(
+            state, f"combo-{session_index}-credit"
+        )
+        _require_child_pytest(session_credit_record)
+        contradiction = _contradiction_record(state, f"combo-{session_index}-contradiction")
+        checkpoints_seen: tuple[str, ...] = ()
+
+        for tick in range(1, TICKS_PER_COMBINATORIAL_SESSION + 1):
+            dimension = rng.choice(_COMBINATORIAL_DIMENSIONS)
+            event_id_base = f"combo-{session_index}-t{tick}-{dimension}"
+
+            if dimension == "event_ordering":
+                # A single tick carrying several distinct event kinds at
+                # once forces the fabric's canonical ordering logic to run
+                # on a non-trivial, deterministic multi-kind batch.
+                events = (
+                    DynamicalEvent.resource_event(
+                        f"{event_id_base}-resource", round(rng.random(), 4)
+                    ),
+                    DynamicalEvent.observation_event(
+                        f"{event_id_base}-observation",
+                        round(rng.random(), 4),
+                        round(rng.random(), 4),
+                    ),
+                    DynamicalEvent.signal_event(
+                        f"{event_id_base}-signal",
+                        make_bound_signal(
+                            f"{event_id_base}-signal-payload",
+                            "candidate.urgency",
+                            transaction_id=state.transaction_id,
+                            objective_id=state.objective_id,
+                            task_state_id=state.task_state_id,
+                            task_state_version=state.task_state_version,
+                            source="combinatorial-soak",
+                            cause=f"{event_id_base}-cause",
+                        ),
+                    ),
+                    DynamicalEvent.settlement_event(
+                        f"{event_id_base}-contradiction", contradiction
+                    ),
+                )
+            elif dimension == "rollback_distance":
+                mode = rng.choice(("bogus", "evicted", "recent"))
+                if mode == "recent" and checkpoints_seen:
+                    checkpoint_id = checkpoints_seen[-1]
+                elif mode == "evicted" and checkpoints_seen:
+                    checkpoint_id = checkpoints_seen[0]
+                else:
+                    checkpoint_id = f"{event_id_base}-never-issued-checkpoint"
+                events = (
+                    DynamicalEvent.rollback_event(f"{event_id_base}-rollback", checkpoint_id),
+                )
+            elif dimension == "stale_state_age":
+                # Bound to a wholly different session/transaction -- always
+                # a task-state mismatch, no matter how many ticks have
+                # elapsed since the record was constructed.
+                events = (
+                    DynamicalEvent.settlement_event(
+                        f"{event_id_base}-stale", cross_context_record
+                    ),
+                )
+            elif dimension == "settlement_saturation":
+                events = (
+                    DynamicalEvent.settlement_event(
+                        f"{event_id_base}-saturation", session_credit_record
+                    ),
+                )
+            elif dimension == "reset_timing":
+                # Bound to a topology snapshot taken *before* a reset --
+                # stale forever afterward, regardless of when it is retried.
+                events = (
+                    DynamicalEvent.settlement_event(
+                        f"{event_id_base}-reset", aged_topology_record
+                    ),
+                )
+            elif dimension == "invalidation_timing":
+                # `invalidate_grounded_adaptation` has no tick-reducer event
+                # today (see the dedicated scope-note test above); probe it
+                # on an independent snapshot of the *current* adaptive state
+                # so a pathological attempt can never influence the live
+                # dynamical lineage running in this same session.
+                snapshot = state.medium.adaptive_state
+                try:
+                    invalidate_grounded_adaptation(
+                        snapshot,
+                        session_credit_record.record_id,
+                        cross_context_record,
+                        reason="combinatorial soak invalidation probe",
+                    )
+                except AdaptiveSubstrateValidationError:
+                    pass
+                assert state.medium.adaptive_state == snapshot
+                events = (
+                    DynamicalEvent.resource_event(f"{event_id_base}-filler", 0.2),
+                )
+            elif dimension == "topology_selection_age":
+                selection = select_candidate_route(
+                    state.medium.adaptive_state.route_topology,
+                    "candidate-work",
+                    transaction_id=state.transaction_id,
+                    objective_id=state.objective_id,
+                    task_state_id=state.task_state_id,
+                    task_state_version=state.task_state_version,
+                )
+                assert selection.route_id in {
+                    route.route_id
+                    for route in state.medium.adaptive_state.route_topology.routes
+                }
+                events = (
+                    DynamicalEvent.resource_event(f"{event_id_base}-filler", 0.3),
+                )
+            elif dimension == "resource_saturation":
+                pressure = rng.choice((0.0, 1.0, 0.999999, round(rng.random(), 6)))
+                events = (
+                    DynamicalEvent.resource_event(f"{event_id_base}-pressure", pressure),
+                )
+            else:  # contradictory_observation
+                events = (
+                    DynamicalEvent.observation_event(f"{event_id_base}-contradiction", 0.0, 1.0),
+                )
+
+            state, trace = reduce_dynamical_tick(state, DynamicalTick(tick, events))
+            _assert_dynamical_invariants(state)
+            checkpoints_seen = tuple(
+                checkpoint.checkpoint_id
+                for checkpoint in state.medium.adaptive_state.checkpoints
+            )
+            total_ticks += 1
+
+    assert total_ticks == TOTAL_COMBINATORIAL_TICKS
