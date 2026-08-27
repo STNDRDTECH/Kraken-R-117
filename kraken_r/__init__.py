@@ -6,6 +6,7 @@ import, start, or adapt any legacy ROGAL runtime component.
 
 from .contracts import (
     Action,
+    ancestry_cycle_errors,
     Authority,
     Capability,
     ContractValidationError,
@@ -256,6 +257,7 @@ from .task_integrity import (
 
 __all__ = [
     "Action",
+    "ancestry_cycle_errors",
     "AdaptiveAudit",
     "AdaptiveCheckpoint",
     "AdaptiveState",

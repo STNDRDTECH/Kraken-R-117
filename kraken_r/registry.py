@@ -8,6 +8,7 @@ from dataclasses import dataclass
 from datetime import date
 from enum import Enum
 from pathlib import Path
+from types import MappingProxyType
 from typing import Any, Iterable, Mapping
 
 
@@ -224,8 +225,14 @@ class ArchitectureRegistry:
         self.registry_id = registry_id
         self.version = version
         self.last_reviewed = last_reviewed
-        self.authority_boundary = dict(authority_boundary or {})
-        self._mechanisms = {record.mechanism_id: record for record in mechanisms}
+        self.authority_boundary = MappingProxyType(dict(authority_boundary or {}))
+        records = tuple(mechanisms)
+        duplicate_ids = _duplicates(record.mechanism_id for record in records)
+        if duplicate_ids:
+            raise ArchitectureRegistryError(
+                f"Duplicate mechanism IDs: {', '.join(sorted(duplicate_ids))}"
+            )
+        self._mechanisms = {record.mechanism_id: record for record in records}
 
     @classmethod
     def from_dict(cls, payload: Mapping[str, Any]) -> "ArchitectureRegistry":

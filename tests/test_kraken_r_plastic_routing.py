@@ -6,8 +6,13 @@ from dataclasses import replace
 
 import pytest
 
+import ast
+from pathlib import Path
+
 from kraken_r import (
     CycleMode,
+    MAX_WEIGHT,
+    MIN_WEIGHT,
     PlasticRoutingValidationError,
     RouteTopology,
     SettlementRouteRecord,
@@ -16,6 +21,35 @@ from kraken_r import (
     run_constitutional_cycle,
     select_candidate_route,
 )
+
+ROOT = Path(__file__).resolve().parents[1]
+
+
+def test_no_module_redefines_a_conflicting_route_weight_ceiling() -> None:
+    """``plastic_routing.py`` is the single source of ``MIN_WEIGHT``/``MAX_WEIGHT``.
+    ``adaptive_substrate.py`` and ``dynamical_substrate.py`` must import these
+    constants rather than declaring their own value under the same name --
+    two differing ceilings for the same bounded quantity would silently pick
+    whichever one a given code path happened to read."""
+
+    assert 0.0 <= MIN_WEIGHT < MAX_WEIGHT <= 1.0
+
+    for module_name in ("adaptive_substrate", "dynamical_substrate"):
+        source = (ROOT / "kraken_r" / f"{module_name}.py").read_text()
+        tree = ast.parse(source)
+        assignments = {
+            target.id
+            for node in ast.walk(tree)
+            if isinstance(node, ast.Assign)
+            for target in node.targets
+            if isinstance(target, ast.Name)
+        }
+        redefined = assignments & {"MIN_WEIGHT", "MAX_WEIGHT"}
+        assert not redefined, (
+            f"{module_name}.py redefines {redefined}; it must import the "
+            "canonical constants from plastic_routing.py instead"
+        )
+        assert "MIN_WEIGHT" in source and "MAX_WEIGHT" in source
 
 
 def _trace(label: str, mode: CycleMode) -> object:

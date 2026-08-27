@@ -263,6 +263,12 @@ class SignalNetwork:
         self._rules = tuple(sorted(tuple(rules), key=lambda rule: rule.rule_id))
         if any(not isinstance(rule, SignalRule) for rule in self._rules):
             raise SignalPropagationError("signal rules must be SignalRule records")
+        rule_ids = [rule.rule_id for rule in self._rules]
+        if len(set(rule_ids)) != len(rule_ids):
+            duplicates = sorted({rid for rid in rule_ids if rule_ids.count(rid) > 1})
+            raise SignalPropagationError(
+                f"duplicate signal rule ids: {', '.join(duplicates)}"
+            )
         if max_ticks < 0 or max_deliveries < 1 or max_fanout < 1:
             raise SignalPropagationError("propagation budgets must be positive")
         self._max_ticks = max_ticks

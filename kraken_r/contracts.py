@@ -6,12 +6,13 @@ have no persistence, event bus, executor, LLM, or legacy ROGAL dependency.
 
 from __future__ import annotations
 
+from collections import deque
 from dataclasses import dataclass, field, fields, is_dataclass
 from enum import Enum
 import hashlib
 import json
 from types import MappingProxyType
-from typing import Any, Mapping, Optional
+from typing import Any, Iterable, Mapping, Optional
 
 
 class ContractValidationError(ValueError):
@@ -149,8 +150,12 @@ class TaskState(_Contract):
         _identifier(self.state_id, "state_id")
         _identifier(self.objective_id, "objective_id")
         _text(self.phase, "phase")
-        if self.version < 1:
-            raise ContractValidationError("version must be at least 1")
+        if (
+            isinstance(self.version, bool)
+            or not isinstance(self.version, int)
+            or self.version < 1
+        ):
+            raise ContractValidationError("version must be an integer at least 1")
         object.__setattr__(self, "values", _frozen_mapping(self.values, "values"))
         object.__setattr__(
             self, "evidence_ids", _frozen_tuple(self.evidence_ids, "evidence_ids")
@@ -255,15 +260,25 @@ class Signal(_Contract):
                 raise ContractValidationError(
                     "task_state_version requires task_state_id"
                 )
-            if not isinstance(self.task_state_version, int) or self.task_state_version < 1:
+            if (
+                isinstance(self.task_state_version, bool)
+                or not isinstance(self.task_state_version, int)
+                or self.task_state_version < 1
+            ):
                 raise ContractValidationError(
                     "task_state_version must be a positive integer"
                 )
         if self.ttl is not None and (
-            not isinstance(self.ttl, int) or self.ttl < 0
+            isinstance(self.ttl, bool)
+            or not isinstance(self.ttl, int)
+            or self.ttl < 0
         ):
             raise ContractValidationError("ttl must be a non-negative integer")
-        if not isinstance(self.created_tick, int) or self.created_tick < 0:
+        if (
+            isinstance(self.created_tick, bool)
+            or not isinstance(self.created_tick, int)
+            or self.created_tick < 0
+        ):
             raise ContractValidationError("created_tick must be a non-negative integer")
         if self.source is not None:
             _identifier(self.source, "source")
@@ -339,6 +354,10 @@ class ExecutionResult(_Contract):
         _identifier(self.execution_id, "execution_id")
         _identifier(self.action_id, "action_id")
         _text(self.status, "status")
+        if self.exit_code is not None and (
+            isinstance(self.exit_code, bool) or not isinstance(self.exit_code, int)
+        ):
+            raise ContractValidationError("exit_code must be an integer when present")
         object.__setattr__(
             self, "observations", _frozen_mapping(self.observations, "observations")
         )
@@ -493,6 +512,12 @@ class Mutation(_Contract):
         object.__setattr__(
             self, "parent_ids", _frozen_tuple(self.parent_ids, "parent_ids")
         )
+        if self.mutation_id in self.parent_ids:
+            raise ContractValidationError(
+                "mutation cannot list itself among its own parent_ids"
+            )
+        if len(set(self.parent_ids)) != len(self.parent_ids):
+            raise ContractValidationError("mutation parent_ids must not contain duplicates")
         object.__setattr__(
             self, "authority", _enum_value(self.authority, Authority, "authority")
         )
@@ -515,6 +540,10 @@ class Lineage(_Contract):
         object.__setattr__(
             self, "parent_ids", _frozen_tuple(self.parent_ids, "parent_ids")
         )
+        if self.subject_id in self.parent_ids:
+            raise ContractValidationError("lineage subject cannot be its own parent")
+        if len(set(self.parent_ids)) != len(self.parent_ids):
+            raise ContractValidationError("lineage parent_ids must not contain duplicates")
         object.__setattr__(
             self, "evidence_ids", _frozen_tuple(self.evidence_ids, "evidence_ids")
         )
@@ -542,8 +571,50 @@ class Regression(_Contract):
         )
 
 
+def ancestry_cycle_errors(
+    records: Iterable[Any], *, id_field: str, parent_field: str
+) -> list[str]:
+    """Detect circular ancestry across a caller-supplied collection.
+
+    Pure and read-only: each individual record already rejects a
+    self-reference and duplicate parents in its own ``__post_init__``, but a
+    cycle can only be seen across a whole collection (A parents B, B parents
+    A). This performs the same bounded Kahn's-algorithm check used by
+    ``ArchitectureRegistry._dependency_cycle_errors`` -- it is not a
+    persisted registry of its own; callers pass in whatever bounded
+    collection of ``Mutation`` or ``Lineage`` records they already hold and
+    nothing here is retained across calls.
+    """
+
+    records = tuple(records)
+    ids = {getattr(record, id_field) for record in records}
+    indegree: dict[str, int] = {record_id: 0 for record_id in ids}
+    dependents: dict[str, list[str]] = {record_id: [] for record_id in ids}
+    for record in records:
+        record_id = getattr(record, id_field)
+        for parent_id in getattr(record, parent_field):
+            if parent_id in ids:
+                indegree[record_id] += 1
+                dependents[parent_id].append(record_id)
+
+    queue = deque(record_id for record_id, degree in indegree.items() if degree == 0)
+    processed = 0
+    while queue:
+        record_id = queue.popleft()
+        processed += 1
+        for dependent in dependents[record_id]:
+            indegree[dependent] -= 1
+            if indegree[dependent] == 0:
+                queue.append(dependent)
+    if processed == len(ids):
+        return []
+    cycle_nodes = sorted(record_id for record_id, degree in indegree.items() if degree > 0)
+    return ["Ancestry cycle detected: " + ", ".join(cycle_nodes)]
+
+
 __all__ = [
     "Action",
+    "ancestry_cycle_errors",
     "Authority",
     "Capability",
     "ContractValidationError",

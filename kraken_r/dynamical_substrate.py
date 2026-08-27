@@ -44,6 +44,8 @@ from .physiology import (
 )
 from .plastic_routing import (
     BASELINE_WEIGHT,
+    MAX_WEIGHT,
+    MIN_WEIGHT,
     PlasticRoutingValidationError,
     SettlementRouteRecord,
     apply_settlement_learning,
@@ -123,6 +125,17 @@ def _unit(value: float, name: str) -> float:
     value = float(value)
     if not math.isfinite(value) or not 0.0 <= value <= 1.0:
         raise DynamicalSubstrateValidationError(f"{name} must be between 0 and 1")
+    return round(value, 6)
+
+
+def _weight(value: float, name: str) -> float:
+    if isinstance(value, bool) or not isinstance(value, (int, float)):
+        raise DynamicalSubstrateValidationError(f"{name} must be numeric")
+    value = float(value)
+    if not math.isfinite(value) or not MIN_WEIGHT <= value <= MAX_WEIGHT:
+        raise DynamicalSubstrateValidationError(
+            f"{name} must be between {MIN_WEIGHT} and {MAX_WEIGHT}"
+        )
     return round(value, 6)
 
 
@@ -710,6 +723,8 @@ class DynamicalTickTrace:
     inhibited: bool
     reason: str
     inactive_decay_route_id: str | None = None
+    inactive_decay_weight_before: float | None = None
+    inactive_decay_weight_after: float | None = None
 
     def __post_init__(self) -> None:
         _integer(self.tick, "tick")
@@ -747,6 +762,26 @@ class DynamicalTickTrace:
         _text(self.reason, "reason")
         if self.inactive_decay_route_id is not None:
             _identifier(self.inactive_decay_route_id, "inactive_decay_route_id")
+        if self.inactive_decay_weight_before is not None:
+            object.__setattr__(
+                self,
+                "inactive_decay_weight_before",
+                _weight(self.inactive_decay_weight_before, "inactive_decay_weight_before"),
+            )
+        if self.inactive_decay_weight_after is not None:
+            object.__setattr__(
+                self,
+                "inactive_decay_weight_after",
+                _weight(self.inactive_decay_weight_after, "inactive_decay_weight_after"),
+            )
+        if (self.inactive_decay_route_id is None) != (
+            self.inactive_decay_weight_before is None
+        ) or (self.inactive_decay_route_id is None) != (
+            self.inactive_decay_weight_after is None
+        ):
+            raise DynamicalSubstrateValidationError(
+                "inactive-route decay audit fields must be present together or absent together"
+            )
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -765,6 +800,8 @@ class DynamicalTickTrace:
             "inhibited": self.inhibited,
             "reason": self.reason,
             "inactive_decay_route_id": self.inactive_decay_route_id,
+            "inactive_decay_weight_before": self.inactive_decay_weight_before,
+            "inactive_decay_weight_after": self.inactive_decay_weight_after,
         }
 
 
@@ -905,17 +942,20 @@ def _withheld_settlement(
 
 def _decay_inactive_route(
     adaptive: AdaptiveState, active_route_id: str | None
-) -> tuple[AdaptiveState, str | None]:
+) -> tuple[AdaptiveState, str | None, float | None, float | None]:
     """Fade one inactive candidate preference toward neutral without credit.
 
     This is an explicit tick effect over caller-owned state.  It does not add a
     settlement, evidence identity, audit, connection, tactic, or update budget
     entry; it only prevents a previously selected candidate preference from
     retaining excess influence while its caller continues to submit empty ticks.
+    The before/after weight is still returned so the caller can attach a
+    non-creditable, observability-only entry to the tick trace -- this decay
+    must remain visible without ever becoming a credit-bearing AdaptiveAudit.
     """
 
     if active_route_id is None:
-        return adaptive, None
+        return adaptive, None, None, None
     route = next(
         (
             item
@@ -925,10 +965,10 @@ def _decay_inactive_route(
         None,
     )
     if route is None:
-        return adaptive, None
+        return adaptive, None, None, None
     delta = min(MAX_ROUTE_DECAY, abs(route.weight - BASELINE_WEIGHT))
     if delta == 0.0:
-        return adaptive, None
+        return adaptive, None, None, None
     next_weight = round(
         route.weight - delta if route.weight > BASELINE_WEIGHT else route.weight + delta,
         6,
@@ -943,7 +983,12 @@ def _decay_inactive_route(
             for item in adaptive.route_topology.routes
         ),
     )
-    return replace(adaptive, route_topology=next_topology), active_route_id
+    return (
+        replace(adaptive, route_topology=next_topology),
+        active_route_id,
+        route.weight,
+        next_weight,
+    )
 
 
 def _reduce_dynamical_tick_counterfactual(
@@ -1259,8 +1304,15 @@ def _reduce_dynamical_tick_counterfactual(
             decay_events = _increment(decay_events, MAX_EVENT_COUNTER)
 
     inactive_decay_route_id: str | None = None
+    inactive_decay_weight_before: float | None = None
+    inactive_decay_weight_after: float | None = None
     if controls["decay"] and not ordered and route_id is not None:
-        adaptive, inactive_decay_route_id = _decay_inactive_route(adaptive, route_id)
+        (
+            adaptive,
+            inactive_decay_route_id,
+            inactive_decay_weight_before,
+            inactive_decay_weight_after,
+        ) = _decay_inactive_route(adaptive, route_id)
         if inactive_decay_route_id is not None:
             turnover = _increment(turnover, MAX_EVENT_COUNTER)
             decay_events = _increment(decay_events, MAX_EVENT_COUNTER)
@@ -1386,6 +1438,8 @@ def _reduce_dynamical_tick_counterfactual(
             else "bounded tick reduced signals, observations, physiology, and candidate state"
         ),
         inactive_decay_route_id,
+        inactive_decay_weight_before,
+        inactive_decay_weight_after,
     )
     return next_state, trace
 

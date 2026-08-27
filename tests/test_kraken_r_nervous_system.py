@@ -14,6 +14,7 @@ from kraken_r import (
     PropagationEffect,
     PropagationLimitError,
     SignalNetwork,
+    SignalPropagationError,
     SignalReplayRecord,
     SignalRule,
     Signal,
@@ -203,6 +204,28 @@ def test_uncertainty_signal_changes_only_the_candidate_trajectory_and_replays() 
     assert enabled.decision.outcome == "insufficient_evidence"
     assert enabled.evidence == ()
     assert ablated.decision.outcome == "success"
+
+
+def test_network_construction_rejects_duplicate_signal_rule_ids() -> None:
+    """Rules are sorted by ``rule_id`` for deterministic matching order, but
+    sorting alone silently tolerates two rules sharing an id -- construction
+    must reject that outright."""
+
+    duplicate = SignalRule(
+        "duplicate-rule",
+        "candidate.urgency",
+        "candidate.observation.requested",
+        PropagationEffect.AMPLIFY,
+        amplification_factor=2,
+    )
+    conflicting = SignalRule(
+        "duplicate-rule",
+        "candidate.uncertainty",
+        "candidate.action.authorize",
+        PropagationEffect.INHIBIT,
+    )
+    with pytest.raises(SignalPropagationError, match="duplicate signal rule ids"):
+        SignalNetwork((duplicate, conflicting))
 
 
 def test_duplicate_delivery_is_deduplicated_without_changing_propagation() -> None:

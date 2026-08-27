@@ -11,6 +11,7 @@ import pytest
 
 from kraken_r import (
     Action,
+    ancestry_cycle_errors,
     ArchitectureRegistry,
     ArchitectureRegistryError,
     Authority,
@@ -175,6 +176,104 @@ def test_planned_mechanisms_are_non_authoritative_and_have_no_operational_eviden
     )
 
 
+@pytest.mark.parametrize(
+    "factory",
+    [
+        lambda: TaskState("state-bool-version", "obj-1", True, "objective"),
+        lambda: Signal(
+            "signal-bool-tsv", "topic", "corr", "test",
+            task_state_id="state-1", task_state_version=True,
+        ),
+        lambda: Signal("signal-bool-ttl", "topic", "corr", "test", ttl=True),
+        lambda: Signal("signal-bool-tick", "topic", "corr", "test", created_tick=True),
+        lambda: ExecutionResult("exec-bool-exit", "act-1", "completed", exit_code=True),
+    ],
+)
+def test_construction_time_invariants_reject_bool_masquerading_as_int(factory) -> None:
+    """``True``/``False`` are ``int`` subclasses; every numeric field here must
+    reject them explicitly rather than silently accept ``version=1`` or
+    ``ttl=1`` from a stray boolean."""
+
+    with pytest.raises(ContractValidationError):
+        factory()
+    # A real int with the same value the bool would coerce to must still work.
+    assert TaskState("state-int-version", "obj-1", 1, "objective").version == 1
+
+
+def test_mutation_and_lineage_reject_self_reference_and_duplicate_parents() -> None:
+    with pytest.raises(ContractValidationError, match="own parent"):
+        Mutation("mut-self", "propose", parent_ids=("mut-self",))
+    with pytest.raises(ContractValidationError, match="duplicate"):
+        Mutation("mut-dup", "propose", parent_ids=("mut-a", "mut-a"))
+    with pytest.raises(ContractValidationError, match="own parent"):
+        Lineage("lin-self", "subject-1", parent_ids=("subject-1",))
+    with pytest.raises(ContractValidationError, match="duplicate"):
+        Lineage("lin-dup", "subject-1", parent_ids=("mut-a", "mut-a"))
+    # Legitimate, non-circular ancestry still constructs cleanly.
+    assert Mutation("mut-child", "propose", parent_ids=("mut-parent",)).parent_ids == (
+        "mut-parent",
+    )
+
+
+def test_ancestry_cycle_errors_detects_circular_support_across_a_collection() -> None:
+    acyclic = (
+        Mutation("mut-a", "propose", parent_ids=()),
+        Mutation("mut-b", "propose", parent_ids=("mut-a",)),
+        Mutation("mut-c", "propose", parent_ids=("mut-b",)),
+    )
+    assert ancestry_cycle_errors(
+        acyclic, id_field="mutation_id", parent_field="parent_ids"
+    ) == []
+
+    # Each pairwise link (a<-b<-c<-... ) is legal alone; only the full
+    # collection reveals the cycle a->b->c->a.
+    cyclic = (
+        Mutation("mut-x", "propose", parent_ids=("mut-z",)),
+        Mutation("mut-y", "propose", parent_ids=("mut-x",)),
+        Mutation("mut-z", "propose", parent_ids=("mut-y",)),
+    )
+    errors = ancestry_cycle_errors(
+        cyclic, id_field="mutation_id", parent_field="parent_ids"
+    )
+    assert errors and "cycle" in errors[0].lower()
+
+    # Lineage ancestry chains through subject_id, not lineage_id -- each
+    # individual record is legal (no self-reference), but the collection as
+    # a whole is circular.
+    lineages = (
+        Lineage("lin-p", "subject-p", parent_ids=("subject-q",)),
+        Lineage("lin-q", "subject-q", parent_ids=("subject-p",)),
+    )
+    errors = ancestry_cycle_errors(
+        lineages, id_field="subject_id", parent_field="parent_ids"
+    )
+    assert errors and "cycle" in errors[0].lower()
+
+    # A pure, read-only check: calling it twice with the same inputs must
+    # not mutate anything or accumulate state -- it is not a persisted
+    # registry of its own.
+    assert errors == ancestry_cycle_errors(
+        lineages, id_field="subject_id", parent_field="parent_ids"
+    )
+
+
+def test_ancestry_cycle_errors_does_not_falsely_pass_a_single_use_generator() -> None:
+    """The type hint accepts any ``Iterable``, including a one-shot generator.
+    If the implementation walks it twice (once for ids, once for edges)
+    without materializing it first, the second pass sees an exhausted
+    generator and a real cycle silently reads back as ``[]`` -- a false-safe
+    result in an integrity check."""
+
+    cyclic = (
+        Mutation("mut-gen-x", "propose", parent_ids=("mut-gen-y",)),
+        Mutation("mut-gen-y", "propose", parent_ids=("mut-gen-x",)),
+    )
+    errors = ancestry_cycle_errors(
+        iter(cyclic), id_field="mutation_id", parent_field="parent_ids"
+    )
+    assert errors and "cycle" in errors[0].lower()
+
+
 def test_registry_rejects_duplicate_ids_unknown_references_and_cycles() -> None:
     raw = json.loads((ROOT / "kraken_r/architecture_registry.json").read_text())
     duplicate = dict(raw["mechanisms"][0])
@@ -196,6 +295,22 @@ def test_registry_rejects_duplicate_ids_unknown_references_and_cycles() -> None:
     )
     report = ArchitectureRegistry([a, b]).validate()
     assert any("Dependency cycle" in error for error in report.errors)
+
+
+def test_registry_direct_construction_rejects_duplicate_mechanism_ids() -> None:
+    """``from_dict`` already rejects duplicates; direct construction must too,
+    or a caller who skips ``from_dict`` can silently lose a mechanism to a
+    last-write-wins dict comprehension."""
+
+    record = load_default_registry().all()[0]
+    with pytest.raises(ArchitectureRegistryError, match="Duplicate mechanism IDs"):
+        ArchitectureRegistry([record, record])
+
+
+def test_registry_authority_boundary_is_immutable() -> None:
+    registry = load_default_registry()
+    with pytest.raises(TypeError):
+        registry.authority_boundary["kraken_candidate"] = "tampered"
 
 
 def test_registry_strictly_requires_constitutional_metadata_and_json_types() -> None:

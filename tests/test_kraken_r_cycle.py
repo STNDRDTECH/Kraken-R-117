@@ -6,8 +6,11 @@ from pathlib import Path
 
 import pytest
 
+from dataclasses import replace
+
 from kraken_r import (
     Authority,
+    ConstitutionalCycle,
     CycleInvariantError,
     CycleMode,
     EvidenceGrade,
@@ -87,6 +90,52 @@ def test_non_success_paths_remain_honest(
 def test_action_authority_is_required_and_candidate_only(authority) -> None:
     with pytest.raises(CycleInvariantError, match="authority"):
         run_constitutional_cycle(objective(), action_authority=authority)
+
+
+def test_validate_trace_rejects_an_out_of_order_phase() -> None:
+    """A hand-tampered trace that skips ``authorized`` straight to ``observed``
+    from ``signaled`` must be rejected even though version numbers stay
+    contiguous."""
+
+    trace = run_constitutional_cycle(objective())
+    states = list(trace.states)
+    # states[4] is normally "authorized"; replace it with an out-of-sequence
+    # phase that "signaled" (states[3]) is not permitted to transition into.
+    states[4] = replace(states[4], phase="settled")
+    tampered = replace(trace, states=tuple(states))
+    with pytest.raises(CycleInvariantError, match="invalid phase transition"):
+        ConstitutionalCycle._validate_trace(tampered)
+
+
+def test_validate_trace_rejects_broken_identity_bindings() -> None:
+    trace = run_constitutional_cycle(objective())
+
+    bad_settlement = replace(trace.settlement, decision_id="some-other-decision")
+    with pytest.raises(CycleInvariantError, match="not bound to the cycle decision"):
+        ConstitutionalCycle._validate_trace(replace(trace, settlement=bad_settlement))
+
+    bad_learning = replace(trace.learning_update, settlement_id="some-other-settlement")
+    with pytest.raises(CycleInvariantError, match="not bound to the cycle settlement"):
+        ConstitutionalCycle._validate_trace(replace(trace, learning_update=bad_learning))
+
+    bad_decision = replace(trace.decision, objective_id="some-other-objective")
+    with pytest.raises(CycleInvariantError, match="not bound to the cycle objective"):
+        ConstitutionalCycle._validate_trace(replace(trace, decision=bad_decision))
+
+
+def test_validate_trace_rejects_evidence_ids_outside_the_cycle() -> None:
+    """State-to-record continuity: a record referencing an evidence id that
+    was never produced by this cycle must fail, not pass silently."""
+
+    trace = run_constitutional_cycle(objective())
+    bad_capability = replace(trace.capability, evidence_ids=("forged-evidence-id",))
+    with pytest.raises(CycleInvariantError, match="evidence outside this cycle"):
+        ConstitutionalCycle._validate_trace(replace(trace, capability=bad_capability))
+
+    states = list(trace.states)
+    states[-1] = replace(states[-1], evidence_ids=("forged-evidence-id",))
+    with pytest.raises(CycleInvariantError, match="evidence outside this cycle"):
+        ConstitutionalCycle._validate_trace(replace(trace, states=tuple(states)))
 
 
 def test_cycle_does_not_import_or_mutate_legacy_runtime() -> None:

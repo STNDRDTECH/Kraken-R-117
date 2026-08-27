@@ -58,6 +58,27 @@ class CycleMode(str, Enum):
     INSUFFICIENT_EVIDENCE = "insufficient_evidence"
 
 
+# The one canonical phase graph the fixed-sequence cycle in ``run()`` walks.
+# ``_advance`` checks every transition against this table so a hand-built or
+# future trace can never claim an out-of-order phase; it is descriptive of
+# the existing sequence, not a new controller or authority.
+_PHASE_TRANSITIONS: Mapping[str, frozenset[str]] = {
+    "objective": frozenset({"planned"}),
+    "planned": frozenset({"hypothesized"}),
+    "hypothesized": frozenset({"signaled"}),
+    "signaled": frozenset({"authorized", "inhibited"}),
+    "authorized": frozenset({"observed"}),
+    "inhibited": frozenset({"observed"}),
+    "observed": frozenset({"evidenced", "evidence_insufficient"}),
+    "evidenced": frozenset({"decided"}),
+    "evidence_insufficient": frozenset({"decided"}),
+    "decided": frozenset({"settled"}),
+    "settled": frozenset({"learned", "learning_withheld"}),
+    "learned": frozenset({"stopped"}),
+    "learning_withheld": frozenset({"stopped"}),
+}
+
+
 def _freeze_trace_value(value: Any) -> Any:
     if isinstance(value, Mapping):
         return MappingProxyType(
@@ -556,6 +577,11 @@ class ConstitutionalCycle:
         *,
         evidence_ids: tuple[str, ...] = (),
     ) -> TaskState:
+        allowed_next_phases = _PHASE_TRANSITIONS.get(previous.phase)
+        if allowed_next_phases is None or phase not in allowed_next_phases:
+            raise CycleInvariantError(
+                f"invalid phase transition: {previous.phase!r} -> {phase!r}"
+            )
         next_state = TaskState(
             f"{previous.objective_id}-state-{previous.version + 1}",
             previous.objective_id,
@@ -837,6 +863,51 @@ class ConstitutionalCycle:
             raise CycleInvariantError("task-state versions are not contiguous")
         if any(state.objective_id != trace.objective.objective_id for state in trace.states):
             raise CycleInvariantError("task-state objective changed during cycle")
+        expected_phase = "objective"
+        for state in trace.states[1:]:
+            allowed_next_phases = _PHASE_TRANSITIONS.get(expected_phase)
+            if allowed_next_phases is None or state.phase not in allowed_next_phases:
+                raise CycleInvariantError(
+                    f"invalid phase transition: {expected_phase!r} -> {state.phase!r}"
+                )
+            expected_phase = state.phase
+        if trace.states[0].phase != "objective":
+            raise CycleInvariantError("cycle must begin at the objective phase")
+        if trace.decision.objective_id != trace.objective.objective_id:
+            raise CycleInvariantError("decision is not bound to the cycle objective")
+        if trace.stop_decision.objective_id != trace.objective.objective_id:
+            raise CycleInvariantError("stop decision is not bound to the cycle objective")
+        if trace.settlement.decision_id != trace.decision.decision_id:
+            raise CycleInvariantError("settlement is not bound to the cycle decision")
+        if (
+            trace.learning_update is not None
+            and trace.learning_update.settlement_id != trace.settlement.settlement_id
+        ):
+            raise CycleInvariantError(
+                "learning update is not bound to the cycle settlement"
+            )
+        cycle_evidence_ids = {item.evidence_id for item in trace.evidence}
+        for record_name, record_evidence_ids in (
+            ("capability", trace.capability.evidence_ids),
+            ("decision", trace.decision.evidence_ids),
+            ("settlement", trace.settlement.evidence_ids),
+            (
+                "learning_update",
+                trace.learning_update.evidence_ids if trace.learning_update else (),
+            ),
+        ):
+            if any(eid not in cycle_evidence_ids for eid in record_evidence_ids):
+                raise CycleInvariantError(
+                    f"{record_name} references evidence outside this cycle"
+                )
+        if any(
+            eid not in cycle_evidence_ids
+            for state in trace.states
+            for eid in state.evidence_ids
+        ):
+            raise CycleInvariantError(
+                "task-state references evidence outside this cycle"
+            )
         if any(
             evidence.execution_id != trace.execution.execution_id
             or evidence.grade in {EvidenceGrade.NONE, EvidenceGrade.DECLARED}

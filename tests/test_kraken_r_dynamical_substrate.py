@@ -358,6 +358,34 @@ def test_event_identity_and_tick_order_fail_closed() -> None:
         reduce_dynamical_tick(initial, DynamicalTick(2))
 
 
+def test_same_kind_events_are_canonically_ordered_regardless_of_submission_order() -> None:
+    """Two same-kind events in one tick must reduce identically no matter what
+    order the caller supplies them in -- ``DynamicalEventFabric.order`` must
+    break ties by ``event_id``, not by submission order, or an ambiguous
+    same-kind ordering could make the tick's outcome caller-dependent."""
+
+    first = DynamicalEvent.resource_event("resource-aaa", 0.20)
+    second = DynamicalEvent.resource_event("resource-bbb", 0.40)
+
+    forward = DynamicalEventFabric.order((first, second))
+    backward = DynamicalEventFabric.order((second, first))
+    assert forward == backward == (first, second)
+
+    initial = DynamicalState.fixture()
+    state_forward, trace_forward = reduce_dynamical_tick(
+        initial, DynamicalTick(1, (first, second))
+    )
+    state_backward, trace_backward = reduce_dynamical_tick(
+        initial, DynamicalTick(1, (second, first))
+    )
+    assert state_forward == state_backward
+    assert (
+        trace_forward.event_ids
+        == trace_backward.event_ids
+        == ("resource-aaa", "resource-bbb")
+    )
+
+
 def test_stale_settlements_and_checkpoints_are_provenance_only() -> None:
     initial = _grounded_state("stale-lineage")
     topology = initial.medium.adaptive_state.route_topology
@@ -557,6 +585,30 @@ def test_inactive_candidate_decay_is_explicit_neutral_and_noncrediting() -> None
     assert decayed_route.weight == pytest.approx(0.60)
     assert next_state.medium.adaptive_state.applied_record_ids == ()
     assert next_state.medium.decay_events == 1
+    # Idle decay must remain observable (invariant: unaudited inactive-route
+    # decay) without ever becoming a credit-bearing AdaptiveAudit -- it
+    # carries its own before/after weight on the tick trace instead.
+    assert trace.inactive_decay_weight_before == pytest.approx(0.65)
+    assert trace.inactive_decay_weight_after == pytest.approx(0.60)
+    assert trace.to_dict()["inactive_decay_weight_before"] == pytest.approx(0.65)
+
+
+def test_inactive_decay_audit_fields_are_present_or_absent_together() -> None:
+    initial = DynamicalState.fixture()
+    next_state, trace = reduce_dynamical_tick(
+        initial,
+        DynamicalTick(1, (DynamicalEvent.observation_event("obs", 0.5, 0.5),)),
+    )
+    # No idle-route decay happened this tick (an event was delivered), so
+    # none of the three decay-audit fields should be populated.
+    assert trace.inactive_decay_route_id is None
+    assert trace.inactive_decay_weight_before is None
+    assert trace.inactive_decay_weight_after is None
+
+    with pytest.raises(
+        DynamicalSubstrateValidationError, match="present together or absent together"
+    ):
+        replace(trace, inactive_decay_route_id="some-route")
 
 
 def test_noninactive_ticks_cannot_trigger_automatic_candidate_decay() -> None:
