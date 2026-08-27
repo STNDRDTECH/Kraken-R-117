@@ -9,9 +9,12 @@ import tempfile
 import pytest
 
 from kraken_r import (
+    ADAPTIVE_FIELD_CONSUMERS,
     AdaptiveState,
     AdaptiveSubstrateValidationError,
     CandidateConnection,
+    ConnectionLifecycle,
+    EvidenceAuthorityTier,
     GroundedDeliveryLedger,
     GroundedExecutionExecutor,
     GroundedExecutionRequest,
@@ -24,11 +27,14 @@ from kraken_r import (
     SettlementRouteRecord,
     TaskState,
     apply_grounded_adaptation,
+    derive_advisory_cognition,
     form_grounded_connection,
     invalidate_grounded_adaptation,
     make_grounded_action,
     replay_adaptive_updates,
     replay_adaptive_invalidations,
+    recover_grounded_connection,
+    retire_grounded_connection,
     rollback_adaptive_state,
     run_constitutional_cycle,
     run_orzhaal_experiment,
@@ -44,6 +50,7 @@ def _grounded_record(
     *,
     passing: bool = True,
     files: dict[str, str] | None = None,
+    causal_parent_record_id: str | None = None,
 ):
     objective = Objective(
         f"{label}-objective",
@@ -75,6 +82,7 @@ def _grounded_record(
         action,
         workspace_files,
         tuple(path for path in workspace_files if path.startswith("test")),
+        causal_parent_record_id=causal_parent_record_id,
     )
     ledger = GroundedDeliveryLedger(
         Path(tempfile.mkdtemp(prefix="kraken-r-stage10-receipts-")) / "receipts.json"
@@ -94,8 +102,18 @@ def _grounded_record(
     return request, verifier, verified, trace
 
 
-def _route_record(state: AdaptiveState, label: str, *, passing: bool = True):
-    request, verifier, verified, trace = _grounded_record(label, passing=passing)
+def _route_record(
+    state: AdaptiveState,
+    label: str,
+    *,
+    passing: bool = True,
+    causal_parent_record_id: str | None = None,
+):
+    request, verifier, verified, trace = _grounded_record(
+        label,
+        passing=passing,
+        causal_parent_record_id=causal_parent_record_id,
+    )
     selection = select_candidate_route(
         state.route_topology,
         "candidate-work",
@@ -116,6 +134,11 @@ def _route_record(state: AdaptiveState, label: str, *, passing: bool = True):
             "route_id": selection.route_id,
             "settlement_id": trace.settlement.settlement_id,
             "evidence_ids": tuple(item.evidence_id for item in trace.evidence),
+            **(
+                {"causal_parent_record_id": causal_parent_record_id}
+                if causal_parent_record_id is not None
+                else {}
+            ),
         },
         grounded_execution=verified,
         grounded_request=request,
@@ -247,13 +270,12 @@ def test_connection_limits_tactic_switch_and_advisory_signals() -> None:
     unrelated = CandidateConnection(
         "candidate-connection-6f11590ea0b3b512", "other", "edge"
     )
-    malformed = replace(state, connections=state.connections + (unrelated,))
-    unrelated_failure = _route_record(
-        malformed, "adaptive-unrelated-connection-failure", passing=False
-    )
-    with pytest.raises(AdaptiveSubstrateValidationError, match="selected route"):
-        weaken_grounded_connection(
-            malformed, unrelated_failure, unrelated.connection_id
+    with pytest.raises(
+        AdaptiveSubstrateValidationError, match="grounded lifecycle lineage"
+    ):
+        replace(
+            state,
+            connections=state.connections + (unrelated,),
         )
 
     tactic_record = _route_record(state, "adaptive-tactic-failure", passing=False)
@@ -353,7 +375,12 @@ def test_stale_topology_generation_and_replay_after_invalidation_fail_closed() -
 
     success = _route_record(initial, "lineage-replay-success")
     reinforced, _ = apply_grounded_adaptation(initial, success)
-    failure = _route_record(reinforced, "lineage-replay-failure", passing=False)
+    failure = _route_record(
+        reinforced,
+        "lineage-replay-failure",
+        passing=False,
+        causal_parent_record_id=success.record_id,
+    )
     invalidated, _ = invalidate_grounded_adaptation(
         reinforced, success.record_id, failure, reason="verified contrary outcome"
     )
@@ -395,7 +422,10 @@ def test_later_grounded_failure_can_invalidate_bad_reinforcement() -> None:
     assert reinforced.route_topology.routes[0].weight == pytest.approx(0.60)
 
     later_failure = _route_record(
-        reinforced, "resilience-later-failure", passing=False
+        reinforced,
+        "resilience-later-failure",
+        passing=False,
+        causal_parent_record_id=success.record_id,
     )
     recovered, invalidation = invalidate_grounded_adaptation(
         reinforced,
@@ -497,3 +527,190 @@ def test_interaction_validation_composes_grounded_adaptation_without_authority()
     assert report.grounded_execution is True
     assert report.adaptive_audit is not None
     assert report.adaptive_audit.operation == "strengthen"
+
+
+def test_operational_evidence_is_provisional_and_cannot_become_durable_state() -> None:
+    state = AdaptiveState.fixture("stage-11-operational")
+    before = state.to_dict()
+    objective = Objective(
+        "stage-11-operational-objective",
+        "Observe one deterministic provisional result.",
+        provenance={"transaction_id": "stage-11-operational-transaction"},
+    )
+    trace = run_constitutional_cycle(objective)
+    assert trace.evidence and all(
+        item.grade.value == "operational" for item in trace.evidence
+    )
+
+    cognition = derive_advisory_cognition(state, trace.evidence)
+
+    assert cognition.evidence_tier is EvidenceAuthorityTier.OPERATIONAL_PROVISIONAL
+    assert cognition.advisory_only is True
+    assert cognition.dispatchable is False
+    assert cognition.authorizes_execution is False
+    assert state.to_dict() == before
+    assert set(ADAPTIVE_FIELD_CONSUMERS) == {
+        "route_topology",
+        "connections",
+        "tactic_scores",
+        "active_tactic_id",
+        "applied_record_ids",
+        "consumed_settlement_ids",
+        "audits",
+        "checkpoints",
+        "failure_streak",
+        "tactic_streak",
+        "invalidated_record_ids",
+    }
+
+
+def test_causal_invalidation_rejects_explicitly_unrelated_failure() -> None:
+    initial = AdaptiveState.fixture("stage-11-causal")
+    success = _route_record(initial, "stage-11-causal-success")
+    reinforced, _ = apply_grounded_adaptation(initial, success)
+    failure = _route_record(reinforced, "stage-11-causal-failure", passing=False)
+    unrelated = _route_record(
+        reinforced,
+        "stage-11-causal-unrelated",
+        passing=False,
+        causal_parent_record_id="unrelated-adaptive-record",
+    )
+    before = reinforced.to_dict()
+
+    with pytest.raises(AdaptiveSubstrateValidationError, match="causally target"):
+        invalidate_grounded_adaptation(
+            reinforced,
+            success.record_id,
+            unrelated,
+            reason="temporally later is not causally related",
+        )
+    assert reinforced.to_dict() == before
+
+    tampered = replace(
+        failure,
+        provenance={
+            **dict(failure.provenance),
+            "causal_parent_record_id": success.record_id,
+        },
+    )
+    with pytest.raises(AdaptiveSubstrateValidationError, match="verified grounded"):
+        invalidate_grounded_adaptation(
+            reinforced,
+            success.record_id,
+            tampered,
+            reason="wrapper-only parent injection is not attested",
+        )
+
+    with pytest.raises(AdaptiveSubstrateValidationError, match="explicit causal_parent"):
+        invalidate_grounded_adaptation(
+            reinforced,
+            success.record_id,
+            failure,
+            reason="temporal order alone is insufficient",
+        )
+
+
+def test_causal_invalidation_replays_later_valid_route_suffix() -> None:
+    initial = AdaptiveState.fixture("stage-11-suffix")
+    bad = _route_record(initial, "stage-11-suffix-bad")
+    after_bad, _ = apply_grounded_adaptation(initial, bad)
+    valid = _route_record(after_bad, "stage-11-suffix-valid")
+    after_both, _ = apply_grounded_adaptation(after_bad, valid)
+    invalidator = _route_record(
+        after_both,
+        "stage-11-suffix-invalidator",
+        passing=False,
+        causal_parent_record_id=bad.record_id,
+    )
+
+    recovered, _ = invalidate_grounded_adaptation(
+        after_both,
+        bad.record_id,
+        invalidator,
+        reason="the first reinforcement was causally falsified",
+    )
+
+    route = recovered.route_topology.routes[0]
+    assert route.weight == pytest.approx(0.60)
+    assert route.success_count == 1
+    assert valid.constitutional_trace.settlement.settlement_id in route.settlement_ids
+    assert bad.constitutional_trace.settlement.settlement_id not in route.settlement_ids
+    assert valid.record_id in recovered.applied_record_ids
+    with pytest.raises(AdaptiveSubstrateValidationError, match="already applied"):
+        apply_grounded_adaptation(recovered, valid)
+
+
+def test_rollback_accepts_only_latest_trusted_checkpoint_and_preserves_prefix() -> None:
+    initial = AdaptiveState.fixture("stage-11-rollback")
+    first = _route_record(initial, "stage-11-rollback-first")
+    first_state, _ = apply_grounded_adaptation(initial, first)
+    second = _route_record(first_state, "stage-11-rollback-second", passing=False)
+    second_state, _ = apply_grounded_adaptation(first_state, second)
+
+    with pytest.raises(AdaptiveSubstrateValidationError, match="most recent trusted"):
+        rollback_adaptive_state(second_state, second_state.checkpoints[0].checkpoint_id)
+
+    restored, audit = rollback_adaptive_state(
+        second_state, second_state.checkpoints[-1].checkpoint_id
+    )
+    assert audit.operation == "rollback"
+    assert restored.route_topology.routes == first_state.route_topology.routes
+    assert first.record_id in restored.applied_record_ids
+    assert second.record_id in restored.applied_record_ids
+    with pytest.raises(AdaptiveSubstrateValidationError, match="already applied"):
+        apply_grounded_adaptation(restored, second)
+
+
+def test_dormant_connection_recovers_and_retirement_is_separate_and_terminal() -> None:
+    state = AdaptiveState.fixture("stage-11-recovery")
+    formed_record = _route_record(state, "stage-11-recovery-form")
+    state, _ = form_grounded_connection(state, formed_record)
+    connection_id = state.connections[0].connection_id
+    lineage_id = state.connections[0].lineage_id
+    for index in range(3):
+        failure = _route_record(
+            state, f"stage-11-recovery-weaken-{index}", passing=False
+        )
+        state, _ = weaken_grounded_connection(state, failure, connection_id)
+    assert state.connections[0].lifecycle == ConnectionLifecycle.DORMANT.value
+
+    recovery = _route_record(state, "stage-11-recovery-useful")
+    recovered, audit = recover_grounded_connection(state, recovery, connection_id)
+    assert audit.operation == "recover_connection"
+    assert recovered.connections[0].weight == pytest.approx(0.30)
+    assert recovered.connections[0].lifecycle == ConnectionLifecycle.WEAKENED.value
+    assert recovered.connections[0].lineage_id == lineage_id
+
+    dormant = state
+    retirement = _route_record(
+        dormant, "stage-11-recovery-retirement", passing=False
+    )
+    retired, audit = retire_grounded_connection(
+        dormant,
+        retirement,
+        connection_id,
+        reason="repeated causally grounded failure",
+    )
+    assert audit.operation == "retire_connection"
+    assert retired.connections[0].lifecycle == ConnectionLifecycle.RETIRED.value
+    later_success = _route_record(retired, "stage-11-recovery-after-retirement")
+    with pytest.raises(AdaptiveSubstrateValidationError, match="cannot recover"):
+        recover_grounded_connection(retired, later_success, connection_id)
+
+
+def test_grounded_advisory_cognition_reads_tactics_and_connections_without_authority() -> None:
+    state = AdaptiveState.fixture("stage-11-cognition")
+    record = _route_record(state, "stage-11-cognition-grounded")
+    connected, _ = form_grounded_connection(state, record)
+    before = connected.to_dict()
+
+    cognition = derive_advisory_cognition(
+        connected, record.evidence, pressure=_pressure(record, high=True)
+    )
+
+    assert cognition.evidence_tier is EvidenceAuthorityTier.GROUNDED_DURABLE
+    assert cognition.active_tactic_id == connected.active_tactic_id
+    assert cognition.tactic_scores == connected.tactic_scores
+    assert cognition.preferred_connection_id == connected.connections[0].connection_id
+    assert cognition.authorizes_execution is False
+    assert connected.to_dict() == before

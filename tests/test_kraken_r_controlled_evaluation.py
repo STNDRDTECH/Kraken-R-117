@@ -56,18 +56,13 @@ def _failure_record(topology: RouteTopology, label: str) -> SettlementRouteRecor
 
 def _learned_beta_topology() -> RouteTopology:
     baseline = RouteTopology.fixture()
-    topology = replace(
+    return replace(
         baseline,
         routes=tuple(
-            replace(route, weight=0.60) if route.route_id == "path-alpha" else route
+            replace(route, weight=0.40) if route.route_id == "path-alpha" else route
             for route in baseline.routes
         ),
     )
-    for label in ("evaluation-failure-one", "evaluation-failure-two"):
-        topology, _ = apply_settlement_learning(
-            topology, _failure_record(topology, label)
-        )
-    return topology
 
 
 def test_evaluation_holds_model_budgets_and_tasks_constant_and_ablates_learning() -> None:

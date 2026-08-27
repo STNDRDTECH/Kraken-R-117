@@ -25,6 +25,8 @@ from .adaptive_substrate import (
     MAX_ROUTE_DECAY,
     apply_grounded_adaptation,
     form_grounded_connection,
+    recover_grounded_connection,
+    retire_grounded_connection,
     rollback_adaptive_state,
     switch_grounded_tactic,
     weaken_grounded_connection,
@@ -240,6 +242,7 @@ class DynamicalEvent:
     checkpoint_id: str | None = None
     operation: str = "credit"
     connection_id: str | None = None
+    reason: str | None = None
 
     def __post_init__(self) -> None:
         _identifier(self.event_id, "event_id")
@@ -282,19 +285,32 @@ class DynamicalEvent:
             "recover",
             "form_connection",
             "weaken_connection",
+            "recover_connection",
+            "retire_connection",
             "switch_tactic",
         }:
             raise DynamicalSubstrateValidationError("unsupported settlement operation")
         if self.connection_id is not None:
             _identifier(self.connection_id, "connection_id")
+        if self.reason is not None:
+            _text(self.reason, "reason")
         if self.checkpoint_id is not None:
             _identifier(self.checkpoint_id, "checkpoint_id")
         if kind is not DynamicalEventKind.SETTLEMENT and (
             self.operation != "credit"
             or self.connection_id is not None
+            or self.reason is not None
         ):
             raise DynamicalSubstrateValidationError(
-                "operation and connection_id are settlement-only fields"
+                "operation, connection_id, and reason are settlement-only fields"
+            )
+        if self.operation == "retire_connection" and self.reason is None:
+            raise DynamicalSubstrateValidationError(
+                "retire_connection requires an explicit reason"
+            )
+        if self.operation != "retire_connection" and self.reason is not None:
+            raise DynamicalSubstrateValidationError(
+                "reason is reserved for retire_connection"
             )
         if kind is not DynamicalEventKind.ROLLBACK and self.checkpoint_id is not None:
             raise DynamicalSubstrateValidationError("checkpoint_id is rollback-only")
@@ -320,6 +336,7 @@ class DynamicalEvent:
         *,
         operation: str = "credit",
         connection_id: str | None = None,
+        reason: str | None = None,
     ) -> "DynamicalEvent":
         return cls(
             event_id,
@@ -327,6 +344,7 @@ class DynamicalEvent:
             settlement=settlement,
             operation=operation,
             connection_id=connection_id,
+            reason=reason,
         )
 
     @classmethod
@@ -358,6 +376,7 @@ class DynamicalEvent:
             "checkpoint_id": self.checkpoint_id,
             "operation": self.operation,
             "connection_id": self.connection_id,
+            "reason": self.reason,
         }
 
 
@@ -1251,6 +1270,25 @@ def _reduce_dynamical_tick_counterfactual(
                     )
                 adaptive, audit = weaken_grounded_connection(
                     adaptive, record, event.connection_id
+                )
+            elif event.operation == "recover_connection":
+                if event.connection_id is None:
+                    raise DynamicalSubstrateValidationError(
+                        "recover_connection requires connection_id"
+                    )
+                adaptive, audit = recover_grounded_connection(
+                    adaptive, record, event.connection_id
+                )
+            elif event.operation == "retire_connection":
+                if event.connection_id is None or event.reason is None:
+                    raise DynamicalSubstrateValidationError(
+                        "retire_connection requires connection_id and reason"
+                    )
+                adaptive, audit = retire_grounded_connection(
+                    adaptive,
+                    record,
+                    event.connection_id,
+                    reason=event.reason,
                 )
             elif event.operation == "switch_tactic":
                 pressure = HomeostaticSnapshot(

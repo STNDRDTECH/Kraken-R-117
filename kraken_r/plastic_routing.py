@@ -559,10 +559,9 @@ def _validate_grounded_route_binding(
 
 def _is_grounded_evidence(evidence: tuple[Evidence, ...]) -> bool:
     return bool(evidence) and all(
-        item.grade in {EvidenceGrade.OPERATIONAL, EvidenceGrade.GROUNDED}
+        item.grade is EvidenceGrade.GROUNDED
         and item.execution_id is not None
-        and item.provenance.get("observation_origin")
-        in {"execution_result", "recorded_execution", "grounded_execution"}
+        and item.provenance.get("observation_origin") == "grounded_execution"
         for item in evidence
     )
 
@@ -612,7 +611,7 @@ def apply_settlement_learning(
     if not _is_grounded_evidence(record.evidence):
         return topology, RouteLearningTrace(
             record.record_id, settlement.settlement_id, route.route_id, "withheld", "none",
-            "settlement lacks grounded execution evidence",
+            "settlement lacks independently verified grounded execution evidence",
             topology.version, topology.version, route.weight, route.weight,
         )
 

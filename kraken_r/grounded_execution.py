@@ -276,6 +276,7 @@ class GroundedExecutionRequest:
     files: Mapping[str, str]
     test_paths: tuple[str, ...]
     limits: ExecutionLimits = field(default_factory=ExecutionLimits)
+    causal_parent_record_id: str | None = None
 
     def __post_init__(self) -> None:
         for name in (
@@ -331,6 +332,13 @@ class GroundedExecutionRequest:
         object.__setattr__(self, "test_paths", tests)
         if not isinstance(self.limits, ExecutionLimits):
             raise GroundedExecutionError("limits must be ExecutionLimits")
+        if self.causal_parent_record_id is not None and (
+            not isinstance(self.causal_parent_record_id, str)
+            or not self.causal_parent_record_id.strip()
+        ):
+            raise GroundedExecutionError(
+                "causal_parent_record_id must be a non-empty string or None"
+            )
 
     @property
     def input_hash(self) -> str:
@@ -347,6 +355,7 @@ class GroundedExecutionRequest:
             "files": dict(self.files),
             "test_paths": list(self.test_paths),
             "limits": self.limits.to_dict(),
+            "causal_parent_record_id": self.causal_parent_record_id,
         }
 
     @classmethod
@@ -364,6 +373,7 @@ class GroundedExecutionRequest:
                 ExecutionLimits.from_dict(
                     _mapping(payload["limits"], "serialized limits")
                 ),
+                payload.get("causal_parent_record_id"),
             )
         except (KeyError, TypeError, ValueError) as exc:
             raise GroundedExecutionError("serialized execution request is invalid") from exc

@@ -798,10 +798,15 @@ def validate_plastic_routing() -> tuple[str, ...]:
         task_state_id="validator-routing-later-state",
         task_state_version=4,
     )
-    if first.effect != "strengthen" or second.effect != "strengthen":
-        errors.append("settled successes did not strengthen the selected route")
-    if alpha.weight != 0.70 or later.candidate_scores[0][1] <= later.candidate_scores[1][1]:
-        errors.append("successful history did not measurably change route organization")
+    if (
+        first.disposition != "withheld"
+        or second.disposition != "withheld"
+        or first.effect != "none"
+        or second.effect != "none"
+    ):
+        errors.append("operational successes escaped provisional route cognition")
+    if alpha.weight != 0.50 or later.candidate_scores[0][1] != later.candidate_scores[1][1]:
+        errors.append("operational history durably changed route organization")
     ablated = after_second.reset()
     if any(route.weight != 0.50 for route in ablated.routes):
         errors.append("route-state ablation did not remove learned preference")
@@ -848,11 +853,13 @@ def validate_plastic_routing() -> tuple[str, ...]:
         task_state_version=4,
     )
     if (
-        failure_trace_one.effect != "weaken"
-        or failure_trace_two.effect != "weaken"
-        or failure_choice.route_id != "path-beta"
+        failure_trace_one.disposition != "withheld"
+        or failure_trace_two.disposition != "withheld"
+        or failure_trace_one.effect != "none"
+        or failure_trace_two.effect != "none"
+        or failure_choice.route_id != "path-alpha"
     ):
-        errors.append("settled failures did not weaken and reorganize route preference")
+        errors.append("operational failures durably reorganized route preference")
 
     for label, mode in (
         ("contradiction", CycleMode.CONTRADICTION),
@@ -865,12 +872,9 @@ def validate_plastic_routing() -> tuple[str, ...]:
         if unchanged != topology or withheld.disposition != "withheld":
             errors.append(f"{label} outcome earned route reinforcement")
 
-    try:
-        apply_settlement_learning(after_first, first_record)
-    except PlasticRoutingValidationError:
-        pass
-    else:
-        errors.append("stale route selection was accepted")
+    repeated, repeated_trace = apply_settlement_learning(after_first, first_record)
+    if repeated != after_first or repeated_trace.disposition != "withheld":
+        errors.append("replayed operational evidence changed durable route state")
 
     declared_trace = replace(
         first_record.constitutional_trace,

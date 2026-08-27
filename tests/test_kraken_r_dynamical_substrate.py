@@ -10,6 +10,8 @@ import pytest
 
 from kraken_r import (
     AdaptiveSubstrateValidationError,
+    CandidateConnection,
+    ConnectionLifecycle,
     DynamicalEvent,
     DynamicalState,
     DynamicalSubstrateValidationError,
@@ -310,6 +312,78 @@ def test_grounded_route_connection_decay_and_rollback_are_bounded() -> None:
     assert decay_trace.adaptive_audits[0].operation == "decay"
     assert decayed.instrumentation.decay_events == 1
     assert decayed.instrumentation.plasticity_events == 1
+
+
+def test_connection_recovery_uses_the_canonical_dynamical_event_stream() -> None:
+    formation_state = _grounded_state("canonical-connection-formation-setup")
+    formation_record = _grounded_record(
+        formation_state, "canonical-connection-formation-setup"
+    )
+    formed, _ = reduce_dynamical_tick(
+        formation_state,
+        DynamicalTick(
+            1,
+            (
+                DynamicalEvent.settlement_event(
+                    "canonical-connection-formation-setup-event",
+                    formation_record,
+                    operation="form_connection",
+                ),
+            ),
+        ),
+    )
+    weakening_state = _grounded_state("canonical-connection-weakening-setup")
+    weakening_state = replace(
+        weakening_state,
+        medium=replace(
+            weakening_state.medium,
+            adaptive_state=formed.medium.adaptive_state,
+        ),
+    )
+    connection = weakening_state.medium.adaptive_state.connections[0]
+    weakening_record = _grounded_record(
+        weakening_state, "canonical-connection-weakening-setup", passing=False
+    )
+    weakened, _ = reduce_dynamical_tick(
+        weakening_state,
+        DynamicalTick(
+            1,
+            (
+                DynamicalEvent.settlement_event(
+                    "canonical-connection-weakening-setup-event",
+                    weakening_record,
+                    operation="weaken_connection",
+                    connection_id=connection.connection_id,
+                ),
+            ),
+        ),
+    )
+    state = _grounded_state("canonical-connection-recovery")
+    state = replace(
+        state,
+        medium=replace(state.medium, adaptive_state=weakened.medium.adaptive_state),
+    )
+    success = _grounded_record(state, "canonical-connection-recover")
+    recovered, trace = reduce_dynamical_tick(
+        state,
+        DynamicalTick(
+            1,
+            (
+                DynamicalEvent.settlement_event(
+                    "canonical-connection-recover-event",
+                    success,
+                    operation="recover_connection",
+                    connection_id=connection.connection_id,
+                ),
+            ),
+        ),
+    )
+
+    assert trace.adaptive_audits[0].operation == "recover_connection"
+    assert (
+        recovered.medium.adaptive_state.connections[0].lifecycle
+        == ConnectionLifecycle.WEAKENED.value
+    )
 
 
 def test_inhibition_withholds_rollback_and_grounded_credit_with_provenance() -> None:

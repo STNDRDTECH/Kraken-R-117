@@ -1,7 +1,7 @@
 # Kraken-R Constitution
 
 **Status:** candidate-only foundation  
-**Version:** 1.10.9
+**Version:** 1.11.1
 **Effective boundary:** documentation, standalone validation, deterministic fixture
 execution, and independently verified bounded candidate execution observations
 
@@ -309,7 +309,7 @@ An update is accepted only when all of the following agree:
 2. transaction, objective, authorized task state/version, route, settlement,
    and evidence identities match the explicit provenance binding;
 3. the settlement is `settled` with an observed `success` or `failure`; and
-4. every cited `Evidence` is operational/grounded observed execution evidence.
+4. every cited `Evidence` is independently verified grounded execution evidence.
 
 A grounded success strengthens only the selected route; a grounded failure
 weakens only the selected route. Contradiction, insufficient evidence,
@@ -437,6 +437,32 @@ uncertainty, repeated failure, novelty, and resource expenditure as bounded
 declared signals. They are advisory-only and remain outside evidence and
 learning authority.
 
+### Stage 11.1 causal-learning integrity
+
+Stage 11.1 hardens this same immutable reducer; it does not add a second loop.
+Evidence authority has two explicit adaptive tiers. Operational evidence may
+enter only a caller-owned `AdvisoryCognition` result for one bounded decision
+horizon. It never returns or mutates `AdaptiveState`. Only independently
+reverified grounded task success or failure can produce durable adaptive audit
+or credit.
+
+Every durable update records its route-lineage identity, evidence identities,
+epistemic class, and grounded authority tier. A later failure may invalidate an
+update only when its immutable route selection belongs to that same causal
+lineage; an explicit parent link that names another update fails closed.
+Rollback accepts only the most recent retained trusted checkpoint, preserves
+the trusted prefix, moves to a new topology generation, and retains every
+consumed record and settlement identity so removed credit cannot be replayed.
+
+Connection weakening is recoverable. A connection moves through explicit
+active, weakened, and dormant states while retaining one developmental lineage;
+later useful grounded evidence may recover it in fixed bounded steps. Permanent
+retirement is a distinct grounded operation available only for a dormant edge,
+and retirement is terminal. Tactic scores and non-retired connection weights
+have one bounded read-only cognition consumer. That output is explicitly
+advisory, non-dispatchable, and unable to authorize execution, create evidence
+or settlement, grant credit, or cross the model/substrate firewall.
+
 ### Orzhaal boundary
 
 Orzhaal is not a Kraken-R organ, controller, recursive loop, or persistent
@@ -446,7 +472,7 @@ structured non-promotable result, and provides no canonical write or promotion
 operation. Adaptation of adaptation rules therefore remains isolated from
 ordinary Kraken adaptation.
 
-Stage 11 is explicitly unstarted. Higher-order circuits, autonomous recursion,
+All other Stage 11 mechanisms remain explicitly unstarted. Higher-order circuits, autonomous recursion,
 specialist daemons, event buses, background workers, live controllers,
 permanent self-modification, organ evolution, broad lattice composition,
 chemistry, Redstone, HOP, ALU systems, and alternate reasoning runtimes remain

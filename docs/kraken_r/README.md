@@ -155,7 +155,7 @@ fresh = GroundedExecutionVerifier.from_record(
 )
 ```
 
-## Stage 10 adaptive substrate
+## Stage 10 adaptive substrate and Stage 11.1 causal integrity
 
 `kraken_r.adaptive_substrate` adds bounded ordinary adaptation as immutable,
 caller-owned candidate state.  It requires a sealed, independently verified
@@ -183,9 +183,23 @@ assert result.promotable is False and result.canonical_mutation is False
 ```
 
 All ordinary changes require exact grounded trace, request, authorized-state,
-record, evidence, and provenance bindings.  Model declarations, confidence,
-signals, and physiology never earn learning credit or create topology.  Stage
-11 mechanisms remain unstarted and excluded.
+record, evidence, and provenance bindings. Model declarations, confidence,
+signals, and physiology never earn learning credit or create topology.
+Stage 11.1 makes the evidence authority split explicit: operational evidence can
+shape only a returned, short-horizon `AdvisoryCognition`, while grounded
+evidence remains mandatory for every durable adaptive change. The advisory
+result reads bounded tactic scores and non-retired connection weights but is
+non-dispatchable and cannot authorize execution, evidence, settlement, credit,
+or promotion.
+
+Adaptive audits now retain immutable route-causal lineage. Invalidation rejects
+an explicit parent mismatch or a failure outside that route lineage. Rollback
+is restricted to the latest trusted checkpoint and keeps all consumed
+identities, preventing duplicate credit. Candidate connections weaken into
+recoverable dormant state, can recover under later useful grounded evidence,
+and become terminal only through a separate explicit grounded retirement.
+Higher-order circuits, autonomous recursion, workers, controllers, alternate
+loops, and all other Stage 11 mechanisms remain unstarted and excluded.
 
 `GroundedDeliveryLedger(path)` persists bounded expiry-stamped receipts. It
 rejects duplicate execution, evidence, settlement, and learning delivery after
@@ -200,7 +214,7 @@ are classed as `task_success`, `task_failure`, setup/infrastructure failure,
 timeout/resource failure, execution failure, contradiction, or insufficient
 evidence. Only the first two classes can become learning credit; every
 adaptive audit retains the exact creditable class and child-runtime
-fingerprint. Stage 11 remains unstarted.
+fingerprint. Other Stage 11 mechanisms remain unstarted.
 
 ## Stage 10.6 plasticity resilience
 
@@ -212,7 +226,8 @@ identities remain consumed. Route preference is capped below the generic route
 maximum, stale selections are rejected instead of being repaired implicitly,
 and a bounded tactic streak forces a deterministic alternate tactic. Advisory
 physiology remains non-evidentiary, and setup/infrastructure failures cannot
-trigger recovery, topology changes, or learning credit. Stage 11 mechanisms
+trigger recovery, topology changes, or learning credit. Stage 11.1 adds only
+the causal-integrity boundaries described above; other Stage 11 mechanisms
 remain excluded.
 
 ## Stage 10.7 task integrity

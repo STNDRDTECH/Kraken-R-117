@@ -106,7 +106,7 @@ def _alpha_preferred_topology() -> RouteTopology:
     )
 
 
-def test_settled_success_history_strengthens_and_changes_later_choice() -> None:
+def test_operational_success_history_is_provisional_and_does_not_change_choice() -> None:
     topology = RouteTopology.fixture()
     before = select_candidate_route(
         topology, "candidate-work", transaction_id="before-tx", objective_id="before-objective",
@@ -119,30 +119,32 @@ def test_settled_success_history_strengthens_and_changes_later_choice() -> None:
     trace_two = _trace("success-two", CycleMode.SUCCESS)
     topology, second = apply_settlement_learning(topology, _record(topology, trace_two))
 
-    assert first.effect == second.effect == "strengthen"
-    assert _route(topology, "path-alpha").weight == pytest.approx(0.70)
+    assert first.disposition == second.disposition == "withheld"
+    assert first.effect == second.effect == "none"
+    assert _route(topology, "path-alpha").weight == pytest.approx(0.50)
     later = select_candidate_route(
         topology, "candidate-work", transaction_id="later-tx", objective_id="later-objective",
         task_state_id="later-state", task_state_version=4,
     )
     assert later.route_id == "path-alpha"
-    assert later.candidate_scores[0][1] > later.candidate_scores[1][1]
+    assert later.candidate_scores[0][1] == later.candidate_scores[1][1]
 
 
-def test_settled_failure_weakens_and_reorganizes_later_choice() -> None:
+def test_operational_failure_does_not_durably_reorganize_later_choice() -> None:
     topology = _alpha_preferred_topology()
     failure_one = _trace("failure-one", CycleMode.FAILURE)
     topology, first = apply_settlement_learning(topology, _record(topology, failure_one))
     failure_two = _trace("failure-two", CycleMode.FAILURE)
     topology, second = apply_settlement_learning(topology, _record(topology, failure_two))
 
-    assert first.effect == second.effect == "weaken"
-    assert _route(topology, "path-alpha").weight == pytest.approx(0.40)
+    assert first.disposition == second.disposition == "withheld"
+    assert first.effect == second.effect == "none"
+    assert _route(topology, "path-alpha").weight == pytest.approx(0.60)
     later = select_candidate_route(
         topology, "candidate-work", transaction_id="later-tx", objective_id="later-objective",
         task_state_id="later-state", task_state_version=4,
     )
-    assert later.route_id == "path-beta"
+    assert later.route_id == "path-alpha"
 
 
 @pytest.mark.parametrize("mode", (CycleMode.CONTRADICTION, CycleMode.INSUFFICIENT_EVIDENCE))
@@ -169,7 +171,7 @@ def test_ablation_removes_learned_routing_gain() -> None:
         topology.reset(), "candidate-work", transaction_id="reset-tx", objective_id="reset-objective",
         task_state_id="reset-state", task_state_version=4,
     )
-    assert learned.route_id == "path-beta"
+    assert learned.route_id == "path-alpha"
     assert learned.candidate_scores[0][1] > learned.candidate_scores[1][1]
     assert ablated.route_id == "path-alpha"
     assert ablated.candidate_scores[0][1] == ablated.candidate_scores[1][1] == 0.50
@@ -187,11 +189,11 @@ def test_learning_history_replay_is_deterministic() -> None:
     second = replay_settlement_learning(initial, (first_record, second_record))
     assert first == second
     assert _route(first[0], "path-alpha").weight == pytest.approx(0.50)
-    assert _route(first[0], "path-alpha").success_count == 1
-    assert _route(first[0], "path-alpha").failure_count == 1
+    assert _route(first[0], "path-alpha").success_count == 0
+    assert _route(first[0], "path-alpha").failure_count == 0
 
 
-def test_learning_is_reversible_and_resists_runaway_reinforcement() -> None:
+def test_operational_history_cannot_create_runaway_reinforcement() -> None:
     topology = RouteTopology.fixture()
     history = []
     for index in range(8):
@@ -199,12 +201,14 @@ def test_learning_is_reversible_and_resists_runaway_reinforcement() -> None:
         record = _record(topology, trace)
         history.append(record)
         topology, accepted = apply_settlement_learning(topology, record)
-        assert accepted.weight_after <= 0.75
-    assert _route(topology, "path-alpha").weight == 0.75
+        assert accepted.disposition == "withheld"
+        assert accepted.weight_after == accepted.weight_before
+    assert _route(topology, "path-alpha").weight == 0.50
 
     failure = _trace("reversible-failure", CycleMode.FAILURE)
     topology, weakened = apply_settlement_learning(topology, _record(topology, failure))
-    assert weakened.weight_after == pytest.approx(0.65)
+    assert weakened.disposition == "withheld"
+    assert weakened.weight_after == pytest.approx(0.50)
     assert _route(topology, "path-beta").weight == 0.50
 
 
@@ -212,8 +216,10 @@ def test_stale_duplicate_and_malformed_provenance_fail_closed() -> None:
     topology = RouteTopology.fixture()
     record = _record(topology, _trace("rejection", CycleMode.SUCCESS))
     updated, _ = apply_settlement_learning(topology, record)
-    with pytest.raises(PlasticRoutingValidationError, match="stale"):
-        apply_settlement_learning(updated, record)
+    assert updated == topology
+    duplicate_topology, duplicate = apply_settlement_learning(updated, record)
+    assert duplicate_topology == topology
+    assert duplicate.disposition == "withheld"
     with pytest.raises(PlasticRoutingValidationError, match="generation"):
         apply_settlement_learning(topology.reset(), record)
 
@@ -254,15 +260,16 @@ def test_declared_signal_like_evidence_cannot_reinforce_a_route() -> None:
         )
 
 
-def test_hard_history_budget_prevents_evicted_duplicate_credit() -> None:
+def test_operational_history_never_consumes_durable_credit_budget() -> None:
     topology = RouteTopology.fixture()
     for index in range(16):
         record = _record(topology, _trace(f"budget-{index}", CycleMode.SUCCESS))
         topology, accepted = apply_settlement_learning(topology, record)
-        assert accepted.disposition == "accepted"
+        assert accepted.disposition == "withheld"
     overflow = _record(topology, _trace("budget-overflow", CycleMode.SUCCESS))
-    with pytest.raises(PlasticRoutingValidationError, match="budget"):
-        apply_settlement_learning(topology, overflow)
+    unchanged, withheld = apply_settlement_learning(topology, overflow)
+    assert unchanged == RouteTopology.fixture()
+    assert withheld.disposition == "withheld"
 
 
 def test_selection_is_advisory_and_route_state_has_bounded_audit_links() -> None:

@@ -13,11 +13,13 @@ proposals.  Its result has no promotion or canonical-write operation.
 from __future__ import annotations
 
 from dataclasses import dataclass, replace
+from enum import Enum
 import hashlib
 import math
+from types import MappingProxyType
 from typing import Any, Iterable, Mapping
 
-from .contracts import Authority, EvidenceGrade, Signal
+from .contracts import Authority, Evidence, EvidenceGrade, Signal
 from .grounded_execution import (
     EpistemicOutcomeClass,
     GroundedExecutionRejected,
@@ -55,6 +57,55 @@ MAX_TRACKED_RECORDS = 64
 MAX_TACTICS = 8
 MAX_ADAPTIVE_FAILURE_STREAK = MAX_ADAPTIVE_UPDATES
 BASELINE_CONNECTION_WEIGHT = 0.50
+
+
+class EvidenceAuthorityTier(str, Enum):
+    """The only two evidence authorities visible to adaptive cognition."""
+
+    OPERATIONAL_PROVISIONAL = "operational_provisional"
+    GROUNDED_DURABLE = "grounded_durable"
+
+
+class ConnectionLifecycle(str, Enum):
+    """Non-authoritative lifecycle of a candidate organizational edge."""
+
+    ACTIVE = "active"
+    WEAKENED = "weakened"
+    DORMANT = "dormant"
+    RETIRED = "retired"
+
+
+def evidence_authority_tier(evidence: Evidence) -> EvidenceAuthorityTier:
+    """Classify evidence without promoting it or changing adaptive state."""
+
+    if not isinstance(evidence, Evidence):
+        raise AdaptiveSubstrateValidationError("evidence tiering requires Evidence")
+    if evidence.grade is EvidenceGrade.GROUNDED:
+        return EvidenceAuthorityTier.GROUNDED_DURABLE
+    if evidence.grade is EvidenceGrade.OPERATIONAL:
+        return EvidenceAuthorityTier.OPERATIONAL_PROVISIONAL
+    raise AdaptiveSubstrateValidationError(
+        "only operational evidence may enter provisional cognition"
+    )
+
+
+# This is an audit contract, not a controller.  It makes each retained field
+# answerable to one bounded reducer or to a read-only report.
+ADAPTIVE_FIELD_CONSUMERS = MappingProxyType(
+    {
+        "route_topology": "grounded route adaptation and bounded rollback",
+        "connections": "grounded connection lifecycle reducers",
+        "tactic_scores": "grounded tactic reducer; advisory cognition reads",
+        "active_tactic_id": "grounded tactic reducer; advisory cognition reads",
+        "applied_record_ids": "duplicate-credit rejection",
+        "consumed_settlement_ids": "duplicate-settlement rejection",
+        "audits": "immutable causal audit reporting",
+        "checkpoints": "trusted latest-checkpoint rollback",
+        "failure_streak": "grounded outcome bounded cognition context",
+        "tactic_streak": "grounded tactic anti-lock-in bound",
+        "invalidated_record_ids": "causal invalidation duplicate rejection",
+    }
+)
 
 
 def _bounded_tuple(values: Iterable[Any], maximum: int, field_name: str) -> tuple[Any, ...]:
@@ -210,13 +261,22 @@ class HomeostaticSnapshot:
 
 @dataclass(frozen=True)
 class CandidateConnection:
-    """One bounded organizational edge; it is never dispatchable."""
+    """One bounded organizational edge; it is never dispatchable.
+
+    Lifecycle changes are deliberately explicit.  Weakening can make an edge
+    dormant, but it can never infer retirement; recovery is available until a
+    separate grounded retirement operation closes the edge permanently.
+    """
 
     connection_id: str
     source: str
     target: str
     weight: float = BASELINE_CONNECTION_WEIGHT
     generation: int = 0
+    lifecycle: str = ConnectionLifecycle.ACTIVE.value
+    lineage_id: str | None = None
+    lifecycle_record_ids: tuple[str, ...] = ()
+    lifecycle_operations: tuple[str, ...] = ()
 
     def __post_init__(self) -> None:
         _identifier(self.source, "source")
@@ -234,14 +294,89 @@ class CandidateConnection:
             raise AdaptiveSubstrateValidationError(
                 "adaptive generation limit is exhausted"
             )
+        try:
+            lifecycle = ConnectionLifecycle(self.lifecycle)
+        except (TypeError, ValueError) as exc:
+            raise AdaptiveSubstrateValidationError(
+                "connection lifecycle is invalid"
+            ) from exc
+        if lifecycle is ConnectionLifecycle.RETIRED and self.weight != MIN_WEIGHT:
+            raise AdaptiveSubstrateValidationError(
+                "retired connections must remain at the minimum weight floor"
+            )
+        if lifecycle is ConnectionLifecycle.DORMANT and self.weight != MIN_WEIGHT:
+            raise AdaptiveSubstrateValidationError(
+                "dormant connections must remain at the minimum weight floor"
+            )
+        if lifecycle is ConnectionLifecycle.WEAKENED and not (
+            MIN_WEIGHT < self.weight < BASELINE_CONNECTION_WEIGHT
+        ):
+            raise AdaptiveSubstrateValidationError(
+                "weakened connections require a recoverable sub-baseline weight"
+            )
+        if lifecycle is ConnectionLifecycle.ACTIVE and self.weight < BASELINE_CONNECTION_WEIGHT:
+            raise AdaptiveSubstrateValidationError(
+                "active connections cannot remain below baseline weight"
+            )
+        if self.lineage_id is None:
+            digest = hashlib.sha256(
+                f"{self.source}->{self.target}".encode("utf-8")
+            ).hexdigest()[:16]
+            object.__setattr__(self, "lineage_id", f"connection-lineage-{digest}")
+        else:
+            _identifier(self.lineage_id, "connection lineage_id")
+        lifecycle_record_ids = _bounded_tuple(
+            self.lifecycle_record_ids,
+            MAX_ADAPTIVE_AUDIT,
+            "connection lifecycle_record_ids",
+        )
+        if not all(isinstance(item, str) and item for item in lifecycle_record_ids):
+            raise AdaptiveSubstrateValidationError(
+                "connection lifecycle record identities are invalid"
+            )
+        if len(set(lifecycle_record_ids)) != len(lifecycle_record_ids):
+            raise AdaptiveSubstrateValidationError(
+                "connection lifecycle record identities must not repeat"
+            )
+        lifecycle_operations = _bounded_tuple(
+            self.lifecycle_operations,
+            MAX_ADAPTIVE_AUDIT,
+            "connection lifecycle_operations",
+        )
+        allowed_operations = {
+            "form_connection",
+            "weaken_connection",
+            "recover_connection",
+            "retire_connection",
+        }
+        if any(item not in allowed_operations for item in lifecycle_operations):
+            raise AdaptiveSubstrateValidationError(
+                "connection lifecycle operations are invalid"
+            )
+        if len(lifecycle_operations) != len(lifecycle_record_ids):
+            raise AdaptiveSubstrateValidationError(
+                "connection lifecycle records and operations must align"
+            )
+        object.__setattr__(self, "lifecycle_record_ids", lifecycle_record_ids)
+        object.__setattr__(self, "lifecycle_operations", lifecycle_operations)
+        object.__setattr__(self, "lifecycle", lifecycle.value)
 
     @classmethod
-    def for_route(cls, route: CandidateRoute, *, generation: int) -> "CandidateConnection":
+    def for_route(
+        cls,
+        route: CandidateRoute,
+        *,
+        generation: int,
+        lifecycle_record_ids: tuple[str, ...] = (),
+        lifecycle_operations: tuple[str, ...] = (),
+    ) -> "CandidateConnection":
         return cls(
             _connection_id(route.source, route.target),
             route.source,
             route.target,
             generation=generation,
+            lifecycle_record_ids=lifecycle_record_ids,
+            lifecycle_operations=lifecycle_operations,
         )
 
     def to_dict(self) -> dict[str, Any]:
@@ -251,6 +386,10 @@ class CandidateConnection:
             "target": self.target,
             "weight": self.weight,
             "generation": self.generation,
+            "lifecycle": self.lifecycle,
+            "lineage_id": self.lineage_id,
+            "lifecycle_record_ids": list(self.lifecycle_record_ids),
+            "lifecycle_operations": list(self.lifecycle_operations),
             "dispatchable": False,
         }
 
@@ -268,6 +407,73 @@ class CandidateTactic:
 
 
 @dataclass(frozen=True)
+class AdvisoryCognition:
+    """A bounded read-only cognition result, never an authorization decision."""
+
+    cognition_id: str
+    active_tactic_id: str
+    tactic_scores: tuple[tuple[str, float], ...]
+    preferred_connection_id: str | None
+    pressure: float
+    evidence_tier: EvidenceAuthorityTier
+    evidence_ids: tuple[str, ...] = ()
+    advisory_only: bool = True
+    dispatchable: bool = False
+    authorizes_execution: bool = False
+
+    def __post_init__(self) -> None:
+        _identifier(self.cognition_id, "cognition_id")
+        _identifier(self.active_tactic_id, "active_tactic_id")
+        _bounded(self.pressure, "cognition pressure")
+        try:
+            tier = EvidenceAuthorityTier(self.evidence_tier)
+        except (TypeError, ValueError) as exc:
+            raise AdaptiveSubstrateValidationError(
+                "cognition evidence tier is invalid"
+            ) from exc
+        if not self.advisory_only or self.dispatchable or self.authorizes_execution:
+            raise AdaptiveSubstrateValidationError(
+                "advisory cognition cannot become an authority"
+            )
+        scores = _bounded_tuple(self.tactic_scores, MAX_TACTICS, "cognition tactic_scores")
+        if not all(
+            isinstance(item, (tuple, list))
+            and len(item) == 2
+            and isinstance(item[0], str)
+            for item in scores
+        ):
+            raise AdaptiveSubstrateValidationError("cognition tactic scores are invalid")
+        object.__setattr__(
+            self,
+            "tactic_scores",
+            tuple((item[0], _bounded(item[1], "cognition tactic score")) for item in scores),
+        )
+        evidence_ids = _bounded_tuple(
+            self.evidence_ids, MAX_ADAPTIVE_AUDIT, "cognition evidence_ids"
+        )
+        if not all(isinstance(item, str) and item for item in evidence_ids):
+            raise AdaptiveSubstrateValidationError("cognition evidence ids are invalid")
+        object.__setattr__(self, "evidence_ids", evidence_ids)
+        object.__setattr__(self, "evidence_tier", tier)
+        if self.preferred_connection_id is not None:
+            _identifier(self.preferred_connection_id, "preferred_connection_id")
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "cognition_id": self.cognition_id,
+            "active_tactic_id": self.active_tactic_id,
+            "tactic_scores": [list(item) for item in self.tactic_scores],
+            "preferred_connection_id": self.preferred_connection_id,
+            "pressure": self.pressure,
+            "evidence_tier": self.evidence_tier.value,
+            "evidence_ids": list(self.evidence_ids),
+            "advisory_only": True,
+            "dispatchable": False,
+            "authorizes_execution": False,
+        }
+
+
+@dataclass(frozen=True)
 class AdaptiveCheckpoint:
     """A bounded pre-update snapshot used only for safe candidate rollback."""
 
@@ -278,6 +484,8 @@ class AdaptiveCheckpoint:
     active_tactic_id: str
     tactic_scores: tuple[tuple[str, float], ...]
     applied_record_ids: tuple[str, ...]
+    trusted: bool = True
+    causal_lineage_id: str | None = None
 
     def __post_init__(self) -> None:
         _identifier(self.checkpoint_id, "checkpoint_id")
@@ -300,9 +508,29 @@ class AdaptiveCheckpoint:
         )
         if not all(isinstance(item, str) and item for item in record_ids):
             raise AdaptiveSubstrateValidationError("checkpoint record identities are invalid")
+        if not isinstance(self.trusted, bool) or not self.trusted:
+            raise AdaptiveSubstrateValidationError(
+                "adaptive checkpoints must be explicitly trusted"
+            )
+        if self.causal_lineage_id is not None:
+            _identifier(self.causal_lineage_id, "checkpoint causal_lineage_id")
         object.__setattr__(self, "connections", connections)
         object.__setattr__(self, "tactic_scores", scores)
         object.__setattr__(self, "applied_record_ids", record_ids)
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "checkpoint_id": self.checkpoint_id,
+            "generation": self.generation,
+            "route_topology_version": self.route_topology.version,
+            "route_topology_generation": self.route_topology.generation,
+            "connection_ids": [item.connection_id for item in self.connections],
+            "active_tactic_id": self.active_tactic_id,
+            "tactic_scores": [list(item) for item in self.tactic_scores],
+            "applied_record_ids": list(self.applied_record_ids),
+            "trusted": self.trusted,
+            "causal_lineage_id": self.causal_lineage_id,
+        }
 
 
 @dataclass(frozen=True)
@@ -321,6 +549,12 @@ class AdaptiveAudit:
     reason: str
     evidence_ids: tuple[str, ...]
     epistemic_class: str | None = None
+    authority_tier: str = EvidenceAuthorityTier.GROUNDED_DURABLE.value
+    causal_lineage_id: str | None = None
+    parent_record_id: str | None = None
+    target_record_id: str | None = None
+    settlement_id: str | None = None
+    update_lineage_id: str | None = None
 
     def __post_init__(self) -> None:
         for value, name in (
@@ -338,6 +572,8 @@ class AdaptiveAudit:
             "recover",
             "form_connection",
             "weaken_connection",
+            "recover_connection",
+            "retire_connection",
             "switch_tactic",
             "rollback",
             "invalidate_evidence",
@@ -349,6 +585,23 @@ class AdaptiveAudit:
         object.__setattr__(self, "evidence_ids", evidence_ids)
         if not all(isinstance(item, str) and item for item in evidence_ids):
             raise AdaptiveSubstrateValidationError("audit evidence ids are invalid")
+        try:
+            authority_tier = EvidenceAuthorityTier(self.authority_tier)
+        except (TypeError, ValueError) as exc:
+            raise AdaptiveSubstrateValidationError(
+                "audit authority tier is invalid"
+            ) from exc
+        if self.causal_lineage_id is not None:
+            _identifier(self.causal_lineage_id, "audit causal_lineage_id")
+        if self.parent_record_id is not None:
+            _identifier(self.parent_record_id, "audit parent_record_id")
+        if self.target_record_id is not None:
+            _identifier(self.target_record_id, "audit target_record_id")
+        if self.settlement_id is not None:
+            _identifier(self.settlement_id, "audit settlement_id")
+        if self.update_lineage_id is not None:
+            _identifier(self.update_lineage_id, "audit update_lineage_id")
+        object.__setattr__(self, "authority_tier", authority_tier.value)
         if self.operation == "rollback":
             if self.epistemic_class is not None:
                 raise AdaptiveSubstrateValidationError(
@@ -387,6 +640,12 @@ class AdaptiveAudit:
             "reason": self.reason,
             "evidence_ids": list(self.evidence_ids),
             "epistemic_class": self.epistemic_class,
+            "authority_tier": self.authority_tier,
+            "causal_lineage_id": self.causal_lineage_id,
+            "parent_record_id": self.parent_record_id,
+            "target_record_id": self.target_record_id,
+            "settlement_id": self.settlement_id,
+            "update_lineage_id": self.update_lineage_id,
         }
 
 
@@ -409,6 +668,7 @@ class AdaptiveState:
     tactic_streak: int = 0
     invalidated_record_ids: tuple[str, ...] = ()
     consumed_settlement_ids: tuple[str, ...] = ()
+    connection_lifecycle_audits: tuple[AdaptiveAudit, ...] = ()
 
     def __post_init__(self) -> None:
         _identifier(self.substrate_id, "substrate_id")
@@ -467,6 +727,11 @@ class AdaptiveState:
             ("consumed_settlement_ids", self.consumed_settlement_ids, MAX_TRACKED_RECORDS),
             ("audits", self.audits, MAX_ADAPTIVE_AUDIT),
             ("checkpoints", self.checkpoints, MAX_CHECKPOINTS),
+            (
+                "connection_lifecycle_audits",
+                self.connection_lifecycle_audits,
+                MAX_TRACKED_RECORDS,
+            ),
         ):
             bounded_values[name] = _bounded_tuple(values, limit, name)
         applied_record_ids = bounded_values["applied_record_ids"]
@@ -474,6 +739,7 @@ class AdaptiveState:
         consumed_settlement_ids = bounded_values["consumed_settlement_ids"]
         audits = bounded_values["audits"]
         checkpoints = bounded_values["checkpoints"]
+        connection_lifecycle_audits = bounded_values["connection_lifecycle_audits"]
         if len(set(applied_record_ids)) != len(applied_record_ids):
             raise AdaptiveSubstrateValidationError("applied record identities must not repeat")
         if any(not isinstance(item, str) or not item for item in applied_record_ids):
@@ -505,6 +771,153 @@ class AdaptiveState:
             raise AdaptiveSubstrateValidationError("adaptive audit entries are invalid")
         if any(not isinstance(item, AdaptiveCheckpoint) for item in checkpoints):
             raise AdaptiveSubstrateValidationError("adaptive checkpoints are invalid")
+        if any(
+            not isinstance(item, AdaptiveAudit)
+            or item.operation
+            not in {
+                "form_connection",
+                "weaken_connection",
+                "recover_connection",
+                "retire_connection",
+            }
+            for item in connection_lifecycle_audits
+        ):
+            raise AdaptiveSubstrateValidationError(
+                "connection lifecycle audit entries are invalid"
+            )
+        if len({item.audit_id for item in connection_lifecycle_audits}) != len(
+            connection_lifecycle_audits
+        ):
+            raise AdaptiveSubstrateValidationError(
+                "connection lifecycle audits must not repeat"
+            )
+        audit_by_record_id = {
+            item.record_id: item for item in connection_lifecycle_audits
+        }
+        for connection in connections:
+            if not connection.lifecycle_record_ids:
+                raise AdaptiveSubstrateValidationError(
+                    "candidate connection requires grounded lifecycle lineage"
+                )
+            operations = connection.lifecycle_operations
+            if not operations or operations[0] != "form_connection":
+                raise AdaptiveSubstrateValidationError(
+                    "candidate connection lifecycle must begin with grounded formation"
+                )
+            lifecycle_state = ConnectionLifecycle.ACTIVE
+            lifecycle_weight = BASELINE_CONNECTION_WEIGHT
+            for index, operation in enumerate(operations):
+                record_id = connection.lifecycle_record_ids[index]
+                lifecycle_audit = audit_by_record_id[record_id]
+                if (
+                    lifecycle_audit.weight_before is None
+                    or lifecycle_audit.weight_after is None
+                    or lifecycle_audit.weight_before != lifecycle_weight
+                ):
+                    raise AdaptiveSubstrateValidationError(
+                        "connection lifecycle audit weight progression is invalid"
+                    )
+                if index == 0:
+                    if (
+                        operation != "form_connection"
+                        or lifecycle_audit.weight_after
+                        != BASELINE_CONNECTION_WEIGHT
+                    ):
+                        raise AdaptiveSubstrateValidationError(
+                            "connection formation must establish baseline active weight"
+                        )
+                    lifecycle_weight = lifecycle_audit.weight_after
+                    continue
+                if lifecycle_state is ConnectionLifecycle.RETIRED:
+                    raise AdaptiveSubstrateValidationError(
+                        "retired candidate connection lifecycle is terminal"
+                    )
+                if operation == "form_connection":
+                    raise AdaptiveSubstrateValidationError(
+                        "candidate connection cannot be formed twice"
+                    )
+                if operation == "weaken_connection":
+                    expected_weight = max(
+                        MIN_WEIGHT,
+                        round(lifecycle_weight - MAX_CONNECTION_CHANGE, 6),
+                    )
+                    if lifecycle_audit.weight_after != expected_weight:
+                        raise AdaptiveSubstrateValidationError(
+                            "connection weakening audit has an invalid bounded effect"
+                        )
+                    lifecycle_state = (
+                        ConnectionLifecycle.DORMANT
+                        if expected_weight == MIN_WEIGHT
+                        else ConnectionLifecycle.WEAKENED
+                    )
+                elif operation == "recover_connection":
+                    if lifecycle_state not in {
+                        ConnectionLifecycle.WEAKENED,
+                        ConnectionLifecycle.DORMANT,
+                    }:
+                        raise AdaptiveSubstrateValidationError(
+                            "connection recovery requires prior weakening or dormancy"
+                        )
+                    expected_weight = min(
+                        BASELINE_CONNECTION_WEIGHT,
+                        round(lifecycle_weight + MAX_ROUTE_RECOVERY, 6),
+                    )
+                    if lifecycle_audit.weight_after != expected_weight:
+                        raise AdaptiveSubstrateValidationError(
+                            "connection recovery audit has an invalid bounded effect"
+                        )
+                    lifecycle_state = (
+                        ConnectionLifecycle.ACTIVE
+                        if expected_weight == BASELINE_CONNECTION_WEIGHT
+                        else ConnectionLifecycle.WEAKENED
+                    )
+                elif operation == "retire_connection":
+                    if (
+                        lifecycle_state is not ConnectionLifecycle.DORMANT
+                        or lifecycle_weight != MIN_WEIGHT
+                        or lifecycle_audit.weight_after != MIN_WEIGHT
+                    ):
+                        raise AdaptiveSubstrateValidationError(
+                            "connection retirement requires a proven dormant predecessor"
+                        )
+                    lifecycle_state = ConnectionLifecycle.RETIRED
+                lifecycle_weight = lifecycle_audit.weight_after
+            if lifecycle_weight != connection.weight:
+                raise AdaptiveSubstrateValidationError(
+                    "candidate connection weight disagrees with grounded audit lineage"
+                )
+            for record_id, operation in zip(
+                connection.lifecycle_record_ids,
+                connection.lifecycle_operations,
+            ):
+                retained_audit = audit_by_record_id.get(record_id)
+                if retained_audit is None or (
+                    retained_audit.operation != operation
+                    or retained_audit.connection_id != connection.connection_id
+                    or retained_audit.authority_tier
+                    != EvidenceAuthorityTier.GROUNDED_DURABLE.value
+                ):
+                    raise AdaptiveSubstrateValidationError(
+                        "connection lifecycle disagrees with retained grounded audit"
+                    )
+            expected_lifecycle = {
+                "form_connection": ConnectionLifecycle.ACTIVE.value,
+                "weaken_connection": (
+                    ConnectionLifecycle.DORMANT.value
+                    if connection.weight == MIN_WEIGHT
+                    else ConnectionLifecycle.WEAKENED.value
+                ),
+                "recover_connection": (
+                    ConnectionLifecycle.ACTIVE.value
+                    if connection.weight >= BASELINE_CONNECTION_WEIGHT
+                    else ConnectionLifecycle.WEAKENED.value
+                ),
+                "retire_connection": ConnectionLifecycle.RETIRED.value,
+            }[operations[-1]]
+            if connection.lifecycle != expected_lifecycle:
+                raise AdaptiveSubstrateValidationError(
+                    "candidate connection lifecycle disagrees with grounded audit lineage"
+                )
         _positive_integer(self.failure_streak, "failure_streak")
         if self.failure_streak > MAX_ADAPTIVE_FAILURE_STREAK:
             raise AdaptiveSubstrateValidationError(
@@ -522,6 +935,9 @@ class AdaptiveState:
         object.__setattr__(self, "consumed_settlement_ids", consumed_settlement_ids)
         object.__setattr__(self, "audits", audits)
         object.__setattr__(self, "checkpoints", checkpoints)
+        object.__setattr__(
+            self, "connection_lifecycle_audits", connection_lifecycle_audits
+        )
 
     @classmethod
     def fixture(cls, substrate_id: str = "candidate-adaptive-substrate") -> "AdaptiveState":
@@ -569,10 +985,15 @@ class AdaptiveState:
             "applied_record_ids": list(self.applied_record_ids),
             "audits": [item.to_dict() for item in self.audits],
             "checkpoint_ids": [item.checkpoint_id for item in self.checkpoints],
+            "checkpoints": [item.to_dict() for item in self.checkpoints],
             "failure_streak": self.failure_streak,
             "tactic_streak": self.tactic_streak,
             "invalidated_record_ids": list(self.invalidated_record_ids),
             "consumed_settlement_ids": list(self.consumed_settlement_ids),
+            "connection_lifecycle_audits": [
+                item.to_dict() for item in self.connection_lifecycle_audits
+            ],
+            "persistent_field_consumers": dict(ADAPTIVE_FIELD_CONSUMERS),
             "authority": Authority.KRAKEN_CANDIDATE.value,
         }
 
@@ -718,7 +1139,34 @@ def _checkpoint(state: AdaptiveState) -> AdaptiveCheckpoint:
         state.active_tactic_id,
         state.tactic_scores,
         state.applied_record_ids,
+        True,
+        (
+            f"{state.route_topology.topology_id}-generation-"
+            f"{state.route_topology.generation}"
+        ),
     )
+
+
+def _causal_lineage_id(record: SettlementRouteRecord) -> str:
+    """Return the immutable route-lineage identity carried by a selection."""
+
+    supplied = record.provenance.get("causal_lineage_id")
+    digest = hashlib.sha256(
+        "|".join(
+            (
+                record.selection.topology_id,
+                str(record.selection.topology_generation),
+                record.selection.context_id,
+                record.selection.route_id,
+            )
+        ).encode("utf-8")
+    ).hexdigest()[:20]
+    expected = f"adaptive-lineage-{digest}"
+    if supplied is not None and supplied != expected:
+        raise AdaptiveSubstrateValidationError(
+            "record causal lineage does not match its immutable route selection"
+        )
+    return expected
 
 
 def _prepare_update(
@@ -766,24 +1214,46 @@ def _finish_update(
     reason: str,
     evidence_ids: tuple[str, ...],
     epistemic_class: EpistemicOutcomeClass,
+    causal_lineage_id: str,
+    parent_record_id: str | None = None,
+    target_record_id: str | None = None,
     **changes: Any,
 ) -> tuple[AdaptiveState, AdaptiveAudit]:
     next_generation = state.generation
+    update_lineage_id = f"{causal_lineage_id}-{record.record_id}"
     audit = AdaptiveAudit(
-        f"{state.substrate_id}-audit-{state.generation}-{state.updates_applied + 1}",
-        record.record_id,
-        operation,
-        state.generation,
-        next_generation,
-        route_id,
-        connection_id,
-        weight_before,
-        weight_after,
-        reason,
-        evidence_ids,
-        epistemic_class.value,
+        audit_id=f"{state.substrate_id}-audit-{state.generation}-{state.updates_applied + 1}",
+        record_id=record.record_id,
+        operation=operation,
+        generation_before=state.generation,
+        generation_after=next_generation,
+        route_id=route_id,
+        connection_id=connection_id,
+        weight_before=weight_before,
+        weight_after=weight_after,
+        reason=reason,
+        evidence_ids=evidence_ids,
+        epistemic_class=epistemic_class.value,
+        authority_tier=EvidenceAuthorityTier.GROUNDED_DURABLE.value,
+        causal_lineage_id=causal_lineage_id,
+        parent_record_id=parent_record_id,
+        target_record_id=target_record_id,
+        settlement_id=record.settlement.settlement_id,
+        update_lineage_id=update_lineage_id,
     )
     next_checkpoints = (state.checkpoints + (checkpoint,))[-MAX_CHECKPOINTS:]
+    lifecycle_audits = state.connection_lifecycle_audits
+    if operation in {
+        "form_connection",
+        "weaken_connection",
+        "recover_connection",
+        "retire_connection",
+    }:
+        if len(lifecycle_audits) >= MAX_TRACKED_RECORDS:
+            raise AdaptiveSubstrateValidationError(
+                "connection lifecycle audit retention is exhausted"
+            )
+        lifecycle_audits = lifecycle_audits + (audit,)
     next_state = replace(
         state,
         audits=(state.audits + (audit,))[-MAX_ADAPTIVE_AUDIT:],
@@ -793,6 +1263,7 @@ def _finish_update(
             state.consumed_settlement_ids + (record.settlement.settlement_id,)
         ),
         updates_applied=state.updates_applied + 1,
+        connection_lifecycle_audits=lifecycle_audits,
         **changes,
     )
     return next_state, audit
@@ -804,11 +1275,31 @@ def _replace_route(
     *,
     weight: float,
     settlement_id: str,
+    evidence_ids: tuple[str, ...] = (),
+    lineage_id: str | None = None,
+    success: bool = False,
 ) -> RouteTopology:
+    matching = next(item for item in topology.routes if item.route_id == route.route_id)
+    route_settlement_ids = (matching.settlement_ids + (settlement_id,))[-16:]
+    route_evidence_ids = (matching.evidence_ids + evidence_ids)[-16:]
+    route_lineage_ids = (
+        matching.lineage_ids + ((lineage_id,) if lineage_id is not None else ())
+    )[-16:]
     return RouteTopology(
         topology.topology_id,
         topology.version + 1,
-        tuple(replace(item, weight=weight) if item.route_id == route.route_id else item
+        tuple(
+            replace(
+                item,
+                weight=weight,
+                success_count=item.success_count + (1 if success else 0),
+                failure_count=item.failure_count + (0 if success else 1),
+                settlement_ids=route_settlement_ids,
+                evidence_ids=route_evidence_ids,
+                lineage_ids=route_lineage_ids,
+            )
+            if item.route_id == route.route_id
+            else item
               for item in topology.routes),
         topology.generation,
         topology.applied_settlement_ids + (settlement_id,),
@@ -842,6 +1333,7 @@ def apply_grounded_adaptation(
         )
     if operation not in {"strengthen", "weaken", "decay", "recover"}:
         raise AdaptiveSubstrateValidationError("operation is not a route adaptation")
+    causal_lineage_id = _causal_lineage_id(record)
     outcome = record.settlement.observed_outcome
     permitted_outcomes = {
         "strengthen": "success",
@@ -872,6 +1364,9 @@ def apply_grounded_adaptation(
         route,
         weight=next_weight,
         settlement_id=record.settlement.settlement_id,
+        evidence_ids=evidence_ids,
+        lineage_id=f"{causal_lineage_id}-{record.record_id}",
+        success=outcome == "success",
     )
     next_state, audit = _finish_update(
         state,
@@ -884,6 +1379,7 @@ def apply_grounded_adaptation(
         reason=f"settled grounded {outcome} outcome",
         evidence_ids=evidence_ids,
         epistemic_class=epistemic_class,
+        causal_lineage_id=causal_lineage_id,
         route_topology=next_topology,
         failure_streak=(
             min(MAX_ADAPTIVE_FAILURE_STREAK, state.failure_streak + 1)
@@ -910,6 +1406,7 @@ def form_grounded_connection(
         raise AdaptiveSubstrateValidationError(
             "candidate connections form only after grounded success"
         )
+    causal_lineage_id = _causal_lineage_id(record)
     connection_id = _connection_id(route.source, route.target)
     if any(item.connection_id == connection_id for item in state.connections):
         raise AdaptiveSubstrateValidationError("candidate connection identity already exists")
@@ -925,7 +1422,12 @@ def form_grounded_connection(
     ):
         raise AdaptiveSubstrateValidationError("candidate connection degree limit reached")
     checkpoint, _ = _prepare_update(state, record)
-    connection = CandidateConnection.for_route(route, generation=state.generation)
+    connection = CandidateConnection.for_route(
+        route,
+        generation=state.generation,
+        lifecycle_record_ids=(record.record_id,),
+        lifecycle_operations=("form_connection",),
+    )
     next_state, audit = _finish_update(
         state,
         checkpoint,
@@ -933,9 +1435,12 @@ def form_grounded_connection(
         "form_connection",
         route_id=route.route_id,
         connection_id=connection.connection_id,
+        weight_before=BASELINE_CONNECTION_WEIGHT,
+        weight_after=BASELINE_CONNECTION_WEIGHT,
         reason="settled grounded success formed one bounded candidate edge",
         evidence_ids=evidence_ids,
         epistemic_class=epistemic_class,
+        causal_lineage_id=causal_lineage_id,
         connections=state.connections + (connection,),
     )
     return next_state, audit
@@ -969,10 +1474,21 @@ def weaken_grounded_connection(
         raise AdaptiveSubstrateValidationError(
             "candidate connection is retained at its minimum weight floor"
         )
+    causal_lineage_id = _causal_lineage_id(record)
     checkpoint, _ = _prepare_update(state, record)
     next_weight = max(MIN_WEIGHT, round(connection.weight - MAX_CONNECTION_CHANGE, 6))
     next_connections = tuple(
-        replace(item, weight=next_weight)
+        replace(
+            item,
+            weight=next_weight,
+            lifecycle=(
+                ConnectionLifecycle.DORMANT.value
+                if next_weight <= MIN_WEIGHT
+                else ConnectionLifecycle.WEAKENED.value
+            ),
+            lifecycle_record_ids=item.lifecycle_record_ids + (record.record_id,),
+            lifecycle_operations=item.lifecycle_operations + ("weaken_connection",),
+        )
         if item.connection_id == connection_id
         else item
         for item in state.connections
@@ -989,9 +1505,222 @@ def weaken_grounded_connection(
         reason="settled grounded failure weakened one bounded candidate edge",
         evidence_ids=evidence_ids,
         epistemic_class=epistemic_class,
+        causal_lineage_id=causal_lineage_id,
         connections=next_connections,
     )
     return next_state, audit
+
+
+def recover_grounded_connection(
+    state: AdaptiveState, record: SettlementRouteRecord, connection_id: str
+) -> tuple[AdaptiveState, AdaptiveAudit]:
+    """Recover one weakened or dormant edge after useful grounded evidence."""
+
+    if not isinstance(state, AdaptiveState):
+        raise AdaptiveSubstrateValidationError("connection recovery requires AdaptiveState")
+    _reject_duplicate_record(state, record)
+    route, evidence_ids, epistemic_class = _require_grounded_credit(state, record)
+    if (
+        record.settlement.observed_outcome != "success"
+        or epistemic_class is not EpistemicOutcomeClass.TASK_SUCCESS
+    ):
+        raise AdaptiveSubstrateValidationError(
+            "candidate connections recover only after grounded task success"
+        )
+    _identifier(connection_id, "connection_id")
+    connection = next(
+        (item for item in state.connections if item.connection_id == connection_id),
+        None,
+    )
+    if connection is None:
+        raise AdaptiveSubstrateValidationError("candidate connection does not exist")
+    if connection.lifecycle == ConnectionLifecycle.RETIRED.value:
+        raise AdaptiveSubstrateValidationError(
+            "permanently retired candidate connection cannot recover"
+        )
+    if connection.connection_id != _connection_id(route.source, route.target):
+        raise AdaptiveSubstrateValidationError(
+            "grounded success can recover only the selected route connection"
+        )
+    if connection.weight >= BASELINE_CONNECTION_WEIGHT:
+        raise AdaptiveSubstrateValidationError(
+            "active candidate connection has no recoverable weakening"
+        )
+    causal_lineage_id = _causal_lineage_id(record)
+    checkpoint, _ = _prepare_update(state, record)
+    next_weight = min(
+        BASELINE_CONNECTION_WEIGHT,
+        round(connection.weight + MAX_ROUTE_RECOVERY, 6),
+    )
+    next_lifecycle = (
+        ConnectionLifecycle.ACTIVE.value
+        if next_weight >= BASELINE_CONNECTION_WEIGHT
+        else ConnectionLifecycle.WEAKENED.value
+    )
+    next_connections = tuple(
+        replace(
+            item,
+            weight=next_weight,
+            lifecycle=next_lifecycle,
+            generation=state.generation,
+            lifecycle_record_ids=item.lifecycle_record_ids + (record.record_id,),
+            lifecycle_operations=item.lifecycle_operations + ("recover_connection",),
+        )
+        if item.connection_id == connection_id
+        else item
+        for item in state.connections
+    )
+    return _finish_update(
+        state,
+        checkpoint,
+        record,
+        "recover_connection",
+        route_id=route.route_id,
+        connection_id=connection_id,
+        weight_before=connection.weight,
+        weight_after=next_weight,
+        reason="later useful grounded evidence recovered one candidate edge",
+        evidence_ids=evidence_ids,
+        epistemic_class=epistemic_class,
+        causal_lineage_id=causal_lineage_id,
+        parent_record_id=record.provenance.get("causal_parent_record_id"),
+        connections=next_connections,
+    )
+
+
+def retire_grounded_connection(
+    state: AdaptiveState,
+    record: SettlementRouteRecord,
+    connection_id: str,
+    *,
+    reason: str,
+) -> tuple[AdaptiveState, AdaptiveAudit]:
+    """Permanently retire one dormant edge through a separate grounded act."""
+
+    if not isinstance(state, AdaptiveState):
+        raise AdaptiveSubstrateValidationError("connection retirement requires AdaptiveState")
+    if not isinstance(reason, str) or not reason.strip():
+        raise AdaptiveSubstrateValidationError("connection retirement reason is required")
+    _reject_duplicate_record(state, record)
+    route, evidence_ids, epistemic_class = _require_grounded_credit(state, record)
+    if (
+        record.settlement.observed_outcome != "failure"
+        or epistemic_class is not EpistemicOutcomeClass.TASK_FAILURE
+    ):
+        raise AdaptiveSubstrateValidationError(
+            "candidate connection retirement requires grounded task failure"
+        )
+    _identifier(connection_id, "connection_id")
+    connection = next(
+        (item for item in state.connections if item.connection_id == connection_id),
+        None,
+    )
+    if connection is None:
+        raise AdaptiveSubstrateValidationError("candidate connection does not exist")
+    if connection.lifecycle != ConnectionLifecycle.DORMANT.value:
+        raise AdaptiveSubstrateValidationError(
+            "only an explicitly dormant candidate connection can be retired"
+        )
+    if connection.connection_id != _connection_id(route.source, route.target):
+        raise AdaptiveSubstrateValidationError(
+            "grounded failure can retire only the selected route connection"
+        )
+    causal_lineage_id = _causal_lineage_id(record)
+    checkpoint, _ = _prepare_update(state, record)
+    next_connections = tuple(
+        replace(
+            item,
+            lifecycle=ConnectionLifecycle.RETIRED.value,
+            generation=state.generation,
+            lifecycle_record_ids=item.lifecycle_record_ids + (record.record_id,),
+            lifecycle_operations=item.lifecycle_operations + ("retire_connection",),
+        )
+        if item.connection_id == connection_id
+        else item
+        for item in state.connections
+    )
+    return _finish_update(
+        state,
+        checkpoint,
+        record,
+        "retire_connection",
+        route_id=route.route_id,
+        connection_id=connection_id,
+        weight_before=connection.weight,
+        weight_after=connection.weight,
+        reason=f"explicit grounded permanent retirement: {reason.strip()}",
+        evidence_ids=evidence_ids,
+        epistemic_class=epistemic_class,
+        causal_lineage_id=causal_lineage_id,
+        parent_record_id=record.provenance.get("causal_parent_record_id"),
+        connections=next_connections,
+    )
+
+
+def derive_advisory_cognition(
+    state: AdaptiveState,
+    evidence: Iterable[Evidence],
+    *,
+    pressure: HomeostaticSnapshot | None = None,
+) -> AdvisoryCognition:
+    """Read tactic and connection state into a bounded non-authoritative view.
+
+    Operational evidence can change this returned value for one caller-owned
+    decision horizon.  The function never returns a new ``AdaptiveState`` and
+    therefore cannot make operational influence durable.
+    """
+
+    if not isinstance(state, AdaptiveState):
+        raise AdaptiveSubstrateValidationError("advisory cognition requires AdaptiveState")
+    items = _bounded_tuple(evidence, MAX_ADAPTIVE_AUDIT, "cognition evidence")
+    if not items:
+        raise AdaptiveSubstrateValidationError(
+            "advisory cognition requires operational or grounded evidence"
+        )
+    tiers = tuple(evidence_authority_tier(item) for item in items)
+    evidence_tier = (
+        EvidenceAuthorityTier.GROUNDED_DURABLE
+        if all(item is EvidenceAuthorityTier.GROUNDED_DURABLE for item in tiers)
+        else EvidenceAuthorityTier.OPERATIONAL_PROVISIONAL
+    )
+    pressure_value = pressure.pressure if pressure is not None else 0.0
+    available = tuple(
+        item
+        for item in state.connections
+        if item.lifecycle != ConnectionLifecycle.RETIRED.value
+    )
+    preferred = (
+        sorted(
+            available,
+            key=lambda item: (-item.weight, item.connection_id),
+        )[0].connection_id
+        if available
+        else None
+    )
+    evidence_ids = tuple(item.evidence_id for item in items)
+    digest = hashlib.sha256(
+        repr(
+            (
+                state.substrate_id,
+                state.generation,
+                state.active_tactic_id,
+                state.tactic_scores,
+                preferred,
+                pressure_value,
+                evidence_tier.value,
+                evidence_ids,
+            )
+        ).encode("utf-8")
+    ).hexdigest()[:20]
+    return AdvisoryCognition(
+        f"advisory-cognition-{digest}",
+        state.active_tactic_id,
+        state.tactic_scores,
+        preferred,
+        pressure_value,
+        evidence_tier,
+        evidence_ids,
+    )
 
 
 def switch_grounded_tactic(
@@ -1006,6 +1735,7 @@ def switch_grounded_tactic(
     _reject_duplicate_record(state, record)
     _validate_pressure(pressure, record)
     _, evidence_ids, epistemic_class = _require_grounded_credit(state, record)
+    causal_lineage_id = _causal_lineage_id(record)
     checkpoint, _ = _prepare_update(state, record)
     ordered = sorted(state.tactics, key=lambda item: (item.ordinal, item.tactic_id))
     current_index = next(
@@ -1038,6 +1768,7 @@ def switch_grounded_tactic(
         ),
         evidence_ids=evidence_ids,
         epistemic_class=epistemic_class,
+        causal_lineage_id=causal_lineage_id,
         active_tactic_id=target.tactic_id,
         tactic_scores=tuple((item.tactic_id, scores[item.tactic_id]) for item in ordered),
         tactic_streak=(
@@ -1075,6 +1806,14 @@ def rollback_adaptive_state(
         raise AdaptiveSubstrateValidationError(
             "rollback checkpoint lineage is stale for the current adaptive generation"
         )
+    latest_trusted = next(
+        (item for item in reversed(state.checkpoints) if item.trusted),
+        None,
+    )
+    if latest_trusted is None or latest_trusted.checkpoint_id != checkpoint_id:
+        raise AdaptiveSubstrateValidationError(
+            "rollback is restricted to the most recent trusted checkpoint"
+        )
     if state.updates_applied >= MAX_ADAPTIVE_UPDATES:
         raise AdaptiveSubstrateValidationError("rollback budget is exhausted")
     if state.generation >= MAX_ADAPTIVE_GENERATIONS:
@@ -1092,6 +1831,8 @@ def rollback_adaptive_state(
         "restored immutable checkpoint without evicting applied identities",
         (),
         None,
+        EvidenceAuthorityTier.GROUNDED_DURABLE.value,
+        checkpoint.causal_lineage_id,
     )
     topology = replace(
         checkpoint.route_topology,
@@ -1114,8 +1855,87 @@ def rollback_adaptive_state(
         state.tactic_streak,
         state.invalidated_record_ids,
         state.consumed_settlement_ids,
+        state.connection_lifecycle_audits,
     )
     return next_state, audit
+
+
+def _replay_retained_route_audits(
+    topology: RouteTopology, audits: tuple[AdaptiveAudit, ...]
+) -> RouteTopology:
+    """Rebuild a valid route suffix from immutable grounded audit effects."""
+
+    result = topology
+    for audit in audits:
+        if audit.operation not in {"strengthen", "weaken", "decay", "recover"}:
+            continue
+        if (
+            audit.settlement_id is None
+            or audit.update_lineage_id is None
+            or audit.epistemic_class not in {
+                EpistemicOutcomeClass.TASK_SUCCESS.value,
+                EpistemicOutcomeClass.TASK_FAILURE.value,
+            }
+        ):
+            raise AdaptiveSubstrateValidationError(
+                "retained route suffix lacks replayable grounded lineage"
+            )
+        route = next(
+            (item for item in result.routes if item.route_id == audit.route_id),
+            None,
+        )
+        if route is None:
+            raise AdaptiveSubstrateValidationError(
+                "retained route suffix names an absent route"
+            )
+        if audit.operation == "strengthen":
+            next_weight = min(
+                MAX_ADAPTIVE_ROUTE_WEIGHT, route.weight + MAX_CONNECTION_CHANGE
+            )
+        elif audit.operation == "weaken":
+            next_weight = max(MIN_WEIGHT, route.weight - MAX_CONNECTION_CHANGE)
+        elif audit.operation == "decay":
+            delta = min(MAX_ROUTE_DECAY, abs(route.weight - BASELINE_CONNECTION_WEIGHT))
+            next_weight = (
+                route.weight - delta if route.weight > BASELINE_CONNECTION_WEIGHT
+                else route.weight + delta
+            )
+        else:
+            delta = min(MAX_ROUTE_RECOVERY, abs(route.weight - BASELINE_CONNECTION_WEIGHT))
+            next_weight = (
+                route.weight + delta if route.weight < BASELINE_CONNECTION_WEIGHT
+                else route.weight - delta
+            )
+        next_route = replace(
+            route,
+            weight=round(next_weight, 6),
+            success_count=route.success_count
+            + (
+                1
+                if audit.epistemic_class == EpistemicOutcomeClass.TASK_SUCCESS.value
+                else 0
+            ),
+            failure_count=route.failure_count
+            + (
+                1
+                if audit.epistemic_class == EpistemicOutcomeClass.TASK_FAILURE.value
+                else 0
+            ),
+            settlement_ids=(route.settlement_ids + (audit.settlement_id,))[-16:],
+            evidence_ids=(route.evidence_ids + audit.evidence_ids)[-16:],
+            lineage_ids=(route.lineage_ids + (audit.update_lineage_id,))[-16:],
+        )
+        result = RouteTopology(
+            result.topology_id,
+            result.version + 1,
+            tuple(
+                next_route if item.route_id == next_route.route_id else item
+                for item in result.routes
+            ),
+            result.generation,
+            result.applied_settlement_ids + (audit.settlement_id,),
+        )
+    return result
 
 
 def invalidate_grounded_adaptation(
@@ -1128,8 +1948,9 @@ def invalidate_grounded_adaptation(
     """Reverse one retained adaptive update after a newer grounded failure.
 
     This reducer is deliberately conservative: it does not create replacement
-    credit, and it only restores a retained pre-update checkpoint.  Both the
-    original and invalidating identities remain consumed.
+    credit. It removes only the target route effect while preserving subsequent
+    valid route learning. Both original and invalidating identities remain
+    consumed.
     """
 
     if not isinstance(state, AdaptiveState):
@@ -1158,6 +1979,29 @@ def invalidate_grounded_adaptation(
         raise AdaptiveSubstrateValidationError(
             "invalidation requires a later grounded task failure"
         )
+    invalidating_lineage_id = _causal_lineage_id(invalidating_record)
+    explicit_parent = invalidating_record.provenance.get("causal_parent_record_id")
+    attested_parent = invalidating_record.grounded_request.causal_parent_record_id
+    if explicit_parent is None:
+        raise AdaptiveSubstrateValidationError(
+            "invalidation requires an explicit causal_parent_record_id"
+        )
+    if attested_parent is None or explicit_parent != attested_parent:
+        raise AdaptiveSubstrateValidationError(
+            "causal parent is not bound to the verified grounded execution input"
+        )
+    if explicit_parent != target_record_id:
+        raise AdaptiveSubstrateValidationError(
+            "invalidating failure does not causally target the adaptive update"
+        )
+    if (
+        target_audit.causal_lineage_id is None
+        or target_audit.causal_lineage_id != invalidating_lineage_id
+        or target_audit.route_id != invalidating_record.selection.route_id
+    ):
+        raise AdaptiveSubstrateValidationError(
+            "invalidating failure is outside the target adaptive causal lineage"
+        )
     checkpoint_candidates = tuple(
         item
         for item in state.checkpoints
@@ -1174,36 +2018,80 @@ def invalidate_grounded_adaptation(
     checkpoint = max(
         checkpoint_candidates, key=lambda item: len(item.applied_record_ids)
     )
+    if target_audit.operation not in {"strengthen", "weaken", "decay", "recover"}:
+        raise AdaptiveSubstrateValidationError(
+            "only a bounded route update has a suffix-preserving invalidation"
+        )
+    if (
+        target_audit.weight_before is None
+        or target_audit.weight_after is None
+        or target_audit.settlement_id is None
+        or target_audit.update_lineage_id is None
+    ):
+        raise AdaptiveSubstrateValidationError(
+            "target adaptive audit lacks reversible causal lineage"
+        )
+    target_index = next(
+        index
+        for index, item in enumerate(state.audits)
+        if item.audit_id == target_audit.audit_id
+    )
+    retained_suffix = tuple(
+        item
+        for item in state.audits[target_index + 1 :]
+        if item.operation not in {"rollback", "invalidate_evidence"}
+    )
+    replayed_topology = _replay_retained_route_audits(
+        checkpoint.route_topology, retained_suffix
+    )
     restored_topology = RouteTopology(
-        checkpoint.route_topology.topology_id,
+        replayed_topology.topology_id,
         state.route_topology.version + 1,
-        checkpoint.route_topology.routes,
+        replayed_topology.routes,
         state.route_topology.generation + 1,
-        state.route_topology.applied_settlement_ids,
+        replayed_topology.applied_settlement_ids,
+    )
+    current_route = next(
+        item
+        for item in state.route_topology.routes
+        if item.route_id == target_audit.route_id
+    )
+    restored_route = next(
+        item
+        for item in restored_topology.routes
+        if item.route_id == target_audit.route_id
     )
     audit = AdaptiveAudit(
-        f"{state.substrate_id}-invalidate-{state.generation}-{state.updates_applied + 1}",
-        invalidating_record.record_id,
-        "invalidate_evidence",
-        state.generation,
-        state.generation + 1,
-        target_audit.route_id,
-        None,
-        None,
-        None,
-        f"reversed {target_record_id} after later grounded failure: {reason.strip()}",
-        tuple(dict.fromkeys(target_audit.evidence_ids + invalidating_evidence)),
-        epistemic_class.value,
+        audit_id=f"{state.substrate_id}-invalidate-{state.generation}-{state.updates_applied + 1}",
+        record_id=invalidating_record.record_id,
+        operation="invalidate_evidence",
+        generation_before=state.generation,
+        generation_after=state.generation + 1,
+        route_id=target_audit.route_id,
+        connection_id=None,
+        weight_before=current_route.weight,
+        weight_after=restored_route.weight,
+        reason=f"reversed {target_record_id} after later grounded failure: {reason.strip()}",
+        evidence_ids=tuple(
+            dict.fromkeys(target_audit.evidence_ids + invalidating_evidence)
+        ),
+        epistemic_class=epistemic_class.value,
+        authority_tier=EvidenceAuthorityTier.GROUNDED_DURABLE.value,
+        causal_lineage_id=invalidating_lineage_id,
+        parent_record_id=target_record_id,
+        target_record_id=target_record_id,
+        settlement_id=invalidating_record.settlement.settlement_id,
+        update_lineage_id=f"{invalidating_lineage_id}-{invalidating_record.record_id}",
     )
     return AdaptiveState(
         state.substrate_id,
         state.generation + 1,
         0,
         restored_topology,
-        checkpoint.connections,
+        state.connections,
         state.tactics,
-        checkpoint.active_tactic_id,
-        checkpoint.tactic_scores,
+        state.active_tactic_id,
+        state.tactic_scores,
         state.applied_record_ids + (invalidating_record.record_id,),
         (state.audits + (audit,))[-MAX_ADAPTIVE_AUDIT:],
         state.checkpoints,
@@ -1212,6 +2100,7 @@ def invalidate_grounded_adaptation(
         state.invalidated_record_ids + (target_record_id,),
         state.consumed_settlement_ids
         + (invalidating_record.settlement.settlement_id,),
+        state.connection_lifecycle_audits,
     ), audit
 
 
@@ -1320,6 +2209,8 @@ def run_orzhaal_experiment(
 
 
 __all__ = [
+    "ADAPTIVE_FIELD_CONSUMERS",
+    "AdvisoryCognition",
     "AdaptiveAudit",
     "AdaptiveCheckpoint",
     "AdaptiveState",
@@ -1327,6 +2218,8 @@ __all__ = [
     "BASELINE_CONNECTION_WEIGHT",
     "CandidateConnection",
     "CandidateTactic",
+    "ConnectionLifecycle",
+    "EvidenceAuthorityTier",
     "HomeostaticSnapshot",
     "MAX_ADAPTIVE_AUDIT",
     "MAX_ADAPTIVE_FAILURE_STREAK",
@@ -1341,10 +2234,14 @@ __all__ = [
     "MAX_TACTICS",
     "OrzhaalExperimentResult",
     "apply_grounded_adaptation",
+    "derive_advisory_cognition",
+    "evidence_authority_tier",
     "form_grounded_connection",
     "invalidate_grounded_adaptation",
     "replay_adaptive_updates",
     "replay_adaptive_invalidations",
+    "recover_grounded_connection",
+    "retire_grounded_connection",
     "rollback_adaptive_state",
     "run_orzhaal_experiment",
     "switch_grounded_tactic",

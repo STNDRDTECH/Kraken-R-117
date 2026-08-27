@@ -144,6 +144,7 @@ def _grounded_route_record_for_topology(
     transaction_id: str | None = None,
     objective_id: str | None = None,
     passing: bool = True,
+    causal_parent_record_id: str | None = None,
 ) -> SettlementRouteRecord:
     """Build one independently verified grounded settlement record."""
 
@@ -179,6 +180,7 @@ def _grounded_route_record_for_topology(
         action,
         files,
         ("test_subject.py",),
+        causal_parent_record_id=causal_parent_record_id,
     )
     ledger = GroundedDeliveryLedger(
         Path(tempfile.mkdtemp(prefix="kraken-r-soak-receipts-")) / "receipts.json"
@@ -213,6 +215,11 @@ def _grounded_route_record_for_topology(
             "route_id": selection.route_id,
             "settlement_id": trace.settlement.settlement_id,
             "evidence_ids": tuple(item.evidence_id for item in trace.evidence),
+            **(
+                {"causal_parent_record_id": causal_parent_record_id}
+                if causal_parent_record_id is not None
+                else {}
+            ),
         },
         grounded_execution=verified,
         grounded_request=request,
@@ -980,6 +987,7 @@ def test_invalidation_budget_exhaustion_scope_note_and_direct_regression() -> No
         transaction_id=base_adaptive.substrate_id,
         objective_id="invalidation-budget-gap-invalidator-objective",
         passing=False,
+        causal_parent_record_id=target_record.record_id,
     )
     _require_child_pytest(invalidating_record)
 
