@@ -285,14 +285,22 @@ def test_kraken_r_source_has_no_legacy_runtime_imports_or_runtime_authorities() 
 
 
 def test_legacy_and_forgotten_mechanisms_are_classified() -> None:
-    preserved = [
-        ROOT / "rogal_core/orzhaal_bubble.py",
-        ROOT / "rogal_core/code_executor/orzhaal_bubble.py",
+    """Quarantined legacy trees were deleted by the cleanup; they must stay gone.
+
+    ``recursive_core`` and the standalone ``core/`` tree were undocumented,
+    unimported orphans and were removed outright. ``rogal_core/orzhaal_bubble.py``
+    and ``rogal_core/code_executor/orzhaal_bubble.py`` lived inside
+    ``rogal_core``, which is left intact because most of it is registry-"keep"
+    (still authoritative for the current non-Kraken-R runtime); only those two
+    quarantined files within it were never deleted, so they are still expected
+    to exist. The registry disposition is the durable record either way.
+    """
+    removed_legacy_trees = [
         ROOT / "recursive_core",
-        ROOT / "core/recursive",
+        ROOT / "core",
     ]
-    if any(path.exists() for path in preserved):
-        assert all(path.exists() for path in preserved)
+    for path in removed_legacy_trees:
+        assert not path.exists(), f"quarantined legacy tree should stay deleted: {path}"
     registry = load_default_registry()
     assert registry.get("orzhaal_bubble").disposition is RegistryDisposition.QUARANTINE
     assert registry.get("recursive_core").disposition is RegistryDisposition.QUARANTINE
