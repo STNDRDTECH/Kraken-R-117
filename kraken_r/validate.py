@@ -428,9 +428,9 @@ def validate_recorded_execution_replay() -> tuple[str, ...]:
         transaction_id=transaction_id,
         objective_id=objective.objective_id,
     )
-    invalid_records = {
-        "missing provenance": replace(record, provenance={}),
-        "missing settlement provenance": replace(
+    invalid_record_factories = {
+        "missing provenance": lambda: replace(record, provenance={}),
+        "missing settlement provenance": lambda: replace(
             record,
             provenance={
                 key: value
@@ -438,11 +438,11 @@ def validate_recorded_execution_replay() -> tuple[str, ...]:
                 if key != "settlement_id"
             },
         ),
-        "stale state": replace(record, task_state_version=4),
-        "mismatched observation": replace(
+        "stale state": lambda: replace(record, task_state_version=4),
+        "mismatched observation": lambda: replace(
             record, observations={**record.observations, "action_id": "wrong-action"}
         ),
-        "self-report-only success": replace(
+        "self-report-only success": lambda: replace(
             record,
             status="not_observed",
             observations={
@@ -458,10 +458,11 @@ def validate_recorded_execution_replay() -> tuple[str, ...]:
                 "learning_update_id": None,
             },
         ),
-        "incoherent status": replace(record, status="failed"),
+        "incoherent status": lambda: replace(record, status="failed"),
     }
-    for label, invalid in invalid_records.items():
+    for label, make_invalid in invalid_record_factories.items():
         try:
+            invalid = make_invalid()
             replay_recorded_execution(objective, invalid)
         except ReplayValidationError:
             continue

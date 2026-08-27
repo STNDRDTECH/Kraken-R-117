@@ -158,3 +158,15 @@ def test_recorded_execution_is_immutable_and_candidate_only() -> None:
     source = (ROOT / "kraken_r/replay.py").read_text()
     for forbidden in ("import rogal_core", "from rogal_core", "EventBus", "sqlite3"):
         assert forbidden not in source
+
+
+def test_replay_rejects_unknown_and_cross_mode_semantic_observation_fields() -> None:
+    objective, record = fixture(RecordedExecutionMode.SUCCESS)
+    for observations in (
+        {**record.observations, "provider_claim": "success"},
+        {**record.observations, "positive_observation": False},
+    ):
+        with pytest.raises(ReplayValidationError, match="semantic"):
+            replay_recorded_execution(
+                objective, replace(record, observations=observations)
+            )

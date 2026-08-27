@@ -156,6 +156,28 @@ def _digest(value: Any) -> str:
     return hashlib.sha256(_canonical_json(value).encode("utf-8")).hexdigest()
 
 
+def _causal_criterion_binding(request: "GroundedExecutionRequest") -> str:
+    """Bind causal proof to the independently executed criterion, not subject.
+
+    The implementation under test may change between a passing update and a
+    later failing falsification.  Continuity therefore means the same action
+    contract and exact executed test paths/content, which the executor signs
+    and the verifier recomputes from the sealed request.
+    """
+
+    return _digest(
+        {
+            "action": {
+                "operation": request.action.operation,
+                "target": request.action.target,
+                "authority": request.action.authority.value,
+            },
+            "test_paths": list(request.test_paths),
+            "test_files": {path: request.files[path] for path in request.test_paths},
+        }
+    )
+
+
 def _safe_path(value: str, field_name: str) -> PurePosixPath:
     if not isinstance(value, str) or not value or len(value) > 240 or "\x00" in value:
         raise GroundedExecutionRejected(f"{field_name} must be a bounded relative path")
@@ -277,6 +299,7 @@ class GroundedExecutionRequest:
     test_paths: tuple[str, ...]
     limits: ExecutionLimits = field(default_factory=ExecutionLimits)
     causal_parent_record_id: str | None = None
+    causal_target: Mapping[str, str] | None = None
 
     def __post_init__(self) -> None:
         for name in (
@@ -339,6 +362,21 @@ class GroundedExecutionRequest:
             raise GroundedExecutionError(
                 "causal_parent_record_id must be a non-empty string or None"
             )
+        if self.causal_target is not None:
+            if not isinstance(self.causal_target, Mapping) or set(self.causal_target) != {
+                "target_record_id",
+                "target_settlement_id",
+                "target_update_lineage_id",
+                "target_audit_hash",
+                "target_criterion_binding",
+            }:
+                raise GroundedExecutionError("causal_target must use the exact target schema")
+            target = _freeze_mapping(self.causal_target, "causal_target")
+            if any(not isinstance(value, str) or not value for value in target.values()):
+                raise GroundedExecutionError("causal_target values must be non-empty strings")
+            if self.causal_parent_record_id != target["target_record_id"]:
+                raise GroundedExecutionError("causal target and parent record must agree")
+            object.__setattr__(self, "causal_target", target)
 
     @property
     def input_hash(self) -> str:
@@ -356,6 +394,9 @@ class GroundedExecutionRequest:
             "test_paths": list(self.test_paths),
             "limits": self.limits.to_dict(),
             "causal_parent_record_id": self.causal_parent_record_id,
+            "causal_target": (
+                dict(self.causal_target) if self.causal_target is not None else None
+            ),
         }
 
     @classmethod
@@ -374,6 +415,7 @@ class GroundedExecutionRequest:
                     _mapping(payload["limits"], "serialized limits")
                 ),
                 payload.get("causal_parent_record_id"),
+                payload.get("causal_target"),
             )
         except (KeyError, TypeError, ValueError) as exc:
             raise GroundedExecutionError("serialized execution request is invalid") from exc
@@ -497,6 +539,8 @@ class ExecutionProvenance:
     workspace_hash: str
     child_runtime_verified: bool = False
     child_runtime_fingerprint: str | None = None
+    causal_target_witness: str | None = None
+    causal_criterion_binding: str | None = None
 
     def __post_init__(self) -> None:
         if self.isolation != "user_mount_network_pid_namespace":
@@ -524,6 +568,18 @@ class ExecutionProvenance:
             raise GroundedExecutionError(
                 "unverified child runtime cannot carry a runtime fingerprint"
             )
+        if self.causal_target_witness is not None and (
+            not isinstance(self.causal_target_witness, str)
+            or len(self.causal_target_witness) != 64
+            or any(char not in "0123456789abcdef" for char in self.causal_target_witness)
+        ):
+            raise GroundedExecutionError("causal target witness must be a SHA-256 digest")
+        if self.causal_criterion_binding is not None and (
+            not isinstance(self.causal_criterion_binding, str)
+            or len(self.causal_criterion_binding) != 64
+            or any(char not in "0123456789abcdef" for char in self.causal_criterion_binding)
+        ):
+            raise GroundedExecutionError("causal criterion binding must be a SHA-256 digest")
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -534,6 +590,8 @@ class ExecutionProvenance:
             "workspace_hash": self.workspace_hash,
             "child_runtime_verified": self.child_runtime_verified,
             "child_runtime_fingerprint": self.child_runtime_fingerprint,
+            "causal_target_witness": self.causal_target_witness,
+            "causal_criterion_binding": self.causal_criterion_binding,
         }
 
     @classmethod
@@ -541,6 +599,8 @@ class ExecutionProvenance:
         if (
             "child_runtime_verified" not in payload
             or "child_runtime_fingerprint" not in payload
+            or "causal_target_witness" not in payload
+            or "causal_criterion_binding" not in payload
         ):
             raise GroundedExecutionError(
                 "serialized execution provenance predates the child runtime contract"
@@ -554,6 +614,8 @@ class ExecutionProvenance:
                 payload["workspace_hash"],
                 payload["child_runtime_verified"],
                 payload["child_runtime_fingerprint"],
+                payload["causal_target_witness"],
+                payload["causal_criterion_binding"],
             )
         except (KeyError, TypeError, ValueError) as exc:
             raise GroundedExecutionError("serialized execution provenance is invalid") from exc
@@ -748,7 +810,10 @@ class GroundedExecutionRecord:
 class GroundedDeliveryLedger:
     """Bounded receipt ledger with optional durable replay and expiry semantics."""
 
-    _SCHEMA_VERSION = 1
+    _SCHEMA_VERSION = 2
+    _LEGACY_SCHEMA_VERSION = 1
+    _MAX_RECEIPTS = 256
+    _MAX_IDENTITIES = 512
 
     def __init__(
         self,
@@ -767,9 +832,17 @@ class GroundedDeliveryLedger:
         self._receipt_ttl_seconds = receipt_ttl_seconds
         self._clock = clock or time.time
         self._receipts: dict[tuple[str, str], tuple[str, int]] = {}
+        self._identities: dict[tuple[str, str], str] = {}
+        self._needs_migration = False
         self._lock = threading.Lock()
         if self._storage_path is not None:
             self._load()
+            if self._needs_migration:
+                # A valid legacy file is upgraded immediately via the same
+                # fsync + replace path as claims; it is never left half-migrated
+                # pending a later delivery.
+                self._persist()
+                self._needs_migration = False
 
     @property
     def is_durable(self) -> bool:
@@ -780,9 +853,20 @@ class GroundedDeliveryLedger:
             return
         try:
             payload = json.loads(self._storage_path.read_text(encoding="utf-8"))
-            if payload.get("schema_version") != self._SCHEMA_VERSION:
+            version = payload.get("schema_version")
+            if version not in {self._LEGACY_SCHEMA_VERSION, self._SCHEMA_VERSION}:
                 raise ValueError("unknown receipt schema")
+            if (
+                isinstance(payload.get("receipt_ttl_seconds"), bool)
+                or not isinstance(payload.get("receipt_ttl_seconds"), int)
+                or not 1 <= payload["receipt_ttl_seconds"] <= 86_400
+            ):
+                raise ValueError("invalid receipt ttl")
+            if payload["receipt_ttl_seconds"] != self._receipt_ttl_seconds:
+                raise ValueError("receipt ttl does not match durable ledger")
             receipts = payload.get("receipts", ())
+            if not isinstance(receipts, list) or len(receipts) > self._MAX_RECEIPTS:
+                raise ValueError("invalid receipt retention")
             loaded: dict[tuple[str, str], tuple[str, int]] = {}
             for item in receipts:
                 stage = item["stage"]
@@ -797,9 +881,39 @@ class GroundedDeliveryLedger:
                     or not isinstance(expires_at, int)
                 ):
                     raise ValueError("invalid receipt")
+                if (
+                    not identity
+                    or not binding
+                    or len(identity) > 256
+                    or len(binding) > 256
+                    or (stage, identity) in loaded
+                ):
+                    raise ValueError("invalid receipt")
                 loaded[(stage, identity)] = (binding, expires_at)
+            identities: dict[tuple[str, str], str] = {}
+            if version == self._SCHEMA_VERSION:
+                tombstones = payload.get("identity_tombstones")
+                if not isinstance(tombstones, list) or len(tombstones) > self._MAX_IDENTITIES:
+                    raise ValueError("invalid identity tombstones")
+                for item in tombstones:
+                    stage, identity, binding = item["stage"], item["identity"], item["binding"]
+                    if (
+                        stage not in {"execution", "evidence", "settlement", "learning"}
+                        or not isinstance(identity, str) or not identity or len(identity) > 256
+                        or not isinstance(binding, str) or not binding or len(binding) > 256
+                        or (stage, identity) in identities
+                    ):
+                        raise ValueError("invalid identity tombstone")
+                    identities[(stage, identity)] = binding
+            else:
+                # Valid v1 receipts become permanent identities on first v2 load.
+                identities = {key: binding for key, (binding, _) in loaded.items()}
+                self._needs_migration = True
+            if len(identities) > self._MAX_IDENTITIES or not set(loaded).issubset(identities):
+                raise ValueError("invalid identity retention")
             self._receipts = loaded
-        except (OSError, TypeError, ValueError, KeyError, json.JSONDecodeError) as exc:
+            self._identities = identities
+        except (OSError, TypeError, ValueError, KeyError, AttributeError, json.JSONDecodeError) as exc:
             raise GroundedExecutionError("durable receipt ledger is invalid") from exc
 
     def _persist(self) -> None:
@@ -819,6 +933,10 @@ class GroundedDeliveryLedger:
                 for (stage, identity), (binding, expires_at) in sorted(
                     self._receipts.items()
                 )
+            ],
+            "identity_tombstones": [
+                {"stage": stage, "identity": identity, "binding": binding}
+                for (stage, identity), binding in sorted(self._identities.items())
             ],
         }
         temporary = self._storage_path.with_suffix(self._storage_path.suffix + ".tmp")
@@ -879,18 +997,32 @@ class GroundedDeliveryLedger:
     def claim(self, stage: str, identity: str, binding: str) -> None:
         if stage not in {"execution", "evidence", "settlement", "learning"}:
             raise GroundedExecutionError("unknown grounded delivery stage")
-        if not identity or not binding:
+        if (
+            not isinstance(identity, str)
+            or not isinstance(binding, str)
+            or not identity
+            or not binding
+            or len(identity) > 256
+            or len(binding) > 256
+        ):
             raise GroundedExecutionError("delivery identity and binding are required")
         key = (stage, identity)
         with self._locked_receipts():
             now = int(self._clock())
-            self._purge_expired(now)
-            previous = self._receipts.get(key)
-            if previous is None:
+            changed = self._purge_expired(now)
+            previous_binding = self._identities.get(key)
+            if previous_binding is None:
+                if len(self._identities) >= self._MAX_IDENTITIES:
+                    raise GroundedExecutionRejected("grounded delivery identity retention is exhausted")
+                if len(self._receipts) >= self._MAX_RECEIPTS:
+                    raise GroundedExecutionRejected("grounded delivery receipt retention is exhausted")
                 self._receipts[key] = (binding, now + self._receipt_ttl_seconds)
+                self._identities[key] = binding
                 self._persist()
                 return
-            if previous[0] == binding:
+            if changed:
+                self._persist()
+            if previous_binding == binding:
                 raise GroundedExecutionRejected(
                     f"duplicate grounded {stage} delivery is already reconciled"
                 )
@@ -1137,6 +1269,18 @@ class GroundedExecutionExecutor:
             workspace_hash,
             child_runtime_verified,
             child_runtime_fingerprint,
+            (
+                _digest(
+                    {
+                        "request_input_hash": request.input_hash,
+                        "causal_target": dict(request.causal_target),
+                        "causal_criterion_binding": _causal_criterion_binding(request),
+                    }
+                )
+                if request.causal_target is not None
+                else None
+            ),
+            _causal_criterion_binding(request),
         )
         base = {
             "record_id": f"{request.request_id}-record",
@@ -1316,6 +1460,25 @@ class GroundedExecutionVerifier:
             raise GroundedExecutionRejected("record input hash does not match request")
         if record.provenance.workspace_hash != _workspace_hash(request.files):
             raise GroundedExecutionRejected("record workspace provenance does not match input")
+        expected_witness = (
+            _digest(
+                {
+                    "request_input_hash": request.input_hash,
+                    "causal_target": dict(request.causal_target),
+                    "causal_criterion_binding": _causal_criterion_binding(request),
+                }
+            )
+            if request.causal_target is not None
+            else None
+        )
+        if record.provenance.causal_criterion_binding != _causal_criterion_binding(request):
+            raise GroundedExecutionRejected(
+                "record causal criterion binding does not match sealed request"
+            )
+        if record.provenance.causal_target_witness != expected_witness:
+            raise GroundedExecutionRejected(
+                "record causal target witness does not match sealed request"
+            )
         if not (
             record.provenance.resource_limits_enforced
             and record.provenance.cleanup_verified

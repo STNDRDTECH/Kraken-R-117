@@ -192,18 +192,21 @@ result reads bounded tactic scores and non-retired connection weights but is
 non-dispatchable and cannot authorize execution, evidence, settlement, credit,
 or promotion.
 
-Adaptive audits now retain immutable route-causal lineage. Invalidation rejects
-an explicit parent mismatch or a failure outside that route lineage. Rollback
-is restricted to the latest trusted checkpoint and keeps all consumed
-identities, preventing duplicate credit. Candidate connections weaken into
+Adaptive audits now retain immutable route-causal lineage. Invalidation requires
+the exact target audit envelope in the request hash plus the signed
+child-runtime witness, rather than accepting a parent ID alone; it also replays
+only the checkpoint's current live branch after rollback. Rollback is restricted
+to the latest trusted checkpoint and keeps all consumed identities, preventing
+duplicate credit. Candidate connections weaken into
 recoverable dormant state, can recover under later useful grounded evidence,
 and become terminal only through a separate explicit grounded retirement.
 Higher-order circuits, autonomous recursion, workers, controllers, alternate
 loops, and all other Stage 11 mechanisms remain unstarted and excluded.
 
-`GroundedDeliveryLedger(path)` persists bounded expiry-stamped receipts. It
-rejects duplicate execution, evidence, settlement, and learning delivery after
-restart until the configured receipt expiry; it grants no controller authority.
+`GroundedDeliveryLedger(path)` persists bounded expiry-stamped active receipts
+and non-expiring identity tombstones. It rejects duplicate execution, evidence,
+settlement, and learning delivery after restart even when an active receipt has
+expired; expiry never permits identity reuse. It grants no controller authority.
 The host runner measures the applied resource limits and confirms the sandbox
 process group is gone before marking cleanup provenance as verified.
 Stage 10.5 additionally selects an explicit local Python runtime, requires

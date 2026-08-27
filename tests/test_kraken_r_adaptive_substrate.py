@@ -12,6 +12,7 @@ from kraken_r import (
     ADAPTIVE_FIELD_CONSUMERS,
     AdaptiveState,
     AdaptiveSubstrateValidationError,
+    BASELINE_CONNECTION_WEIGHT,
     CandidateConnection,
     ConnectionLifecycle,
     EvidenceAuthorityTier,
@@ -20,8 +21,10 @@ from kraken_r import (
     GroundedExecutionRequest,
     EpistemicOutcomeClass,
     HomeostaticSnapshot,
+    MAX_ADAPTIVE_AUDIT,
     MAX_ADAPTIVE_ROUTE_WEIGHT,
     MAX_ADAPTIVE_GENERATIONS,
+    MAX_ADAPTIVE_UPDATES,
     MAX_TACTIC_STREAK,
     Objective,
     SettlementRouteRecord,
@@ -29,6 +32,7 @@ from kraken_r import (
     apply_grounded_adaptation,
     derive_advisory_cognition,
     form_grounded_connection,
+    grounded_causal_target,
     invalidate_grounded_adaptation,
     make_grounded_action,
     replay_adaptive_updates,
@@ -51,13 +55,16 @@ def _grounded_record(
     passing: bool = True,
     files: dict[str, str] | None = None,
     causal_parent_record_id: str | None = None,
+    causal_target: dict[str, str] | None = None,
+    causal_action_target: str | None = None,
+    causal_objective_id: str | None = None,
 ):
     objective = Objective(
-        f"{label}-objective",
+        causal_objective_id or f"{label}-objective",
         "Produce an independently verified bounded outcome.",
         provenance={"transaction_id": f"{label}-transaction"},
     )
-    action = make_grounded_action(objective.objective_id)
+    action = make_grounded_action(causal_action_target or objective.objective_id)
     authorized_state = TaskState(
         f"{objective.objective_id}-state-5",
         objective.objective_id,
@@ -83,6 +90,7 @@ def _grounded_record(
         workspace_files,
         tuple(path for path in workspace_files if path.startswith("test")),
         causal_parent_record_id=causal_parent_record_id,
+        causal_target=causal_target,
     )
     ledger = GroundedDeliveryLedger(
         Path(tempfile.mkdtemp(prefix="kraken-r-stage10-receipts-")) / "receipts.json"
@@ -108,11 +116,17 @@ def _route_record(
     *,
     passing: bool = True,
     causal_parent_record_id: str | None = None,
+    causal_target: dict[str, str] | None = None,
+    causal_action_target: str | None = None,
+    causal_objective_id: str | None = None,
 ):
     request, verifier, verified, trace = _grounded_record(
         label,
         passing=passing,
         causal_parent_record_id=causal_parent_record_id,
+        causal_target=causal_target,
+        causal_action_target=causal_action_target,
+        causal_objective_id=causal_objective_id,
     )
     selection = select_candidate_route(
         state.route_topology,
@@ -147,9 +161,19 @@ def _route_record(
 
 
 def _route_record_from_execution(
-    state: AdaptiveState, label: str, *, files: dict[str, str]
+    state: AdaptiveState,
+    label: str,
+    *,
+    files: dict[str, str],
+    causal_parent_record_id: str | None = None,
+    causal_target: dict[str, str] | None = None,
 ) -> SettlementRouteRecord:
-    request, verifier, verified, trace = _grounded_record(label, files=files)
+    request, verifier, verified, trace = _grounded_record(
+        label,
+        files=files,
+        causal_parent_record_id=causal_parent_record_id,
+        causal_target=causal_target,
+    )
     selection = select_candidate_route(
         state.route_topology,
         "candidate-work",
@@ -170,6 +194,11 @@ def _route_record_from_execution(
             "route_id": selection.route_id,
             "settlement_id": trace.settlement.settlement_id,
             "evidence_ids": tuple(item.evidence_id for item in trace.evidence),
+            **(
+                {"causal_parent_record_id": causal_parent_record_id}
+                if causal_parent_record_id is not None
+                else {}
+            ),
         },
         grounded_execution=verified,
         grounded_request=request,
@@ -374,12 +403,13 @@ def test_stale_topology_generation_and_replay_after_invalidation_fail_closed() -
     assert advanced.to_dict() == before
 
     success = _route_record(initial, "lineage-replay-success")
-    reinforced, _ = apply_grounded_adaptation(initial, success)
+    reinforced, success_audit = apply_grounded_adaptation(initial, success)
     failure = _route_record(
         reinforced,
         "lineage-replay-failure",
         passing=False,
         causal_parent_record_id=success.record_id,
+        causal_target=dict(grounded_causal_target(success_audit)),
     )
     invalidated, _ = invalidate_grounded_adaptation(
         reinforced, success.record_id, failure, reason="verified contrary outcome"
@@ -426,6 +456,7 @@ def test_later_grounded_failure_can_invalidate_bad_reinforcement() -> None:
         "resilience-later-failure",
         passing=False,
         causal_parent_record_id=success.record_id,
+        causal_target=dict(grounded_causal_target(reinforcement_audit)),
     )
     recovered, invalidation = invalidate_grounded_adaptation(
         reinforced,
@@ -561,6 +592,8 @@ def test_operational_evidence_is_provisional_and_cannot_become_durable_state() -
         "failure_streak",
         "tactic_streak",
         "invalidated_record_ids",
+        "connection_lifecycle_audits",
+        "live_update_record_ids",
     }
 
 
@@ -593,7 +626,7 @@ def test_causal_invalidation_rejects_explicitly_unrelated_failure() -> None:
             "causal_parent_record_id": success.record_id,
         },
     )
-    with pytest.raises(AdaptiveSubstrateValidationError, match="verified grounded"):
+    with pytest.raises(AdaptiveSubstrateValidationError, match="causal parent"):
         invalidate_grounded_adaptation(
             reinforced,
             success.record_id,
@@ -613,7 +646,7 @@ def test_causal_invalidation_rejects_explicitly_unrelated_failure() -> None:
 def test_causal_invalidation_replays_later_valid_route_suffix() -> None:
     initial = AdaptiveState.fixture("stage-11-suffix")
     bad = _route_record(initial, "stage-11-suffix-bad")
-    after_bad, _ = apply_grounded_adaptation(initial, bad)
+    after_bad, bad_audit = apply_grounded_adaptation(initial, bad)
     valid = _route_record(after_bad, "stage-11-suffix-valid")
     after_both, _ = apply_grounded_adaptation(after_bad, valid)
     invalidator = _route_record(
@@ -621,6 +654,7 @@ def test_causal_invalidation_replays_later_valid_route_suffix() -> None:
         "stage-11-suffix-invalidator",
         passing=False,
         causal_parent_record_id=bad.record_id,
+        causal_target=dict(grounded_causal_target(bad_audit)),
     )
 
     recovered, _ = invalidate_grounded_adaptation(
@@ -638,6 +672,140 @@ def test_causal_invalidation_replays_later_valid_route_suffix() -> None:
     assert valid.record_id in recovered.applied_record_ids
     with pytest.raises(AdaptiveSubstrateValidationError, match="already applied"):
         apply_grounded_adaptation(recovered, valid)
+
+
+def test_rollback_drops_nonlive_successor_before_invalidation_replay() -> None:
+    """A rollback branch is authoritative: invalidating A must not revive B."""
+
+    initial = AdaptiveState.fixture("live-branch")
+    first = _route_record(initial, "live-branch-first")
+    after_first, first_audit = apply_grounded_adaptation(initial, first)
+    second = _route_record(after_first, "live-branch-second")
+    after_second, _ = apply_grounded_adaptation(after_first, second)
+    restored, _ = rollback_adaptive_state(
+        after_second, after_second.checkpoints[-1].checkpoint_id
+    )
+    assert restored.live_update_record_ids == (first.record_id,)
+
+    invalidator = _route_record(
+        restored,
+        "live-branch-invalidator",
+        passing=False,
+        causal_parent_record_id=first.record_id,
+        causal_target=dict(grounded_causal_target(first_audit)),
+    )
+    invalidated, _ = invalidate_grounded_adaptation(
+        restored, first.record_id, invalidator, reason="sealed contrary result"
+    )
+    route = invalidated.route_topology.routes[0]
+    assert route.weight == pytest.approx(0.50)
+    assert second.record_id not in invalidated.live_update_record_ids
+    assert second.constitutional_trace.settlement.settlement_id not in route.settlement_ids
+
+
+def test_signed_failure_cannot_copy_target_envelope_for_another_subject() -> None:
+    initial = AdaptiveState.fixture("causal-subject")
+    success = _route_record(initial, "causal-subject-success")
+    updated, audit = apply_grounded_adaptation(initial, success)
+    copied = _route_record_from_execution(
+        updated,
+        "causal-subject-unrelated",
+        files={
+            "other.py": "def answer():\n    return 0\n",
+            "test_other.py": "from other import answer\n\ndef test_answer():\n    assert answer() == 42\n",
+        },
+        causal_parent_record_id=success.record_id,
+        causal_target=dict(grounded_causal_target(audit)),
+    )
+    with pytest.raises(AdaptiveSubstrateValidationError, match="target criterion"):
+        invalidate_grounded_adaptation(
+            updated, success.record_id, copied, reason="copied caller metadata"
+        )
+
+    same_subject_new_criterion = _route_record_from_execution(
+        updated,
+        "causal-subject-new-test",
+        files={
+            "subject.py": "def answer():\n    return 42\n",
+            "test_unrelated.py": "from subject import answer\n\ndef test_unrelated():\n    assert answer() == 0\n",
+        },
+        causal_parent_record_id=success.record_id,
+        causal_target=dict(grounded_causal_target(audit)),
+    )
+    with pytest.raises(AdaptiveSubstrateValidationError, match="target criterion"):
+        invalidate_grounded_adaptation(
+            updated,
+            success.record_id,
+            same_subject_new_criterion,
+            reason="same subject but unrelated falsification criterion",
+        )
+
+
+def test_long_lived_connection_retains_more_than_sixteen_lifecycle_transitions() -> None:
+    """Lifecycle proof survives bounded generation turnover without dangling refs."""
+
+    state = AdaptiveState.fixture("lifecycle-churn")
+    formed_record = _route_record(state, "lifecycle-churn-form")
+    state, _ = form_grounded_connection(state, formed_record)
+    connection_id = state.connections[0].connection_id
+    applied_records = [formed_record]
+
+    # A generation permits eight updates. Roll back the eighth update at each
+    # boundary (the reducer's only valid reset), retaining seven transitions,
+    # then continue until the live edge itself references >16 accepted acts.
+    index = 1
+    while len(state.connections[0].lifecycle_record_ids) <= 16:
+        connection = state.connections[0]
+        recovering = connection.weight < BASELINE_CONNECTION_WEIGHT
+        record = _route_record(
+            state,
+            f"lifecycle-churn-{index}",
+            passing=recovering,
+        )
+        if recovering:
+            state, _ = recover_grounded_connection(state, record, connection_id)
+        else:
+            state, _ = weaken_grounded_connection(state, record, connection_id)
+        applied_records.append(record)
+        index += 1
+        if (
+            state.updates_applied == MAX_ADAPTIVE_UPDATES - 1
+            and len(state.connections[0].lifecycle_record_ids) <= 16
+        ):
+            state, _ = rollback_adaptive_state(
+                state, state.checkpoints[-1].checkpoint_id
+            )
+
+    connection = state.connections[0]
+    assert len(connection.lifecycle_record_ids) > 16
+    assert len(connection.lifecycle_record_ids) <= MAX_ADAPTIVE_AUDIT
+    lifecycle_by_record = {
+        audit.record_id: audit for audit in state.connection_lifecycle_audits
+    }
+    assert tuple(
+        lifecycle_by_record[record_id].operation
+        for record_id in connection.lifecycle_record_ids
+    ) == connection.lifecycle_operations
+    assert set(connection.lifecycle_record_ids).issubset(lifecycle_by_record)
+    # Reconstructing the immutable state reruns all reference checks.
+    assert replace(state).to_dict() == state.to_dict()
+
+    missing = tuple(
+        audit
+        for audit in state.connection_lifecycle_audits
+        if audit.record_id != connection.lifecycle_record_ids[0]
+    )
+    with pytest.raises(
+        AdaptiveSubstrateValidationError, match="lifecycle audit reference is missing"
+    ):
+        replace(state, connection_lifecycle_audits=missing)
+
+    duplicate = applied_records[-1]
+    with pytest.raises(AdaptiveSubstrateValidationError, match="already applied"):
+        weaken_grounded_connection(state, duplicate, connection_id)
+    settlement_reuse = replace(duplicate, record_id="lifecycle-churn-new-record-id")
+    with pytest.raises(AdaptiveSubstrateValidationError, match="settlement identity"):
+        weaken_grounded_connection(state, settlement_reuse, connection_id)
 
 
 def test_rollback_accepts_only_latest_trusted_checkpoint_and_preserves_prefix() -> None:

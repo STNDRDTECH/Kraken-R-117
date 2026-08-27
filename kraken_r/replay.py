@@ -44,6 +44,23 @@ class RecordedExecutionMode(str, Enum):
     INSUFFICIENT_EVIDENCE = "insufficient_evidence"
 
 
+_OBSERVATION_KEYS = frozenset(
+    {
+        "mode", "transaction_id", "objective_id", "task_state_id",
+        "task_state_version", "action_id", "execution_id", "observed",
+        "criteria_met", "positive_observation", "negative_observation",
+    }
+)
+_PROVENANCE_KEYS = frozenset(
+    {
+        "record_id", "observation_origin", "transaction_id", "objective_id",
+        "task_state_id", "task_state_version", "action_id", "execution_id",
+        "evidence_ids", "decision_id", "settlement_id", "stop_decision_id",
+        "learning_update_id",
+    }
+)
+
+
 def _freeze(value: Any) -> Any:
     if isinstance(value, Mapping):
         return MappingProxyType({str(key): _freeze(item) for key, item in value.items()})
@@ -93,7 +110,11 @@ class RecordedExecution:
             _identifier(getattr(self, field_name), field_name)
         if self.learning_update_id is not None:
             _identifier(self.learning_update_id, "learning_update_id")
-        if not isinstance(self.task_state_version, int) or self.task_state_version < 1:
+        if (
+            isinstance(self.task_state_version, bool)
+            or not isinstance(self.task_state_version, int)
+            or self.task_state_version < 1
+        ):
             raise ReplayValidationError("task_state_version must be a positive integer")
         if not isinstance(self.status, str) or not self.status.strip():
             raise ReplayValidationError("status must be a non-empty string")
@@ -101,6 +122,39 @@ class RecordedExecution:
             raise ReplayValidationError("observations must be a mapping")
         if not isinstance(self.provenance, Mapping):
             raise ReplayValidationError("provenance must be a mapping")
+        if set(self.observations) - _OBSERVATION_KEYS:
+            if "self_reported_outcome" in self.observations:
+                raise ReplayValidationError("self-report semantic extras are not replayable")
+            raise ReplayValidationError("recorded observation contains unsupported semantic extras")
+        mode = self.observations.get("mode")
+        expected_observation_keys = {
+            "mode", "transaction_id", "objective_id", "task_state_id",
+            "task_state_version", "action_id", "execution_id", "observed",
+        }
+        if mode in {RecordedExecutionMode.SUCCESS.value, RecordedExecutionMode.FAILURE.value}:
+            expected_observation_keys.add("criteria_met")
+        elif mode == RecordedExecutionMode.CONTRADICTION.value:
+            expected_observation_keys.update({"positive_observation", "negative_observation"})
+        if mode in {item.value for item in RecordedExecutionMode} and set(
+            self.observations
+        ) != expected_observation_keys:
+            raise ReplayValidationError(
+                "recorded observation contains unsupported or missing semantic fields"
+            )
+        if set(self.provenance) != _PROVENANCE_KEYS:
+            missing = sorted(_PROVENANCE_KEYS - set(self.provenance))
+            extra = sorted(set(self.provenance) - _PROVENANCE_KEYS)
+            raise ReplayValidationError(
+                "record provenance must use the exact supported schema"
+                + (": missing " + ", ".join(missing) if missing else "")
+                + (": unsupported " + ", ".join(extra) if extra else "")
+            )
+        if len(self.observations) > len(_OBSERVATION_KEYS):
+            raise ReplayValidationError("observations exceed the bounded schema")
+        if any(not isinstance(key, str) for key in self.observations) or any(
+            not isinstance(key, str) for key in self.provenance
+        ):
+            raise ReplayValidationError("observation and provenance keys must be strings")
         if not isinstance(self.evidence_ids, tuple) or not all(
             isinstance(item, str) and item for item in self.evidence_ids
         ):
@@ -450,6 +504,12 @@ class RecordedExecutionReplay:
             raise ReplayValidationError("objective provenance must name the replay transaction")
         if record.task_state_version != cls.AUTHORIZED_STATE_VERSION:
             raise ReplayValidationError("record references a stale task-state version")
+        if isinstance(record.task_state_version, bool):
+            raise ReplayValidationError("task_state_version must be an integer")
+        if record.observations.get("mode") not in {
+            item.value for item in RecordedExecutionMode
+        }:
+            raise ReplayValidationError("recorded observation mode is unsupported")
         observed_identity = {
             "record_id": f"{record.transaction_id}-record",
             "observation_origin": "recorded_execution",
@@ -477,7 +537,7 @@ class RecordedExecutionReplay:
         observed = record.observations.get("observed")
         if not isinstance(observed, bool):
             raise ReplayValidationError("recorded observation must declare observed as a boolean")
-        if not observed and record.observations.get("self_reported_outcome"):
+        if "self_reported_outcome" in record.observations:
             raise ReplayValidationError("self-report-only success is not replayable evidence")
         if record.status not in {"completed", "failed", "not_observed"}:
             raise ReplayValidationError("recorded status is unsupported")

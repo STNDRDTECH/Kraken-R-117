@@ -1,7 +1,7 @@
 # Kraken-R Constitution
 
 **Status:** candidate-only foundation  
-**Version:** 1.11.1
+**Version:** 1.11.2
 **Effective boundary:** documentation, standalone validation, deterministic fixture
 execution, and independently verified bounded candidate execution observations
 
@@ -449,7 +449,15 @@ or credit.
 Every durable update records its route-lineage identity, evidence identities,
 epistemic class, and grounded authority tier. A later failure may invalidate an
 update only when its immutable route selection belongs to that same causal
-lineage; an explicit parent link that names another update fails closed.
+lineage **and** its sealed request carries the exact target audit envelope
+(record, settlement, update-lineage, and audit digest). The independently
+verified signed child record carries a witness over that request hash and target
+envelope, plus a verifier-recomputed binding for the exact candidate action and
+executed test contract (paths and contents). A caller-supplied parent ID, legacy
+record, forged witness, copied envelope for another criterion, or mismatched active target is
+not proof and fails closed. Rollback restores the
+checkpoint's bounded live-update branch; invalidation replays only successors
+still live on that branch, never updates removed by a later rollback.
 Rollback accepts only the most recent retained trusted checkpoint, preserves
 the trusted prefix, moves to a new topology generation, and retains every
 consumed record and settlement identity so removed credit cannot be replayed.
@@ -462,6 +470,11 @@ and retirement is terminal. Tactic scores and non-retired connection weights
 have one bounded read-only cognition consumer. That output is explicitly
 advisory, non-dispatchable, and unable to authorize execution, create evidence
 or settlement, grant credit, or cross the model/substrate firewall.
+
+The delivery ledger uses bounded active receipts plus bounded, non-expiring
+identity tombstones. Receipt expiry changes only receipt status; it never
+permits the execution, evidence, settlement, or learning identity to be reused.
+Malformed, over-capacity, or incompatible durable schemas fail closed.
 
 ### Orzhaal boundary
 

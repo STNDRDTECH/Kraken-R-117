@@ -103,6 +103,7 @@ from kraken_r import (
     apply_grounded_adaptation,
     apply_settlement_learning,
     form_grounded_connection,
+    grounded_causal_target,
     invalidate_grounded_adaptation,
     make_bound_signal,
     make_grounded_action,
@@ -145,17 +146,20 @@ def _grounded_route_record_for_topology(
     objective_id: str | None = None,
     passing: bool = True,
     causal_parent_record_id: str | None = None,
+    causal_target: dict[str, str] | None = None,
+    causal_action_target: str | None = None,
+    causal_objective_id: str | None = None,
 ) -> SettlementRouteRecord:
     """Build one independently verified grounded settlement record."""
 
-    objective_id = objective_id or f"{label}-objective"
+    objective_id = causal_objective_id or objective_id or f"{label}-objective"
     transaction_id = transaction_id or f"{label}-transaction"
     objective = Objective(
         objective_id,
         "Produce an independently verified longevity-soak outcome.",
         provenance={"transaction_id": transaction_id},
     )
-    action = make_grounded_action(objective.objective_id)
+    action = make_grounded_action(causal_action_target or objective.objective_id)
     authorized = TaskState(
         f"{objective.objective_id}-state-5",
         objective.objective_id,
@@ -181,6 +185,7 @@ def _grounded_route_record_for_topology(
         files,
         ("test_subject.py",),
         causal_parent_record_id=causal_parent_record_id,
+        causal_target=causal_target,
     )
     ledger = GroundedDeliveryLedger(
         Path(tempfile.mkdtemp(prefix="kraken-r-soak-receipts-")) / "receipts.json"
@@ -978,7 +983,7 @@ def test_invalidation_budget_exhaustion_scope_note_and_direct_regression() -> No
     base_adaptive = AdaptiveState.fixture("invalidation-budget-gap-adaptive")
     target_record = _grounded_route_record(base_adaptive, "invalidation-budget-gap-target")
     _require_child_pytest(target_record)
-    credited, _ = apply_grounded_adaptation(base_adaptive, target_record)
+    credited, target_audit = apply_grounded_adaptation(base_adaptive, target_record)
     saturated = replace(credited, updates_applied=MAX_ADAPTIVE_UPDATES)
 
     invalidating_record = _grounded_route_record_for_topology(
@@ -988,6 +993,7 @@ def test_invalidation_budget_exhaustion_scope_note_and_direct_regression() -> No
         objective_id="invalidation-budget-gap-invalidator-objective",
         passing=False,
         causal_parent_record_id=target_record.record_id,
+        causal_target=dict(grounded_causal_target(target_audit)),
     )
     _require_child_pytest(invalidating_record)
 

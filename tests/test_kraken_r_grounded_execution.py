@@ -319,7 +319,37 @@ def test_durable_receipts_replay_until_expiry(tmp_path: Path) -> None:
         path, receipt_ttl_seconds=10, clock=lambda: now[0]
     )
     assert expired.receipt_status("execution", "expiry-request") == "expired"
-    expired.claim("execution", "expiry-request", "sealed-input")
+    with pytest.raises(GroundedExecutionRejected, match="duplicate grounded execution"):
+        expired.claim("execution", "expiry-request", "sealed-input")
+
+
+def test_delivery_identity_tombstones_migrate_and_fail_closed(tmp_path: Path) -> None:
+    path = tmp_path / "v1-receipts.json"
+    path.write_text(
+        json.dumps(
+            {
+                "schema_version": 1,
+                "receipt_ttl_seconds": 10,
+                "receipts": [
+                    {
+                        "stage": "execution",
+                        "identity": "old-request",
+                        "binding": "old-input",
+                        "expires_at": 1,
+                    }
+                ],
+            }
+        ),
+        encoding="utf-8",
+    )
+    ledger = GroundedDeliveryLedger(path, receipt_ttl_seconds=10, clock=lambda: 2)
+    with pytest.raises(GroundedExecutionRejected, match="duplicate"):
+        ledger.claim("execution", "old-request", "old-input")
+    assert json.loads(path.read_text())["schema_version"] == 2
+
+    path.write_text('{"schema_version":2,"receipts":[],"identity_tombstones":{}}')
+    with pytest.raises(Exception, match="durable receipt ledger"):
+        GroundedDeliveryLedger(path)
 
 
 def test_durable_receipt_claim_is_atomic_across_processes(tmp_path: Path) -> None:
