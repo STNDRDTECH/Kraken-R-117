@@ -1,6 +1,6 @@
 {
   "constitution_kind": "kraken_r_constitution",
-  "version": "1.10.9",
+  "version": "1.11.2",
   "mission": "Define and deterministically validate a candidate-only, domain-agnostic constitutional lifecycle, including read-only recorded-execution replay, bounded signal propagation, advisory bounded physiology, settlement-grounded bounded route preference, grounded bounded adaptive reducers with deterministic resilience and recovery, an immutable replayable multi-tick dynamical substrate and bounded descriptive metastability experiments, immutable task integrity with bounded multi-hypothesis interpretation, information-loss accounting, and proposal-only adversarial review, disposable isolated Orzhaal experiments, proposal-only LLM behavior, independently verified bounded execution with reproducible child-runtime provenance and a fail-closed epistemic outcome taxonomy, and static cross-module interaction validation, without starting, replacing, or wiring a second ROGAL runtime.",
   "authority_boundary": {
     "legacy_reference": "ROGALDaemon and AutonomousCycle remain the deployed reference authority.",

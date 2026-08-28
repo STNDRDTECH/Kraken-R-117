@@ -1,7 +1,7 @@
 {
   "registry_kind": "kraken_r_architecture",
   "registry_id": "kraken-r-foundation",
-  "version": "1.10.9",
+  "version": "1.11.2",
   "last_reviewed": "2026-08-25",
   "authority_boundary": {
     "legacy_reference": "rogal_core.daemon.ROGALDaemon and rogal_core.autonomous_cycle.AutonomousCycle remain the deployed reference runtime.",
