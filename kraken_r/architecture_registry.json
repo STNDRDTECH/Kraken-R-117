@@ -5,7 +5,7 @@
   "last_reviewed": "2026-08-25",
   "authority_boundary": {
     "legacy_reference": "rogal_core.daemon.ROGALDaemon and rogal_core.autonomous_cycle.AutonomousCycle remain the deployed reference runtime.",
-    "kraken_candidate": "The deterministic Kraken-R cycle, read-only recorded-execution replay, bounded in-memory signal propagation, advisory bounded physiology, settlement-grounded bounded route preference, grounded bounded adaptive reducers, immutable replayable dynamical ticks, immutable task-integrity inspection, disposable isolated Orzhaal experiments, proposal-only LLM adapter, verified bounded execution observer, and static interaction validation are executable candidate infrastructure only; they have no authority over the deployed runtime.",
+    "kraken_candidate": "The deterministic Kraken-R cycle, read-only recorded-execution replay, bounded in-memory signal propagation, advisory bounded physiology, settlement-grounded bounded route preference, grounded bounded adaptive reducers, immutable replayable dynamical ticks, immutable task-integrity inspection, proof-carrying cognition processing, disposable isolated Orzhaal experiments, proposal-only LLM adapter, verified bounded execution observer, and static interaction validation are executable candidate infrastructure only; they have no authority over the deployed runtime.",
     "preservation": "Legacy, alternate, dormant, and forgotten mechanisms are classified and preserved, never deleted by this foundation."
   },
   "mechanisms": [
@@ -1016,6 +1016,22 @@
       "source_refs": ["replit.md"],
       "planned": false,
       "notes": "Constitutional principle only in this phase."
+    },
+    {
+      "mechanism_id": "proof_carrying_cognition_kernel",
+      "category": "core_execution",
+      "name": "Proof-carrying cognition processing kernel",
+      "intended_role": "Preserve bounded problem and epistemic structure while making adaptive topology consumption causally observable in one declared candidate operation.",
+      "current_status": "infrastructure",
+      "dependencies": ["kraken_r_foundation", "kraken_r_bounded_adaptive_substrate", "kraken_r_task_integrity_boundary"],
+      "authority": "kraken_candidate",
+      "evidence_grade": "implemented",
+      "evidence_refs": ["kraken_r/cognition_kernel.py", "tests/test_kraken_r_cognition_kernel.py"],
+      "duplicates": [],
+      "disposition": "keep",
+      "source_refs": ["docs/kraken_r/CONSTITUTION.md", "docs/kraken_r/README.md"],
+      "planned": false,
+      "notes": "Pure caller-owned projection only. It cannot create evidence, settlement, durable credit, runtime dispatch, persistence, or self-promotion."
     },
     {
       "mechanism_id": "metaplasticity",

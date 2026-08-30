@@ -110,6 +110,18 @@ from .task_integrity import (
     TaskSpecification,
     replay_task_integrity,
 )
+from .cognition_kernel import (
+    CognitionValidationError,
+    ProcessingCapability,
+    ProcessingOperation,
+    ProblemBranch,
+    ProblemGraph,
+    ProblemRequirement,
+    ProblemSubtask,
+    SatisfactionState,
+    replay_processing_trace,
+    run_connected_processing,
+)
 
 
 CANONICAL_CONTRACTS = (
@@ -169,6 +181,100 @@ def validate_legacy_runtime_boundary() -> tuple[str, ...]:
                     f"{path.name}: runtime authority symbol {node.id} is forbidden"
                 )
     return tuple(sorted(set(errors)))
+
+
+def validate_cognition_kernel() -> tuple[str, ...]:
+    """Exercise topology-to-computation causality without granting authority."""
+
+    errors: list[str] = []
+    original = OriginalTask(
+        "validator-cognition-task",
+        "Choose one bounded candidate investigation branch.",
+        "validator",
+        {"candidate_only": True},
+    )
+    problem = ProblemGraph(
+        "validator-cognition-problem",
+        original,
+        "Which branch should be inspected first?",
+        (
+            ProblemRequirement(
+                "validator-cognition-requirement",
+                "Retain the unresolved requirement.",
+                status=SatisfactionState.UNRESOLVED,
+            ),
+        ),
+        (
+            ProblemSubtask(
+                "validator-cognition-alpha",
+                "Inspect alpha.",
+                ("validator-cognition-requirement",),
+                branch_id="validator-cognition-branch-alpha",
+            ),
+            ProblemSubtask(
+                "validator-cognition-beta",
+                "Inspect beta.",
+                ("validator-cognition-requirement",),
+                branch_id="validator-cognition-branch-beta",
+            ),
+        ),
+        branches=(
+            ProblemBranch(
+                "validator-cognition-branch-alpha",
+                "Alpha",
+                "validator-cognition-environment-alpha",
+                ("validator-cognition-alpha",),
+            ),
+            ProblemBranch(
+                "validator-cognition-branch-beta",
+                "Beta",
+                "validator-cognition-environment-beta",
+                ("validator-cognition-beta",),
+            ),
+        ),
+        environments=(
+            "validator-cognition-environment-alpha",
+            "validator-cognition-environment-beta",
+        ),
+        satisfaction={
+            "validator-cognition-requirement": SatisfactionState.UNRESOLVED,
+            "validator-cognition-alpha": SatisfactionState.UNRESOLVED,
+            "validator-cognition-beta": SatisfactionState.UNRESOLVED,
+        },
+    )
+    capabilities = (
+        ProcessingCapability(
+            "validator-cognition-capability-alpha",
+            ProcessingOperation.CHECK_LOGIC,
+            "path-alpha",
+            "validator-cognition-branch-alpha",
+            ("validator-cognition-alpha",),
+        ),
+        ProcessingCapability(
+            "validator-cognition-capability-beta",
+            ProcessingOperation.CHECK_QUANTITATIVE,
+            "path-beta",
+            "validator-cognition-branch-beta",
+            ("validator-cognition-beta",),
+        ),
+    )
+    try:
+        trace = run_connected_processing(problem, capabilities, AdaptiveState.fixture())
+        replay = replay_processing_trace(trace)
+    except (CognitionValidationError, ValueError, TypeError) as exc:
+        return (f"cognition kernel failed: {exc}",)
+    if replay.to_dict() != trace.to_dict():
+        errors.append("cognition structural replay changed the trace")
+    if trace.decision.selected_capability_id not in trace.projection.available_capability_ids:
+        errors.append("cognition selected an unavailable capability")
+    if trace.result is None or trace.result.evidence_ids or trace.result.adaptive_update_ids:
+        errors.append("cognition result crossed the authority boundary")
+    if (
+        trace.context.satisfaction["validator-cognition-beta"]
+        is not SatisfactionState.UNRESOLVED
+    ):
+        errors.append("cognition silently resolved an untouched branch")
+    return tuple(errors)
 PLANNED_CAPABILITIES = (
     "metaplasticity",
     "neuromodulation",
@@ -1633,6 +1739,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     task_integrity_errors = validate_task_integrity()
     dynamical_substrate_errors = validate_dynamical_substrate()
     metastability_errors = validate_metastability_experiments()
+    cognition_kernel_errors = validate_cognition_kernel()
     legacy_runtime_errors = validate_legacy_runtime_boundary()
     report = {
         "ok": (
@@ -1651,6 +1758,7 @@ def main(argv: Sequence[str] | None = None) -> int:
             and not task_integrity_errors
             and not dynamical_substrate_errors
             and not metastability_errors
+            and not cognition_kernel_errors
             and not legacy_runtime_errors
         ),
         "contracts_ok": not contract_errors,
@@ -1721,6 +1829,11 @@ def main(argv: Sequence[str] | None = None) -> int:
             "ok": not metastability_errors,
             "errors": list(metastability_errors),
             "authority": "bounded_candidate_experiment_observation_only",
+        },
+        "cognition_kernel": {
+            "ok": not cognition_kernel_errors,
+            "errors": list(cognition_kernel_errors),
+            "authority": "proposal_only_read_only_adaptive_projection",
         },
         "constitution": {
             "ok": True,

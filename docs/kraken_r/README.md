@@ -617,3 +617,24 @@ result = ModelAdapter(provider).invoke(
 assert result.proposal.declared_only
 assert not hasattr(result.proposal, "evidence")
 ```
+
+## Proof-carrying cognition candidate
+
+`kraken_r.cognition_kernel` adds a bounded immutable problem/claim/reasoning
+projection above the qualified Stage 11.1 baseline. Existing adaptive topology
+is read-only advisory input that can change which predeclared candidate
+capability and branch is selected. Every topology read is linked through
+availability or inhibition to one explicit operation request, its exact inputs,
+its proposal-only result, and the resulting context snapshot.
+
+The kernel fails closed on malformed provenance, capacity overflow, duplicate
+events, undeclared branches, cross-environment references, relationship types
+with the wrong verification obligations, and operation output that attempts to
+create evidence, settlement, or adaptive updates. A materially inert topology
+change is labeled `causal_noop`.
+
+Replay is structural and does not rerun callbacks, model providers, retrieval,
+tools, calculations, or simulations. The kernel has no daemon, scheduler,
+worker, store, alternate event bus, evidence path, settlement path, or
+self-promotion operation. Only the existing grounded execution and settlement
+boundary may later provide durable adaptive credit.

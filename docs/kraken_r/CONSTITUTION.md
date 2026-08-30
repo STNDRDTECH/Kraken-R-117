@@ -522,3 +522,48 @@ insufficient-evidence outcomes remain non-creditable. This stage does not add
 a provider, execution path, persistent memory, adaptive reducer, controller,
 daemon, routing reputation, open-weight probe, recursive circuit, or any Stage
 11 functionality.
+
+## Successor candidate: proof-carrying cognition kernel
+
+The frozen Stage 11.1 authority remains unchanged. `kraken_r.cognition_kernel`
+is a separate, pure, caller-owned projection that may read the existing
+`AdaptiveState` and `RouteTopology` only as advisory organizational input. It
+cannot write adaptive state, authorize execution, mint `Evidence`, create a
+`Settlement` or `LearningUpdate`, consume a grounded delivery receipt, or alter
+rollback and invalidation semantics.
+
+The kernel preserves the original task, requirements, central question,
+subtasks, environments, competing branches, active/deferred/dormant/reactivated
+material, and unresolved satisfaction states in one bounded immutable
+`ProblemGraph`. Candidate claims retain declared support, contradiction,
+assumptions, unresolved dependencies, source lineage, use site, verification
+pressure, falsification conditions, and internal-versus-external competence
+origin. Their declared or supported status is never an evidence grade.
+
+Reasoning relationships are typed as assumption, deduction, causation,
+correlation, analogy, quantitative relation, source assertion, prediction,
+requirement, or counterfactual. Each type has an exact obligation schema.
+Analogy and correlation cannot satisfy causal or quantitative obligations.
+Open logic, dependency, dimensional, quantitative, conservation, regime,
+temporal, contradiction, source-currentness/correlation, analogy-scope, or user
+constraint obligations block candidate synthesis rather than being averaged
+away.
+
+One explicit call may project bounded capability availability and inhibition,
+select one declared operation under a finite budget, record its exact inputs
+and proposal-only result, and return a downstream context snapshot. The
+topology read, availability decision, selected operation, result, and context
+effect are linked by hashes and immutable causal events. When changed topology
+leaves operation, inputs, branch, resources, result, and downstream context
+materially identical, the trace records a causal no-op.
+
+Structural replay reconstructs the immutable trace and verifies its hashes
+without invoking a model, retriever, tool, simulation, daemon, scheduler, or
+other provider. Angel, Nemesis, and bounded forward/reverse Antimetabole output
+only questions and investigative needs. Any later durable learning still
+requires the existing independently grounded execution and constitutional
+settlement path.
+
+Mechanistic synthesis, source-independence inference, identifiability search,
+ontology migration/versioning, cognitive compilation, graph-wide invalidation,
+open-ended recursion, and persistent cognitive memory remain out of scope.
