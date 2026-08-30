@@ -1034,6 +1034,22 @@
       "notes": "Pure caller-owned projection only. It cannot create evidence, settlement, durable credit, runtime dispatch, persistence, or self-promotion."
     },
     {
+      "mechanism_id": "typed_semantic_model_capability",
+      "category": "core_execution",
+      "name": "Typed semantic model capability",
+      "intended_role": "Run topology-selected recall, mechanism, explanation, correspondence, extraction, interpretation, falsifier, and missing-information jobs through focused model context inside one declared cognition operation.",
+      "current_status": "infrastructure",
+      "dependencies": ["proof_carrying_cognition_kernel", "kraken_r_controlled_llm_proposal_adapter"],
+      "authority": "kraken_candidate",
+      "evidence_grade": "implemented",
+      "evidence_refs": ["kraken_r/semantic_capability.py", "tests/test_kraken_r_semantic_capability.py"],
+      "duplicates": [],
+      "disposition": "keep",
+      "source_refs": ["docs/kraken_r/CONSTITUTION.md", "docs/kraken_r/README.md"],
+      "planned": false,
+      "notes": "Uses ModelAdapter as the sole provider boundary. Outputs are typed candidate cognition with hash-bound provenance and no evidence, settlement, execution, or adaptive-credit authority."
+    },
+    {
       "mechanism_id": "metaplasticity",
       "category": "distinctive_concepts",
       "name": "Metaplasticity",

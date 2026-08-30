@@ -292,6 +292,7 @@ from .cognition_kernel import (
     ProblemRequirement,
     ProblemSubtask,
     SatisfactionState,
+    SemanticJob,
     SourceLineage,
     SynthesisAssessment,
     TypedReasoningEdge,
@@ -304,6 +305,15 @@ from .cognition_kernel import (
     project_adaptive_processing,
     replay_processing_trace,
     run_connected_processing,
+)
+from .semantic_capability import (
+    CandidateCognition,
+    SemanticCapabilityError,
+    SemanticCapabilityResult,
+    SemanticModelCapability,
+    SemanticProvenance,
+    semantic_result_from_dict,
+    validate_semantic_operation_result,
 )
 
 __all__ = [
@@ -325,6 +335,7 @@ __all__ = [
     "BASELINE_CONNECTION_WEIGHT",
     "Capability",
     "CandidateConnection",
+    "CandidateCognition",
     "CandidateClaim",
     "CandidateResult",
     "CandidateRoute",
@@ -562,6 +573,11 @@ __all__ = [
     "ProblemRequirement",
     "ProblemSubtask",
     "SatisfactionState",
+    "SemanticCapabilityError",
+    "SemanticCapabilityResult",
+    "SemanticJob",
+    "SemanticModelCapability",
+    "SemanticProvenance",
     "SourceLineage",
     "SynthesisAssessment",
     "TypedReasoningEdge",
@@ -573,5 +589,7 @@ __all__ = [
     "nemesis_projection",
     "project_adaptive_processing",
     "replay_processing_trace",
+    "semantic_result_from_dict",
     "run_connected_processing",
+    "validate_semantic_operation_result",
 ]

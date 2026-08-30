@@ -638,3 +638,27 @@ tools, calculations, or simulations. The kernel has no daemon, scheduler,
 worker, store, alternate event bus, evidence path, settlement path, or
 self-promotion operation. Only the existing grounded execution and settlement
 boundary may later provide durable adaptive credit.
+
+### Semantic model jobs
+
+`SemanticModelCapability` is an operation callback for
+`ProcessingOperation.MODEL_PROPOSAL`. Each `ProcessingCapability` declares a
+`SemanticJob`; adaptive route selection therefore changes both the semantic
+work performed and the focused JSON context sent through the existing
+`ModelAdapter`. Supported jobs are recall, mechanism generation, competing
+explanations, cross-domain correspondence, variable/equation extraction,
+source interpretation, falsifier generation, and missing-information
+detection.
+
+The response becomes typed `CandidateCognition` with system-bound provenance,
+an explicit job-specific use class, bounded structured payload, declared source
+lineage, questions, and missing-information items. It remains proposal-only:
+even a confident model assertion has no evidence, settlement, execution, or
+adaptive-credit authority. Malformed, oversized, unauthorized, wrongly bound,
+or source-inventing output is rejected. `replay_processing_trace()` validates
+the stored semantic contract and hashes without invoking the provider again.
+
+Use `FixtureModelProvider` for deterministic qualification. Production callers
+may inject `OpenAICompatibleProvider` into the same `ModelAdapter`; the semantic
+module owns no second provider, credential, network, retry, scheduler, or
+persistence path.

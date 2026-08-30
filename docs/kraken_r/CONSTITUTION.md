@@ -564,6 +564,28 @@ only questions and investigative needs. Any later durable learning still
 requires the existing independently grounded execution and constitutional
 settlement path.
 
-Mechanistic synthesis, source-independence inference, identifiability search,
+### Typed semantic model capability
+
+`kraken_r.semantic_capability` makes the existing injected `ModelAdapter` a
+real semantic leaf inside that same processing call. A model capability
+declares exactly one job: recall, mechanism generation, competing explanations,
+cross-domain correspondence, variable/equation extraction, source
+interpretation, falsifier generation, or missing-information detection.
+Adaptive topology selects among those declared capabilities and changes the
+focused request projection: only the selected branch, declared input material,
+source lineage, route, tactic, and job/use class are sent.
+
+The provider must return the exact bounded semantic JSON contract. Kraken adds
+problem, branch, operation, context, topology, provider, model, output, and
+source-lineage provenance itself. Unknown fields, wrong job/use-class binding,
+undeclared source references, authority fields, malformed JSON, provider
+identity mismatch, timeout, and size/count overflow fail closed. Model-reported
+confidence is retained only as a non-authoritative self-report. Typed semantic
+candidates cannot create downstream material, satisfy requirements, mint
+evidence or settlement, report execution truth, or receive adaptive credit.
+Structural replay reparses and rebinds the stored semantic result without
+calling the provider.
+
+Authoritative mechanistic synthesis, source-independence inference, identifiability search,
 ontology migration/versioning, cognitive compilation, graph-wide invalidation,
 open-ended recursion, and persistent cognitive memory remain out of scope.

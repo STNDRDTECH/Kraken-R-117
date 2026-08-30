@@ -261,6 +261,17 @@ class ProcessingOperation(str, Enum):
     ANTIMETABOLE = "antimetabole"
 
 
+class SemanticJob(str, Enum):
+    RECALL = "recall"
+    MECHANISM_GENERATION = "mechanism_generation"
+    COMPETING_EXPLANATIONS = "competing_explanations"
+    CROSS_DOMAIN_CORRESPONDENCE = "cross_domain_correspondence"
+    VARIABLE_EQUATION_EXTRACTION = "variable_equation_extraction"
+    SOURCE_INTERPRETATION = "source_interpretation"
+    FALSIFIER_GENERATION = "falsifier_generation"
+    MISSING_INFORMATION_DETECTION = "missing_information_detection"
+
+
 class ProcessingEventKind(str, Enum):
     DISCOVERED_NEED = "discovered_need"
     ACTIVATION = "activation"
@@ -1027,6 +1038,7 @@ class ProcessingCapability:
     cost: int = 1
     priority: int = 0
     min_route_weight: float = MIN_ROUTE_WEIGHT
+    semantic_job: SemanticJob | None = None
 
     def __post_init__(self) -> None:
         _identifier(self.capability_id, "capability_id")
@@ -1056,6 +1068,22 @@ class ProcessingCapability:
         if not -100 <= self.priority <= 100:
             raise CognitionValidationError("capability priority must be from -100 through 100")
         object.__setattr__(self, "min_route_weight", _bounded(self.min_route_weight, "min_route_weight"))
+        if self.semantic_job is not None:
+            object.__setattr__(self, "semantic_job", SemanticJob(self.semantic_job))
+        if (
+            self.operation is ProcessingOperation.MODEL_PROPOSAL
+            and self.semantic_job is None
+        ):
+            raise CognitionValidationError(
+                "model proposal capability requires a declared semantic job"
+            )
+        if (
+            self.operation is not ProcessingOperation.MODEL_PROPOSAL
+            and self.semantic_job is not None
+        ):
+            raise CognitionValidationError(
+                "semantic jobs are restricted to model proposal capabilities"
+            )
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -1069,6 +1097,7 @@ class ProcessingCapability:
             "cost": self.cost,
             "priority": self.priority,
             "min_route_weight": self.min_route_weight,
+            "semantic_job": self.semantic_job.value if self.semantic_job else None,
         }
 
 
@@ -1250,6 +1279,8 @@ class OperationRequest:
     input_ids: tuple[str, ...]
     allowed_output_material_ids: tuple[str, ...]
     allowed_satisfaction_ids: tuple[str, ...]
+    semantic_job: SemanticJob | None
+    focused_context: Mapping[str, Any]
     input_hash: str
     budget_cost: int
 
@@ -1278,6 +1309,27 @@ class OperationRequest:
                 MAX_CONTEXT_ITEMS,
             ),
         )
+        if self.semantic_job is not None:
+            object.__setattr__(self, "semantic_job", SemanticJob(self.semantic_job))
+        if (
+            self.operation is ProcessingOperation.MODEL_PROPOSAL
+            and self.semantic_job is None
+        ):
+            raise CognitionValidationError(
+                "model proposal request requires a semantic job"
+            )
+        if (
+            self.operation is not ProcessingOperation.MODEL_PROPOSAL
+            and self.semantic_job is not None
+        ):
+            raise CognitionValidationError(
+                "non-model requests cannot carry a semantic job"
+            )
+        object.__setattr__(
+            self,
+            "focused_context",
+            _freeze(_bounded_payload(self.focused_context, "focused context")),
+        )
         _identifier(self.input_hash, "input_hash")
         _positive_int(self.budget_cost, "budget_cost", MAX_OPERATION_COST)
 
@@ -1291,6 +1343,8 @@ class OperationRequest:
             "input_ids": list(self.input_ids),
             "allowed_output_material_ids": list(self.allowed_output_material_ids),
             "allowed_satisfaction_ids": list(self.allowed_satisfaction_ids),
+            "semantic_job": self.semantic_job.value if self.semantic_job else None,
+            "focused_context": _jsonable(self.focused_context),
             "input_hash": self.input_hash,
             "budget_cost": self.budget_cost,
         }
@@ -1466,6 +1520,92 @@ def _validate_capability_scope(
             raise CognitionValidationError(
                 "capability crosses satisfaction branch scope"
             )
+
+
+def _focused_context_values(
+    problem: ProblemGraph,
+    capability: ProcessingCapability,
+    projection: AdaptiveProcessingProjection,
+) -> Mapping[str, Any]:
+    requirements = {item.requirement_id: item for item in problem.requirements}
+    subtasks = {item.subtask_id: item for item in problem.subtasks}
+    materials = {item.material_id: item for item in problem.materials}
+    branch = next(
+        item for item in problem.branches if item.branch_id == capability.branch_id
+    )
+    focused_items: list[dict[str, Any]] = []
+    for item_id in capability.declared_input_ids:
+        if item_id in requirements:
+            item = requirements[item_id]
+            focused_items.append(
+                {
+                    "item_id": item.requirement_id,
+                    "kind": "requirement",
+                    "text": item.text,
+                    "status": item.status.value,
+                    "user_constraint": item.user_constraint,
+                }
+            )
+        elif item_id in subtasks:
+            item = subtasks[item_id]
+            focused_items.append(
+                {
+                    "item_id": item.subtask_id,
+                    "kind": "subtask",
+                    "question": item.question,
+                    "requirement_ids": list(item.requirement_ids),
+                    "status": item.status.value,
+                }
+            )
+        else:
+            item = materials[item_id]
+            focused_items.append(
+                {
+                    "item_id": item.material_id,
+                    "kind": "material",
+                    "content": item.content,
+                    "material_kind": item.kind,
+                    "state": item.state.value,
+                    "source_lineage_ids": list(item.source_lineage_ids),
+                    "environment_id": item.environment_id,
+                }
+            )
+    return _freeze(
+        _bounded_payload(
+            {
+                "problem_id": problem.problem_id,
+                "problem_hash": problem.graph_hash,
+                "central_question": problem.central_question,
+                "branch": {
+                    "branch_id": branch.branch_id,
+                    "label": branch.label,
+                    "environment_id": branch.environment_id,
+                    "status": branch.status.value,
+                },
+                "semantic_job": (
+                    capability.semantic_job.value
+                    if capability.semantic_job is not None
+                    else None
+                ),
+                "use_class": (
+                    f"{capability.semantic_job.value}_candidate"
+                    if capability.semantic_job is not None
+                    else "candidate_processing"
+                ),
+                "focus_ids": list(capability.declared_input_ids),
+                "focused_items": focused_items,
+                "topology": {
+                    "projection_id": projection.projection_id,
+                    "topology_read_hash": projection.topology_read_hash,
+                    "active_tactic_id": projection.active_tactic_id,
+                    "route_id": capability.route_id,
+                    "route_weight": _route_weight(projection, capability.route_id),
+                },
+                "candidate_only": True,
+            },
+            "focused context",
+        )
+    )
 
 
 def _canonical_context_values(
@@ -1725,6 +1865,11 @@ class ProcessingTrace:
                 "capability": selected.to_dict(),
                 "branch": selected.branch_id,
                 "topology_read": self.projection.topology_read_hash,
+                "focused_context": _jsonable(
+                    _focused_context_values(
+                        self.problem, selected, self.projection
+                    )
+                ),
             })
             if (
                 self.request.problem_id != self.problem.problem_id
@@ -1736,11 +1881,20 @@ class ProcessingTrace:
                 != selected.declared_output_material_ids
                 or self.request.allowed_satisfaction_ids
                 != selected.declared_satisfaction_ids
+                or self.request.semantic_job != selected.semantic_job
+                or self.request.focused_context
+                != _focused_context_values(
+                    self.problem, selected, self.projection
+                )
                 or self.request.input_hash != expected_input_hash
                 or self.request.budget_cost != selected.cost
                 or self.result.request_id != self.request.request_id
             ):
                 raise CognitionValidationError("operation request/result binding is invalid")
+            if selected.semantic_job is not None:
+                from .semantic_capability import validate_semantic_operation_result
+
+                validate_semantic_operation_result(self.request, self.result)
             (
                 expected_materials,
                 expected_satisfaction,
@@ -2027,13 +2181,19 @@ def run_connected_processing(
         "capability": selected.to_dict(),
         "branch": selected.branch_id,
         "topology_read": projection.topology_read_hash,
+        "focused_context": _jsonable(
+            _focused_context_values(problem, selected, projection)
+        ),
     })
+    focused_context = _focused_context_values(problem, selected, projection)
     request = OperationRequest(
         f"{problem.problem_id}-operation-{selected.capability_id}-{projection.topology_version}-{projection.topology_generation}",
         problem.problem_id, selected.operation, selected.capability_id, selected.branch_id,
         selected.declared_input_ids,
         selected.declared_output_material_ids,
         selected.declared_satisfaction_ids,
+        selected.semantic_job,
+        focused_context,
         input_hash,
         selected.cost,
     )
@@ -2288,6 +2448,7 @@ def _capability_from_dict(value: Mapping[str, Any]) -> ProcessingCapability:
         value["cost"],
         value["priority"],
         value["min_route_weight"],
+        value.get("semantic_job"),
     )
 
 
@@ -2340,6 +2501,8 @@ def _processing_trace_from_dict(value: Mapping[str, Any]) -> ProcessingTrace:
             tuple(request_value["input_ids"]),
             tuple(request_value["allowed_output_material_ids"]),
             tuple(request_value["allowed_satisfaction_ids"]),
+            request_value.get("semantic_job"),
+            request_value.get("focused_context", {}),
             request_value["input_hash"],
             request_value["budget_cost"],
         )
@@ -2550,6 +2713,7 @@ __all__ = [
     "ProcessingEvent",
     "ProcessingEventKind",
     "ProcessingOperation",
+    "SemanticJob",
     "ProcessingTrace",
     "ProblemBranch",
     "ProblemGraph",

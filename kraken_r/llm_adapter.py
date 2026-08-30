@@ -759,6 +759,57 @@ class ModelAdapter:
         self.provider = provider
         self.timeout_seconds = float(timeout_seconds)
 
+    def complete_raw(self, request: ProviderRequest) -> ProviderResponse:
+        """Use the established provider boundary for a declared structured caller.
+
+        Parsing and authority checks remain the caller's responsibility.  This
+        method exists so successor cognition capabilities do not introduce a
+        second provider, network, timeout, or credential path.
+        """
+
+        if not isinstance(request, ProviderRequest):
+            raise ModelAdapterValidationError(
+                "raw completion requires a ProviderRequest"
+            )
+        _identifier(request.request_id, "request_id")
+        _identifier(request.model_id, "model_id")
+        _text(request.prompt, "prompt")
+        if (
+            isinstance(request.max_tokens, bool)
+            or not isinstance(request.max_tokens, int)
+            or not 1 <= request.max_tokens <= 4096
+        ):
+            raise ModelAdapterValidationError(
+                "max_tokens must be from 1 through 4096"
+            )
+        if (
+            isinstance(request.temperature, bool)
+            or not isinstance(request.temperature, (int, float))
+            or not 0.0 <= float(request.temperature) <= 2.0
+        ):
+            raise ModelAdapterValidationError(
+                "temperature must be from 0 through 2"
+            )
+        if not _deadline_enforceable():
+            raise TimeoutError(
+                "provider deadline cannot be enforced in this calling thread"
+            )
+        with _provider_deadline(self.timeout_seconds):
+            response = self.provider.complete(
+                request, timeout_seconds=self.timeout_seconds
+            )
+        if not isinstance(response, ProviderResponse):
+            raise ModelProviderError("provider did not return ProviderResponse")
+        if response.provider_id != self.provider.provider_id:
+            raise ModelProviderError(
+                "provider response identity does not match injected provider"
+            )
+        if response.model_id != request.model_id:
+            raise ModelProviderError(
+                "provider response model provenance mismatch"
+            )
+        return response
+
     def invoke(
         self,
         context: CandidateModelContext,

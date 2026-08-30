@@ -51,6 +51,8 @@ from .llm_adapter import (
     ModelAdapterValidationError,
     replay_model_invocation,
 )
+from .cognition_kernel import SemanticJob
+from .semantic_capability import SemanticModelCapability
 from .controlled_evaluation import (
     ControlledEvaluationHarness,
     EvaluationMode,
@@ -275,6 +277,52 @@ def validate_cognition_kernel() -> tuple[str, ...]:
     ):
         errors.append("cognition silently resolved an untouched branch")
     return tuple(errors)
+
+
+def validate_semantic_capability() -> tuple[str, ...]:
+    """Check the isolated semantic job and provider-boundary surface."""
+
+    errors: list[str] = []
+    expected_jobs = {
+        "recall",
+        "mechanism_generation",
+        "competing_explanations",
+        "cross_domain_correspondence",
+        "variable_equation_extraction",
+        "source_interpretation",
+        "falsifier_generation",
+        "missing_information_detection",
+    }
+    if {job.value for job in SemanticJob} != expected_jobs:
+        errors.append("semantic capability job catalog is incomplete")
+    if not callable(SemanticModelCapability):
+        errors.append("semantic model capability is unavailable")
+    semantic_path = Path(__file__).with_name("semantic_capability.py")
+    semantic_source = semantic_path.read_text(encoding="utf-8")
+    semantic_tree = ast.parse(semantic_source, filename=str(semantic_path))
+    forbidden_imports = {
+        "urllib",
+        "requests",
+        "httpx",
+        "threading",
+        "sub" + "process",
+    }
+    for node in ast.walk(semantic_tree):
+        if isinstance(node, ast.Import):
+            names = {item.name.split(".", 1)[0] for item in node.names}
+        elif isinstance(node, ast.ImportFrom) and node.module:
+            names = {node.module.split(".", 1)[0]}
+        else:
+            continue
+        if names & forbidden_imports:
+            errors.append(
+                "semantic capability introduced a second provider/runtime path"
+            )
+    if ".complete_raw(provider_request)" not in semantic_source:
+        errors.append("semantic capability bypasses the established ModelAdapter")
+    return tuple(sorted(set(errors)))
+
+
 PLANNED_CAPABILITIES = (
     "metaplasticity",
     "neuromodulation",
@@ -1740,6 +1788,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     dynamical_substrate_errors = validate_dynamical_substrate()
     metastability_errors = validate_metastability_experiments()
     cognition_kernel_errors = validate_cognition_kernel()
+    semantic_capability_errors = validate_semantic_capability()
     legacy_runtime_errors = validate_legacy_runtime_boundary()
     report = {
         "ok": (
@@ -1759,6 +1808,7 @@ def main(argv: Sequence[str] | None = None) -> int:
             and not dynamical_substrate_errors
             and not metastability_errors
             and not cognition_kernel_errors
+            and not semantic_capability_errors
             and not legacy_runtime_errors
         ),
         "contracts_ok": not contract_errors,
@@ -1834,6 +1884,12 @@ def main(argv: Sequence[str] | None = None) -> int:
             "ok": not cognition_kernel_errors,
             "errors": list(cognition_kernel_errors),
             "authority": "proposal_only_read_only_adaptive_projection",
+        },
+        "semantic_capability": {
+            "ok": not semantic_capability_errors,
+            "errors": list(semantic_capability_errors),
+            "authority": "typed_candidate_cognition_only",
+            "jobs": [job.value for job in SemanticJob],
         },
         "constitution": {
             "ok": True,
