@@ -651,12 +651,20 @@ source interpretation, falsifier generation, and missing-information
 detection.
 
 The response becomes typed `CandidateCognition` with system-bound provenance,
-an explicit job-specific use class, bounded structured payload, declared source
-lineage, questions, and missing-information items. It remains proposal-only:
+an explicit job-specific use class, a distinct bounded payload for that job,
+declared source lineage, job-appropriate verification obligations, questions,
+and missing-information items. Recall, mechanisms, competing explanations,
+cross-domain mappings, variables/equations, source interpretations, falsifiers,
+and missing-information reports cannot substitute payloads for one another.
+It remains proposal-only:
 even a confident model assertion has no evidence, settlement, execution, or
 adaptive-credit authority. Malformed, oversized, unauthorized, wrongly bound,
 or source-inventing output is rejected. `replay_processing_trace()` validates
-the stored semantic contract and hashes without invoking the provider again.
+the same exact schema and source restrictions as live ingestion, recomputes
+candidate identities, and rejects rehashed forged records without invoking the
+provider again. Its invocation envelope proves the deterministic prompt hash,
+template version, model, token limit, temperature, and configuration used for
+the stored output.
 
 Use `FixtureModelProvider` for deterministic qualification. Production callers
 may inject `OpenAICompatibleProvider` into the same `ModelAdapter`; the semantic

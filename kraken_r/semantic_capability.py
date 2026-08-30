@@ -36,6 +36,7 @@ MAX_SEMANTIC_OUTPUT_CHARS = 32_768
 MAX_SEMANTIC_TEXT_CHARS = 4_096
 MAX_SEMANTIC_PAYLOAD_ITEMS = 32
 MAX_SEMANTIC_PROMPT_CHARS = 12_000
+MAX_SEMANTIC_VERIFICATION_OBLIGATIONS = 6
 
 
 class SemanticCapabilityError(CognitionValidationError):
@@ -58,6 +59,102 @@ _CANDIDATE_KEYS = frozenset(
         "source_refs",
     }
 )
+_REPLAY_CANDIDATE_KEYS = frozenset(
+    {
+        "candidate_id",
+        "job",
+        "use_class",
+        "statement",
+        "rationale",
+        "structured_payload",
+        "self_reported_confidence",
+        "provenance",
+        "candidate_only",
+        "evidence_authority",
+        "settlement_authority",
+        "execution_authority",
+        "adaptive_credit_authority",
+    }
+)
+_PROVENANCE_KEYS = frozenset(
+    {
+        "problem_id",
+        "branch_id",
+        "operation_request_id",
+        "operation_input_hash",
+        "focused_context_hash",
+        "topology_read_hash",
+        "provider_id",
+        "model_id",
+        "provider_output_hash",
+        "source_lineage_ids",
+    }
+)
+_INVOCATION_KEYS = frozenset(
+    {
+        "provider_request_id",
+        "operation_request_id",
+        "model_id",
+        "max_tokens",
+        "temperature",
+        "prompt_template_version",
+        "prompt_hash",
+        "configuration_hash",
+        "request_hash",
+    }
+)
+_JOB_PAYLOAD_KEYS = {
+    SemanticJob.RECALL: frozenset(
+        {"recollections", "verification_obligations"}
+    ),
+    SemanticJob.MECHANISM_GENERATION: frozenset(
+        {
+            "components",
+            "causal_steps",
+            "assumptions",
+            "verification_obligations",
+        }
+    ),
+    SemanticJob.COMPETING_EXPLANATIONS: frozenset(
+        {"alternatives", "discriminators", "verification_obligations"}
+    ),
+    SemanticJob.CROSS_DOMAIN_CORRESPONDENCE: frozenset(
+        {"correspondences", "scope_limits", "verification_obligations"}
+    ),
+    SemanticJob.VARIABLE_EQUATION_EXTRACTION: frozenset(
+        {"variables", "equations", "verification_obligations"}
+    ),
+    SemanticJob.SOURCE_INTERPRETATION: frozenset(
+        {"interpretations", "limitations", "verification_obligations"}
+    ),
+    SemanticJob.FALSIFIER_GENERATION: frozenset(
+        {"falsifiers", "verification_obligations"}
+    ),
+    SemanticJob.MISSING_INFORMATION_DETECTION: frozenset(
+        {"missing_items", "blocking_questions", "verification_obligations"}
+    ),
+}
+_JOB_ITEM_KEYS = {
+    "recollections": frozenset({"content", "relevance"}),
+    "components": frozenset({"name", "role", "inputs", "outputs"}),
+    "alternatives": frozenset(
+        {"label", "explanation", "discriminators"}
+    ),
+    "correspondences": frozenset(
+        {"source_concept", "target_concept", "mapping"}
+    ),
+    "variables": frozenset({"name", "description", "unit", "role"}),
+    "equations": frozenset(
+        {"expression", "variable_names", "assumptions"}
+    ),
+    "interpretations": frozenset(
+        {"source_ref", "passage", "interpretation"}
+    ),
+    "falsifiers": frozenset(
+        {"test", "if_supported", "if_disconfirmed", "discriminates"}
+    ),
+    "missing_items": frozenset({"item", "why_needed", "blocks"}),
+}
 _FORBIDDEN_KEYS = frozenset(
     {
         "action",
@@ -129,7 +226,7 @@ def _text(value: Any, field_name: str) -> str:
 
 
 def _text_items(value: Any, field_name: str, limit: int) -> tuple[str, ...]:
-    if not isinstance(value, list) or len(value) > limit:
+    if not isinstance(value, (list, tuple)) or len(value) > limit:
         raise SemanticCapabilityError(f"{field_name} must be a bounded list")
     return tuple(_text(item, field_name) for item in value)
 
@@ -190,6 +287,230 @@ def _reject_forbidden_fields(value: Any, path: str = "model output") -> None:
             _reject_forbidden_fields(item, f"{path}[{index}]")
 
 
+def _record_list(
+    value: Any,
+    field_name: str,
+    item_keys: frozenset[str],
+    *,
+    limit: int = 8,
+) -> list[dict[str, Any]]:
+    if not isinstance(value, list) or not 1 <= len(value) <= limit:
+        raise SemanticCapabilityError(
+            f"{field_name} must contain from 1 through {limit} records"
+        )
+    records: list[dict[str, Any]] = []
+    for index, item in enumerate(value):
+        if not isinstance(item, dict) or set(item) != item_keys:
+            raise SemanticCapabilityError(
+                f"{field_name}[{index}] has the wrong typed schema"
+            )
+        records.append(item)
+    return records
+
+
+def _validate_job_payload(
+    value: Any,
+    job: SemanticJob,
+    allowed_sources: frozenset[str],
+) -> Mapping[str, Any]:
+    if not isinstance(value, dict) or set(value) != _JOB_PAYLOAD_KEYS[job]:
+        raise SemanticCapabilityError(
+            f"{job.value} payload does not match its required schema"
+        )
+    verification = _text_items(
+        value["verification_obligations"],
+        "verification obligation",
+        MAX_SEMANTIC_VERIFICATION_OBLIGATIONS,
+    )
+    if not verification:
+        raise SemanticCapabilityError(
+            f"{job.value} requires a verification obligation"
+        )
+    normalized: dict[str, Any] = {
+        "verification_obligations": verification,
+    }
+
+    def bounded_text(value: Any, field_name: str, limit: int = 8) -> tuple[str, ...]:
+        return _text_items(value, field_name, limit)
+
+    def required_text(
+        value: Any, field_name: str, limit: int = 8
+    ) -> tuple[str, ...]:
+        items = bounded_text(value, field_name, limit)
+        if not items:
+            raise SemanticCapabilityError(f"{field_name} cannot be empty")
+        return items
+
+    if job is SemanticJob.RECALL:
+        records = _record_list(
+            value["recollections"], "recollections", _JOB_ITEM_KEYS["recollections"]
+        )
+        normalized["recollections"] = tuple(
+            {
+                "content": _text(item["content"], "recollection content"),
+                "relevance": _text(item["relevance"], "recollection relevance"),
+            }
+            for item in records
+        )
+    elif job is SemanticJob.MECHANISM_GENERATION:
+        records = _record_list(
+            value["components"], "components", _JOB_ITEM_KEYS["components"]
+        )
+        normalized["components"] = tuple(
+            {
+                "name": _text(item["name"], "component name"),
+                "role": _text(item["role"], "component role"),
+                "inputs": required_text(item["inputs"], "component inputs"),
+                "outputs": required_text(item["outputs"], "component outputs"),
+            }
+            for item in records
+        )
+        normalized["causal_steps"] = required_text(
+            value["causal_steps"], "causal step"
+        )
+        normalized["assumptions"] = required_text(
+            value["assumptions"], "mechanism assumption"
+        )
+    elif job is SemanticJob.COMPETING_EXPLANATIONS:
+        records = _record_list(
+            value["alternatives"],
+            "alternatives",
+            _JOB_ITEM_KEYS["alternatives"],
+            limit=4,
+        )
+        if len(records) < 2:
+            raise SemanticCapabilityError(
+                "competing explanations require at least two alternatives"
+            )
+        normalized["alternatives"] = tuple(
+            {
+                "label": _text(item["label"], "alternative label"),
+                "explanation": _text(item["explanation"], "alternative explanation"),
+                "discriminators": required_text(
+                    item["discriminators"], "alternative discriminator", 4
+                ),
+            }
+            for item in records
+        )
+        normalized["discriminators"] = required_text(
+            value["discriminators"], "explanation discriminator"
+        )
+    elif job is SemanticJob.CROSS_DOMAIN_CORRESPONDENCE:
+        records = _record_list(
+            value["correspondences"],
+            "correspondences",
+            _JOB_ITEM_KEYS["correspondences"],
+        )
+        normalized["correspondences"] = tuple(
+            {
+                "source_concept": _text(
+                    item["source_concept"], "source concept"
+                ),
+                "target_concept": _text(
+                    item["target_concept"], "target concept"
+                ),
+                "mapping": _text(item["mapping"], "concept mapping"),
+            }
+            for item in records
+        )
+        normalized["scope_limits"] = required_text(
+            value["scope_limits"], "correspondence scope limit"
+        )
+    elif job is SemanticJob.VARIABLE_EQUATION_EXTRACTION:
+        variables = _record_list(
+            value["variables"], "variables", _JOB_ITEM_KEYS["variables"]
+        )
+        normalized["variables"] = tuple(
+            {
+                "name": _text(item["name"], "variable name"),
+                "description": _text(item["description"], "variable description"),
+                "unit": _text(item["unit"], "variable unit"),
+                "role": _text(item["role"], "variable role"),
+            }
+            for item in variables
+        )
+        equations = _record_list(
+            value["equations"], "equations", _JOB_ITEM_KEYS["equations"]
+        )
+        normalized["equations"] = tuple(
+            {
+                "expression": _text(item["expression"], "equation expression"),
+                "variable_names": required_text(
+                    item["variable_names"], "equation variable name", 8
+                ),
+                "assumptions": required_text(
+                    item["assumptions"], "equation assumption", 4
+                ),
+            }
+            for item in equations
+        )
+    elif job is SemanticJob.SOURCE_INTERPRETATION:
+        records = _record_list(
+            value["interpretations"],
+            "interpretations",
+            _JOB_ITEM_KEYS["interpretations"],
+        )
+        normalized["interpretations"] = tuple(
+            {
+                "source_ref": _identifier(item["source_ref"], "source_ref"),
+                "passage": _text(item["passage"], "source passage"),
+                "interpretation": _text(
+                    item["interpretation"], "source interpretation"
+                ),
+            }
+            for item in records
+        )
+        if not all(
+            item["source_ref"] in allowed_sources
+            for item in normalized["interpretations"]
+        ):
+            raise SemanticCapabilityError(
+                "source interpretation cites undeclared source lineage"
+            )
+        normalized["limitations"] = required_text(
+            value["limitations"], "interpretation limitation"
+        )
+    elif job is SemanticJob.FALSIFIER_GENERATION:
+        records = _record_list(
+            value["falsifiers"], "falsifiers", _JOB_ITEM_KEYS["falsifiers"]
+        )
+        normalized["falsifiers"] = tuple(
+            {
+                "test": _text(item["test"], "falsifier test"),
+                "if_supported": _text(
+                    item["if_supported"], "supported prediction"
+                ),
+                "if_disconfirmed": _text(
+                    item["if_disconfirmed"], "disconfirmed prediction"
+                ),
+                "discriminates": _text(
+                    item["discriminates"], "falsifier discriminator"
+                ),
+            }
+            for item in records
+        )
+    elif job is SemanticJob.MISSING_INFORMATION_DETECTION:
+        records = _record_list(
+            value["missing_items"],
+            "missing_items",
+            _JOB_ITEM_KEYS["missing_items"],
+        )
+        normalized["missing_items"] = tuple(
+            {
+                "item": _text(item["item"], "missing item"),
+                "why_needed": _text(item["why_needed"], "missing item reason"),
+                "blocks": _text(item["blocks"], "missing item blocker"),
+            }
+            for item in records
+        )
+        normalized["blocking_questions"] = required_text(
+            value["blocking_questions"], "blocking question"
+        )
+    else:
+        raise SemanticCapabilityError("unsupported semantic job")
+    return _freeze(normalized)
+
+
 def _declared_source_ids(context: Mapping[str, Any]) -> frozenset[str]:
     result: set[str] = set()
     for item in context.get("focused_items", ()):
@@ -198,6 +519,104 @@ def _declared_source_ids(context: Mapping[str, Any]) -> frozenset[str]:
         for source_id in item.get("source_lineage_ids", ()):
             result.add(str(source_id))
     return frozenset(result)
+
+
+def _job_payload_example(job: SemanticJob) -> Mapping[str, Any]:
+    examples: dict[SemanticJob, Mapping[str, Any]] = {
+        SemanticJob.RECALL: {
+            "recollections": [
+                {"content": "candidate recollection", "relevance": "why it may apply"}
+            ],
+            "verification_obligations": ["verify recollection against a declared source"],
+        },
+        SemanticJob.MECHANISM_GENERATION: {
+            "components": [
+                {
+                    "name": "component",
+                    "role": "candidate role",
+                    "inputs": ["input"],
+                    "outputs": ["output"],
+                }
+            ],
+            "causal_steps": ["candidate causal step"],
+            "assumptions": ["declared assumption"],
+            "verification_obligations": ["test each causal dependency"],
+        },
+        SemanticJob.COMPETING_EXPLANATIONS: {
+            "alternatives": [
+                {
+                    "label": "alternative-a",
+                    "explanation": "candidate explanation",
+                    "discriminators": ["observation that distinguishes it"],
+                }
+            ],
+            "discriminators": ["cross-alternative discriminating observation"],
+            "verification_obligations": ["compare alternatives under the same evidence"],
+        },
+        SemanticJob.CROSS_DOMAIN_CORRESPONDENCE: {
+            "correspondences": [
+                {
+                    "source_concept": "source concept",
+                    "target_concept": "target concept",
+                    "mapping": "bounded candidate correspondence",
+                }
+            ],
+            "scope_limits": ["where the analogy stops"],
+            "verification_obligations": ["verify mapping and scope independently"],
+        },
+        SemanticJob.VARIABLE_EQUATION_EXTRACTION: {
+            "variables": [
+                {
+                    "name": "x",
+                    "description": "candidate variable",
+                    "unit": "declared unit or dimensionless",
+                    "role": "input, output, parameter, or state",
+                }
+            ],
+            "equations": [
+                {
+                    "expression": "candidate equation",
+                    "variable_names": ["x"],
+                    "assumptions": ["equation assumption"],
+                }
+            ],
+            "verification_obligations": ["check dimensions, quantities, and dependencies"],
+        },
+        SemanticJob.SOURCE_INTERPRETATION: {
+            "interpretations": [
+                {
+                    "source_ref": "declared source_lineage_id",
+                    "passage": "bounded source passage",
+                    "interpretation": "candidate interpretation",
+                }
+            ],
+            "limitations": ["source limitation or ambiguity"],
+            "verification_obligations": ["compare interpretation with the cited source"],
+        },
+        SemanticJob.FALSIFIER_GENERATION: {
+            "falsifiers": [
+                {
+                    "test": "candidate falsifying test",
+                    "if_supported": "observation expected if candidate survives",
+                    "if_disconfirmed": "observation expected if candidate fails",
+                    "discriminates": "claim or alternatives distinguished",
+                }
+            ],
+            "verification_obligations": ["run an independent discriminating check"],
+        },
+        SemanticJob.MISSING_INFORMATION_DETECTION: {
+            "missing_items": [
+                {
+                    "item": "missing information",
+                    "why_needed": "why it matters",
+                    "blocks": "claim, dependency, or decision it blocks",
+                }
+            ],
+            "blocking_questions": ["question required before synthesis"],
+            "verification_obligations": ["obtain the missing information from a valid source"],
+        },
+    }
+    return examples[job]
 
 
 @dataclass(frozen=True)
@@ -272,10 +691,16 @@ class CandidateCognition:
             raise SemanticCapabilityError("candidate use class does not match job")
         _text(self.statement, "candidate statement")
         _text(self.rationale, "candidate rationale")
+        if not isinstance(self.provenance, SemanticProvenance):
+            raise SemanticCapabilityError("candidate provenance is required")
         object.__setattr__(
             self,
             "structured_payload",
-            _validate_payload(_jsonable(self.structured_payload)),
+            _validate_job_payload(
+                _jsonable(self.structured_payload),
+                self.job,
+                frozenset(self.provenance.source_lineage_ids),
+            ),
         )
         confidence = self.self_reported_confidence
         if confidence is not None and (
@@ -288,8 +713,6 @@ class CandidateCognition:
             )
         if confidence is not None:
             object.__setattr__(self, "self_reported_confidence", float(confidence))
-        if not isinstance(self.provenance, SemanticProvenance):
-            raise SemanticCapabilityError("candidate provenance is required")
         if (
             self.candidate_only is not True
             or self.evidence_authority is not False
@@ -318,6 +741,125 @@ class CandidateCognition:
 
 
 @dataclass(frozen=True)
+class SemanticInvocationEnvelope:
+    provider_request_id: str
+    operation_request_id: str
+    model_id: str
+    max_tokens: int
+    temperature: float
+    prompt_template_version: str
+    prompt_hash: str
+    configuration_hash: str
+    request_hash: str
+
+    def __post_init__(self) -> None:
+        for name in (
+            "provider_request_id",
+            "operation_request_id",
+            "model_id",
+            "prompt_template_version",
+            "prompt_hash",
+            "configuration_hash",
+            "request_hash",
+        ):
+            _identifier(getattr(self, name), name)
+        if (
+            isinstance(self.max_tokens, bool)
+            or not isinstance(self.max_tokens, int)
+            or not 1 <= self.max_tokens <= 4096
+        ):
+            raise SemanticCapabilityError(
+                "invocation max_tokens must be from 1 through 4096"
+            )
+        if (
+            isinstance(self.temperature, bool)
+            or not isinstance(self.temperature, (int, float))
+            or not 0.0 <= float(self.temperature) <= 2.0
+        ):
+            raise SemanticCapabilityError(
+                "invocation temperature must be from 0 through 2"
+            )
+        object.__setattr__(self, "temperature", float(self.temperature))
+        expected_configuration_hash = _digest(
+            {
+                "model_id": self.model_id,
+                "max_tokens": self.max_tokens,
+                "temperature": self.temperature,
+                "prompt_template_version": self.prompt_template_version,
+            }
+        )
+        if self.configuration_hash != expected_configuration_hash:
+            raise SemanticCapabilityError(
+                "semantic invocation configuration hash is invalid"
+            )
+        expected_request_hash = _digest(
+            {
+                "provider_request_id": self.provider_request_id,
+                "operation_request_id": self.operation_request_id,
+                "prompt_hash": self.prompt_hash,
+                "configuration_hash": self.configuration_hash,
+            }
+        )
+        if self.request_hash != expected_request_hash:
+            raise SemanticCapabilityError(
+                "semantic invocation request hash is invalid"
+            )
+
+    @classmethod
+    def create(
+        cls,
+        *,
+        provider_request_id: str,
+        operation_request_id: str,
+        model_id: str,
+        max_tokens: int,
+        temperature: float,
+        prompt_template_version: str,
+        prompt_hash: str,
+    ) -> "SemanticInvocationEnvelope":
+        configuration_hash = _digest(
+            {
+                "model_id": model_id,
+                "max_tokens": max_tokens,
+                "temperature": float(temperature),
+                "prompt_template_version": prompt_template_version,
+            }
+        )
+        request_hash = _digest(
+            {
+                "provider_request_id": provider_request_id,
+                "operation_request_id": operation_request_id,
+                "prompt_hash": prompt_hash,
+                "configuration_hash": configuration_hash,
+            }
+        )
+        return cls(
+            provider_request_id,
+            operation_request_id,
+            model_id,
+            max_tokens,
+            float(temperature),
+            prompt_template_version,
+            prompt_hash,
+            configuration_hash,
+            request_hash,
+        )
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "provider_request_id": self.provider_request_id,
+            "operation_request_id": self.operation_request_id,
+            "model_id": self.model_id,
+            "max_tokens": self.max_tokens,
+            "temperature": self.temperature,
+            "prompt_template_version": self.prompt_template_version,
+            "prompt_hash": self.prompt_hash,
+            "configuration_hash": self.configuration_hash,
+            "request_hash": self.request_hash,
+        }
+
+
+@dataclass(frozen=True)
 class SemanticCapabilityResult:
     job: SemanticJob
     use_class: str
@@ -325,10 +867,11 @@ class SemanticCapabilityResult:
     questions: tuple[str, ...]
     missing_information: tuple[str, ...]
     focused_context_hash: str
+    invocation: SemanticInvocationEnvelope
     provider_id: str
     model_id: str
     provider_output_hash: str
-    prompt_template_version: str = "semantic-capability-v1"
+    prompt_template_version: str = "semantic-capability-v2"
     candidate_only: bool = True
 
     def __post_init__(self) -> None:
@@ -376,6 +919,16 @@ class SemanticCapabilityResult:
             _identifier(getattr(self, name), name)
         if self.candidate_only is not True:
             raise SemanticCapabilityError("semantic result must remain candidate-only")
+        if not isinstance(self.invocation, SemanticInvocationEnvelope):
+            raise SemanticCapabilityError("semantic invocation envelope is required")
+        if self.invocation.model_id != self.model_id:
+            raise SemanticCapabilityError(
+                "semantic result model does not match invocation"
+            )
+        if self.invocation.prompt_template_version != self.prompt_template_version:
+            raise SemanticCapabilityError(
+                "semantic result template does not match invocation"
+            )
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -385,6 +938,7 @@ class SemanticCapabilityResult:
             "questions": list(self.questions),
             "missing_information": list(self.missing_information),
             "focused_context_hash": self.focused_context_hash,
+            "invocation": self.invocation.to_dict(),
             "provider_id": self.provider_id,
             "model_id": self.model_id,
             "provider_output_hash": self.provider_output_hash,
@@ -395,6 +949,8 @@ class SemanticCapabilityResult:
 
 class SemanticModelCapability:
     """Callable operation implementation for ``run_connected_processing``."""
+
+    PROMPT_TEMPLATE_VERSION = "semantic-capability-v2"
 
     def __init__(
         self,
@@ -439,9 +995,30 @@ class SemanticModelCapability:
             raise SemanticCapabilityError("focused context semantic job is invalid")
         if context.get("use_class") != _USE_CLASSES[request.semantic_job]:
             raise SemanticCapabilityError("focused context use class is invalid")
+        expected_configuration = {
+            "model_id": self.model_id,
+            "max_tokens": self.max_tokens,
+            "temperature": self.temperature,
+            "prompt_template_version": self.PROMPT_TEMPLATE_VERSION,
+        }
+        if _jsonable(request.semantic_configuration) != expected_configuration:
+            raise SemanticCapabilityError(
+                "semantic capability configuration does not match its declaration"
+            )
         prompt = self._prompt(request.semantic_job, context)
+        prompt_hash = _digest(prompt)
+        provider_request_id = f"{request.request_id}-semantic"
+        invocation = SemanticInvocationEnvelope.create(
+            provider_request_id=provider_request_id,
+            operation_request_id=request.request_id,
+            model_id=self.model_id,
+            max_tokens=self.max_tokens,
+            temperature=self.temperature,
+            prompt_template_version=self.PROMPT_TEMPLATE_VERSION,
+            prompt_hash=prompt_hash,
+        )
         provider_request = ProviderRequest(
-            request_id=f"{request.request_id}-semantic",
+            request_id=provider_request_id,
             model_id=self.model_id,
             prompt=prompt,
             max_tokens=self.max_tokens,
@@ -457,7 +1034,12 @@ class SemanticModelCapability:
             raise SemanticCapabilityError(
                 f"semantic provider failed closed: {type(exc).__name__}"
             ) from exc
-        semantic_result = self._parse(request, response.content, response.provider_id)
+        semantic_result = self._parse(
+            request,
+            response.content,
+            response.provider_id,
+            invocation,
+        )
         return OperationResult(
             result_id=f"{request.request_id}-result",
             request_id=request.request_id,
@@ -486,9 +1068,7 @@ class SemanticModelCapability:
                     {
                         "statement": "bounded candidate statement",
                         "rationale": "bounded candidate rationale",
-                        "structured_payload": {
-                            "job_specific_fields": "JSON-only values"
-                        },
+                        "structured_payload": _job_payload_example(job),
                         "self_reported_confidence": "null or number 0..1; never authority",
                         "source_refs": [
                             "only source_lineage_ids declared in focused_context"
@@ -516,6 +1096,7 @@ class SemanticModelCapability:
         request: OperationRequest,
         raw_output: str,
         provider_id: str,
+        invocation: SemanticInvocationEnvelope,
     ) -> SemanticCapabilityResult:
         if (
             not isinstance(raw_output, str)
@@ -554,7 +1135,7 @@ class SemanticModelCapability:
         context = _jsonable(request.focused_context)
         allowed_sources = _declared_source_ids(context)
         context_hash = _digest(context)
-        output_hash = _digest(raw_output)
+        output_hash = _digest(value)
         candidates: list[CandidateCognition] = []
         for index, item in enumerate(candidate_values):
             if not isinstance(item, dict) or set(item) != _CANDIDATE_KEYS:
@@ -593,7 +1174,9 @@ class SemanticModelCapability:
                     use_class=use_class,
                     statement=item["statement"],
                     rationale=item["rationale"],
-                    structured_payload=item["structured_payload"],
+                    structured_payload=_validate_job_payload(
+                        item["structured_payload"], job, allowed_sources
+                    ),
                     self_reported_confidence=item["self_reported_confidence"],
                     provenance=provenance,
                 )
@@ -605,13 +1188,18 @@ class SemanticModelCapability:
             questions=questions,
             missing_information=missing,
             focused_context_hash=context_hash,
+            invocation=invocation,
             provider_id=provider_id,
             model_id=self.model_id,
             provider_output_hash=output_hash,
         )
 
 
-def semantic_result_from_dict(value: Mapping[str, Any]) -> SemanticCapabilityResult:
+def semantic_result_from_dict(
+    value: Mapping[str, Any],
+    *,
+    request: OperationRequest,
+) -> SemanticCapabilityResult:
     if not isinstance(value, Mapping):
         raise SemanticCapabilityError("semantic replay result must be a mapping")
     expected = {
@@ -621,6 +1209,7 @@ def semantic_result_from_dict(value: Mapping[str, Any]) -> SemanticCapabilityRes
         "questions",
         "missing_information",
         "focused_context_hash",
+        "invocation",
         "provider_id",
         "model_id",
         "provider_output_hash",
@@ -629,9 +1218,97 @@ def semantic_result_from_dict(value: Mapping[str, Any]) -> SemanticCapabilityRes
     }
     if set(value) != expected:
         raise SemanticCapabilityError("semantic replay result schema is invalid")
+    if not isinstance(request, OperationRequest) or request.semantic_job is None:
+        raise SemanticCapabilityError(
+            "semantic replay requires its bound operation request"
+        )
+    try:
+        job = SemanticJob(value["job"])
+    except (TypeError, ValueError) as exc:
+        raise SemanticCapabilityError("semantic replay job is invalid") from exc
+    if job is not request.semantic_job:
+        raise SemanticCapabilityError("semantic replay job binding is invalid")
+    if value["use_class"] != _USE_CLASSES[job]:
+        raise SemanticCapabilityError("semantic replay use class is invalid")
+    questions = _text_items(
+        value["questions"], "question", MAX_SEMANTIC_QUESTIONS
+    )
+    missing = _text_items(
+        value["missing_information"],
+        "missing information",
+        MAX_SEMANTIC_MISSING_ITEMS,
+    )
+    context = _jsonable(request.focused_context)
+    context_hash = _digest(context)
+    if value["focused_context_hash"] != context_hash:
+        raise SemanticCapabilityError("semantic replay context binding is invalid")
+    invocation_value = value["invocation"]
+    if (
+        not isinstance(invocation_value, Mapping)
+        or set(invocation_value) != _INVOCATION_KEYS
+    ):
+        raise SemanticCapabilityError(
+            "semantic invocation replay schema is invalid"
+        )
+    invocation = SemanticInvocationEnvelope(
+        invocation_value["provider_request_id"],
+        invocation_value["operation_request_id"],
+        invocation_value["model_id"],
+        invocation_value["max_tokens"],
+        invocation_value["temperature"],
+        invocation_value["prompt_template_version"],
+        invocation_value["prompt_hash"],
+        invocation_value["configuration_hash"],
+        invocation_value["request_hash"],
+    )
+    if (
+        invocation.operation_request_id != request.request_id
+        or invocation.provider_request_id != f"{request.request_id}-semantic"
+        or invocation.model_id
+        != request.semantic_configuration["model_id"]
+        or invocation.max_tokens
+        != request.semantic_configuration["max_tokens"]
+        or invocation.temperature
+        != request.semantic_configuration["temperature"]
+        or invocation.prompt_template_version
+        != request.semantic_configuration["prompt_template_version"]
+        or invocation.prompt_template_version
+        != SemanticModelCapability.PROMPT_TEMPLATE_VERSION
+        or invocation.prompt_hash
+        != _digest(SemanticModelCapability._prompt(job, context))
+    ):
+        raise SemanticCapabilityError(
+            "semantic invocation does not match the deterministic request"
+        )
+    if value["prompt_template_version"] != invocation.prompt_template_version:
+        raise SemanticCapabilityError(
+            "semantic replay prompt template binding is invalid"
+        )
+    if value["model_id"] != invocation.model_id:
+        raise SemanticCapabilityError("semantic replay model binding is invalid")
+    allowed_sources = _declared_source_ids(context)
+    candidate_values = value["candidates"]
+    if (
+        not isinstance(candidate_values, (list, tuple))
+        or not candidate_values
+        or len(candidate_values) > MAX_SEMANTIC_CANDIDATES
+    ):
+        raise SemanticCapabilityError("semantic replay candidates are unbounded")
     candidates: list[CandidateCognition] = []
-    for item in value["candidates"]:
+    provider_candidates: list[dict[str, Any]] = []
+    for index, item in enumerate(candidate_values):
+        if not isinstance(item, Mapping) or set(item) != _REPLAY_CANDIDATE_KEYS:
+            raise SemanticCapabilityError(
+                "semantic replay candidate schema is invalid"
+            )
         provenance_value = item["provenance"]
+        if (
+            not isinstance(provenance_value, Mapping)
+            or set(provenance_value) != _PROVENANCE_KEYS
+        ):
+            raise SemanticCapabilityError(
+                "semantic replay provenance schema is invalid"
+            )
         provenance = SemanticProvenance(
             provenance_value["problem_id"],
             provenance_value["branch_id"],
@@ -644,6 +1321,25 @@ def semantic_result_from_dict(value: Mapping[str, Any]) -> SemanticCapabilityRes
             provenance_value["provider_output_hash"],
             tuple(provenance_value["source_lineage_ids"]),
         )
+        if not set(provenance.source_lineage_ids) <= allowed_sources:
+            raise SemanticCapabilityError(
+                "semantic replay cites undeclared source lineage"
+            )
+        if item["candidate_id"] != (
+            f"semantic-{value['provider_output_hash'][:16]}-{index + 1}"
+        ):
+            raise SemanticCapabilityError(
+                "semantic replay candidate identity is invalid"
+            )
+        if item["job"] != job.value or item["use_class"] != _USE_CLASSES[job]:
+            raise SemanticCapabilityError(
+                "semantic replay candidate job binding is invalid"
+            )
+        typed_payload = _validate_job_payload(
+            _jsonable(item["structured_payload"]),
+            job,
+            allowed_sources,
+        )
         candidates.append(
             CandidateCognition(
                 item["candidate_id"],
@@ -651,7 +1347,7 @@ def semantic_result_from_dict(value: Mapping[str, Any]) -> SemanticCapabilityRes
                 item["use_class"],
                 item["statement"],
                 item["rationale"],
-                item["structured_payload"],
+                typed_payload,
                 item["self_reported_confidence"],
                 provenance,
                 item["candidate_only"],
@@ -661,18 +1357,39 @@ def semantic_result_from_dict(value: Mapping[str, Any]) -> SemanticCapabilityRes
                 item["adaptive_credit_authority"],
             )
         )
+        provider_candidates.append(
+            {
+                "statement": item["statement"],
+                "rationale": item["rationale"],
+                "structured_payload": _jsonable(typed_payload),
+                "self_reported_confidence": item["self_reported_confidence"],
+                "source_refs": list(provenance.source_lineage_ids),
+            }
+        )
+    provider_value = {
+        "job": job.value,
+        "use_class": _USE_CLASSES[job],
+        "candidates": provider_candidates,
+        "questions": list(questions),
+        "missing_information": list(missing),
+    }
+    if value["provider_output_hash"] != _digest(provider_value):
+        raise SemanticCapabilityError(
+            "semantic replay provider output hash is invalid"
+        )
     return SemanticCapabilityResult(
-        value["job"],
-        value["use_class"],
-        tuple(candidates),
-        tuple(value["questions"]),
-        tuple(value["missing_information"]),
-        value["focused_context_hash"],
-        value["provider_id"],
-        value["model_id"],
-        value["provider_output_hash"],
-        value["prompt_template_version"],
-        value["candidate_only"],
+        job=job,
+        use_class=value["use_class"],
+        candidates=tuple(candidates),
+        questions=questions,
+        missing_information=missing,
+        focused_context_hash=value["focused_context_hash"],
+        invocation=invocation,
+        provider_id=value["provider_id"],
+        model_id=value["model_id"],
+        provider_output_hash=value["provider_output_hash"],
+        prompt_template_version=value["prompt_template_version"],
+        candidate_only=value["candidate_only"],
     )
 
 
@@ -689,7 +1406,10 @@ def validate_semantic_operation_result(
         raise SemanticCapabilityError(
             "semantic operation output contract is invalid"
         )
-    semantic = semantic_result_from_dict(result.output["semantic_result"])
+    semantic = semantic_result_from_dict(
+        result.output["semantic_result"],
+        request=request,
+    )
     if semantic.job is not request.semantic_job:
         raise SemanticCapabilityError("semantic replay job binding is invalid")
     context_hash = _digest(_jsonable(request.focused_context))
@@ -718,6 +1438,13 @@ def validate_semantic_operation_result(
             raise SemanticCapabilityError(
                 "semantic candidate provenance binding is invalid"
             )
+    if (
+        semantic.invocation.operation_request_id != request.request_id
+        or semantic.invocation.model_id != semantic.model_id
+    ):
+        raise SemanticCapabilityError(
+            "semantic invocation/result binding is invalid"
+        )
     if (
         result.downstream_material_ids
         or result.downstream_satisfaction

@@ -2,6 +2,7 @@
 
 from copy import deepcopy
 from dataclasses import replace
+import hashlib
 import json
 
 import pytest
@@ -20,6 +21,7 @@ from kraken_r.cognition_kernel import (
     SatisfactionState,
     SemanticJob,
     SourceLineage,
+    _hash,
     replay_processing_trace,
     run_connected_processing,
 )
@@ -140,6 +142,12 @@ def _capability(
         branch_id,
         (material_id,),
         semantic_job=job,
+        semantic_configuration={
+            "model_id": "fixture-model",
+            "max_tokens": 768,
+            "temperature": 0.0,
+            "prompt_template_version": "semantic-capability-v2",
+        },
     )
 
 
@@ -172,14 +180,128 @@ def _provider_output(
     candidate = {
         "statement": "Pressure-driven transport is a candidate mechanism.",
         "rationale": "It could explain the declared observation but needs testing.",
-        "structured_payload": {
-            "variables": ["pressure", "flow"],
-            "equations": ["flow = conductance * pressure_difference"],
-        },
         "self_reported_confidence": 0.99,
         "source_refs": ["semantic-lineage-alpha"],
     }
     candidate.update(candidate_updates or {})
+    source_ref = (
+        candidate["source_refs"][0]
+        if candidate["source_refs"]
+        else "semantic-lineage-alpha"
+    )
+    payloads = {
+        "recall": {
+            "recollections": [
+                {
+                    "content": "A pressure gradient can drive flow.",
+                    "relevance": "The valve changes the pressure path.",
+                }
+            ],
+            "verification_obligations": [
+                "Verify the recollection against declared material."
+            ],
+        },
+        "mechanism_generation": {
+            "components": [
+                {
+                    "name": "valve",
+                    "role": "changes conductance",
+                    "inputs": ["pressure difference"],
+                    "outputs": ["flow"],
+                }
+            ],
+            "causal_steps": ["Opening the valve increases conductance."],
+            "assumptions": ["Pressure difference remains nonzero."],
+            "verification_obligations": ["Measure each causal dependency."],
+        },
+        "competing_explanations": {
+            "alternatives": [
+                {
+                    "label": "pressure-driven",
+                    "explanation": "Pressure drives the observed flow.",
+                    "discriminators": ["Clamp pressure while opening the valve."],
+                },
+                {
+                    "label": "sensor-artifact",
+                    "explanation": "The reading changes without real flow.",
+                    "discriminators": ["Use an independent flow sensor."],
+                },
+            ],
+            "discriminators": ["Compare independent flow and pressure readings."],
+            "verification_obligations": [
+                "Test alternatives under the same conditions."
+            ],
+        },
+        "cross_domain_correspondence": {
+            "correspondences": [
+                {
+                    "source_concept": "electrical conductance",
+                    "target_concept": "fluid conductance",
+                    "mapping": "Both relate flow to a driving potential.",
+                }
+            ],
+            "scope_limits": ["Compressibility has no direct electrical analogue."],
+            "verification_obligations": ["Verify the analogy within its scope."],
+        },
+        "variable_equation_extraction": {
+            "variables": [
+                {
+                    "name": "flow",
+                    "description": "Volumetric transport rate.",
+                    "unit": "m3/s",
+                    "role": "output",
+                },
+            ],
+            "equations": [
+                {
+                    "expression": "flow = conductance * pressure_difference",
+                    "variable_names": ["flow"],
+                    "assumptions": ["Linear response regime."],
+                }
+            ],
+            "verification_obligations": [
+                "Check dimensions and the linear-regime assumption."
+            ],
+        },
+        "source_interpretation": {
+            "interpretations": [
+                {
+                    "source_ref": source_ref,
+                    "passage": "Alpha rises after the valve opens.",
+                    "interpretation": "The observation is consistent with increased flow.",
+                }
+            ],
+            "limitations": ["The material does not state measurement uncertainty."],
+            "verification_obligations": [
+                "Compare the interpretation with the cited source."
+            ],
+        },
+        "falsifier_generation": {
+            "falsifiers": [
+                {
+                    "test": "Clamp pressure while opening the valve.",
+                    "if_supported": "Flow does not rise without a pressure gradient.",
+                    "if_disconfirmed": "Flow rises despite zero pressure difference.",
+                    "discriminates": "Pressure-driven mechanism.",
+                }
+            ],
+            "verification_obligations": ["Run an independent pressure-clamp test."],
+        },
+        "missing_information_detection": {
+            "missing_items": [
+                {
+                    "item": "Independent pressure measurement.",
+                    "why_needed": "The proposed mechanism requires a pressure gradient.",
+                    "blocks": "Mechanism discrimination.",
+                }
+            ],
+            "blocking_questions": ["What was the pressure across the valve?"],
+            "verification_obligations": [
+                "Obtain a calibrated independent pressure measurement."
+            ],
+        },
+    }
+    candidate.setdefault("structured_payload", payloads[job])
     value = {
         "job": job,
         "use_class": use_class,
@@ -211,6 +333,45 @@ def _semantic(job: SemanticJob, response_factory=None):
     return provider, operation
 
 
+def _rehash_trace_record(record):
+    result = record["result"]
+    result_without_hash = {
+        key: value for key, value in result.items() if key != "output_hash"
+    }
+    result["output_hash"] = _hash(result_without_hash)
+    context = record["context"]
+    context["output_hash"] = _hash(
+        {
+            "problem": record["problem"]["graph_hash"],
+            "branch": context["branch_id"],
+            "materials": context["active_material_ids"],
+            "satisfaction": context["satisfaction"],
+            "result": result["output_hash"],
+        }
+    )
+    for event in record["events"]:
+        if event["kind"] == "operation":
+            event["output_hash"] = result["output_hash"]
+        elif event["kind"] == "motif_observation":
+            event["input_hash"] = result["output_hash"]
+            event["output_hash"] = context["output_hash"]
+    record["structural_hash"] = _hash(
+        {key: value for key, value in record.items() if key != "structural_hash"}
+    )
+    return record
+
+
+def _semantic_digest(value):
+    return hashlib.sha256(
+        json.dumps(
+            value,
+            sort_keys=True,
+            separators=(",", ":"),
+            ensure_ascii=True,
+        ).encode("utf-8")
+    ).hexdigest()
+
+
 @pytest.mark.parametrize("job", tuple(SemanticJob))
 def test_all_declared_semantic_jobs_return_typed_candidate_cognition(job):
     provider, operation = _semantic(job)
@@ -228,10 +389,78 @@ def test_all_declared_semantic_jobs_return_typed_candidate_cognition(job):
     assert semantic.candidates[0].self_reported_confidence == 0.99
     assert semantic.candidates[0].candidate_only is True
     assert semantic.candidates[0].evidence_authority is False
+    assert semantic.candidates[0].structured_payload["verification_obligations"]
+    assert (
+        set(semantic.candidates[0].structured_payload)
+        != {"verification_obligations"}
+    )
     assert trace.result.evidence_ids == ()
     assert trace.result.settlement_ids == ()
     assert trace.result.adaptive_update_ids == ()
     assert len(provider.calls) == 1
+
+
+@pytest.mark.parametrize(
+    ("job", "wrong_job"),
+    tuple(
+        (job, tuple(SemanticJob)[(index + 1) % len(SemanticJob)])
+        for index, job in enumerate(SemanticJob)
+    ),
+)
+def test_each_job_rejects_another_jobs_typed_payload(job, wrong_job):
+    wrong_output = json.loads(
+        _provider_output(wrong_job.value, f"{wrong_job.value}_candidate")
+    )
+    wrong_payload = wrong_output["candidates"][0]["structured_payload"]
+
+    def response(request):
+        prompt = json.loads(request.prompt)
+        return _provider_output(
+            prompt["semantic_job"],
+            prompt["use_class"],
+            candidate_updates={"structured_payload": wrong_payload},
+        )
+
+
+@pytest.mark.parametrize(
+    ("job", "empty_field"),
+    (
+        (SemanticJob.RECALL, "verification_obligations"),
+        (SemanticJob.MECHANISM_GENERATION, "causal_steps"),
+        (SemanticJob.COMPETING_EXPLANATIONS, "discriminators"),
+        (SemanticJob.CROSS_DOMAIN_CORRESPONDENCE, "scope_limits"),
+        (SemanticJob.VARIABLE_EQUATION_EXTRACTION, "verification_obligations"),
+        (SemanticJob.SOURCE_INTERPRETATION, "limitations"),
+        (SemanticJob.FALSIFIER_GENERATION, "verification_obligations"),
+        (SemanticJob.MISSING_INFORMATION_DETECTION, "blocking_questions"),
+    ),
+)
+def test_each_job_rejects_missing_required_reasoning_content(job, empty_field):
+    def response(request):
+        prompt = json.loads(request.prompt)
+        output = json.loads(
+            _provider_output(prompt["semantic_job"], prompt["use_class"])
+        )
+        output["candidates"][0]["structured_payload"][empty_field] = []
+        return json.dumps(output)
+
+    _, operation = _semantic(job, response)
+    with pytest.raises(SemanticCapabilityError):
+        run_connected_processing(
+            _problem(),
+            (_capability(job),),
+            _state(),
+            operation_callbacks={ProcessingOperation.MODEL_PROPOSAL: operation},
+        )
+
+    _, operation = _semantic(job, response)
+    with pytest.raises(SemanticCapabilityError):
+        run_connected_processing(
+            _problem(),
+            (_capability(job),),
+            _state(),
+            operation_callbacks={ProcessingOperation.MODEL_PROPOSAL: operation},
+        )
 
 
 def test_topology_changes_selected_semantic_job_and_focused_model_input():
@@ -291,6 +520,113 @@ def test_structural_replay_validates_semantics_without_calling_provider():
     assert len(provider.calls) == calls_before
 
 
+def test_candidate_identity_is_deterministic_and_bound_to_provider_output():
+    _, operation = _semantic(SemanticJob.RECALL)
+    first = run_connected_processing(
+        _problem(),
+        (_capability(SemanticJob.RECALL),),
+        _state(),
+        operation_callbacks={ProcessingOperation.MODEL_PROPOSAL: operation},
+    )
+    second = run_connected_processing(
+        _problem(),
+        (_capability(SemanticJob.RECALL),),
+        _state(),
+        operation_callbacks={ProcessingOperation.MODEL_PROPOSAL: operation},
+    )
+    first_semantic = validate_semantic_operation_result(
+        first.request, first.result
+    )
+    second_semantic = validate_semantic_operation_result(
+        second.request, second.result
+    )
+
+    expected = f"semantic-{first_semantic.provider_output_hash[:16]}-1"
+    assert first_semantic.candidates[0].candidate_id == expected
+    assert second_semantic.candidates[0].candidate_id == expected
+
+
+@pytest.mark.parametrize(
+    "tamper",
+    (
+        lambda candidate: candidate.update({"unknown_field": "forged"}),
+        lambda candidate: candidate["provenance"].update(
+            {"source_lineage_ids": ["undeclared-lineage"]}
+        ),
+        lambda candidate: candidate.update({"candidate_id": "semantic-forged-1"}),
+    ),
+)
+def test_structurally_rehashed_semantic_records_still_fail_live_contract(tamper):
+    _, operation = _semantic(SemanticJob.RECALL)
+    trace = run_connected_processing(
+        _problem(),
+        (_capability(SemanticJob.RECALL),),
+        _state(),
+        operation_callbacks={ProcessingOperation.MODEL_PROPOSAL: operation},
+    )
+    record = trace.to_dict()
+    candidate = record["result"]["output"]["semantic_result"]["candidates"][0]
+    tamper(candidate)
+    _rehash_trace_record(record)
+
+    with pytest.raises(CognitionValidationError):
+        replay_processing_trace(record)
+
+
+def test_rehashed_invocation_prompt_and_configuration_tampering_fail_closed():
+    _, operation = _semantic(SemanticJob.RECALL)
+    trace = run_connected_processing(
+        _problem(),
+        (_capability(SemanticJob.RECALL),),
+        _state(),
+        operation_callbacks={ProcessingOperation.MODEL_PROPOSAL: operation},
+    )
+    for field, value in (
+        ("max_tokens", 769),
+        ("prompt_hash", "0" * 64),
+        ("prompt_template_version", "semantic-capability-forged"),
+    ):
+        record = trace.to_dict()
+        invocation = record["result"]["output"]["semantic_result"]["invocation"]
+        invocation[field] = value
+        _rehash_trace_record(record)
+        with pytest.raises(CognitionValidationError):
+            replay_processing_trace(record)
+
+
+def test_self_consistently_rehashed_generation_configuration_is_rejected():
+    _, operation = _semantic(SemanticJob.RECALL)
+    trace = run_connected_processing(
+        _problem(),
+        (_capability(SemanticJob.RECALL),),
+        _state(),
+        operation_callbacks={ProcessingOperation.MODEL_PROPOSAL: operation},
+    )
+    record = trace.to_dict()
+    invocation = record["result"]["output"]["semantic_result"]["invocation"]
+    invocation["max_tokens"] = 769
+    invocation["configuration_hash"] = _semantic_digest(
+        {
+            "model_id": invocation["model_id"],
+            "max_tokens": invocation["max_tokens"],
+            "temperature": invocation["temperature"],
+            "prompt_template_version": invocation["prompt_template_version"],
+        }
+    )
+    invocation["request_hash"] = _semantic_digest(
+        {
+            "provider_request_id": invocation["provider_request_id"],
+            "operation_request_id": invocation["operation_request_id"],
+            "prompt_hash": invocation["prompt_hash"],
+            "configuration_hash": invocation["configuration_hash"],
+        }
+    )
+    _rehash_trace_record(record)
+
+    with pytest.raises(CognitionValidationError):
+        replay_processing_trace(record)
+
+
 @pytest.mark.parametrize(
     "response_factory",
     (
@@ -332,6 +668,7 @@ def test_oversized_output_and_provider_error_fail_closed():
     for response_factory in (
         lambda _: "x" * 40_000,
         lambda _: (_ for _ in ()).throw(ModelProviderError("offline")),
+        lambda _: (_ for _ in ()).throw(TimeoutError("deadline")),
     ):
         _, operation = _semantic(SemanticJob.RECALL, response_factory)
         with pytest.raises(SemanticCapabilityError):

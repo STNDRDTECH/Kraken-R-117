@@ -1039,6 +1039,7 @@ class ProcessingCapability:
     priority: int = 0
     min_route_weight: float = MIN_ROUTE_WEIGHT
     semantic_job: SemanticJob | None = None
+    semantic_configuration: Mapping[str, Any] = field(default_factory=dict)
 
     def __post_init__(self) -> None:
         _identifier(self.capability_id, "capability_id")
@@ -1084,6 +1085,54 @@ class ProcessingCapability:
             raise CognitionValidationError(
                 "semantic jobs are restricted to model proposal capabilities"
             )
+        if not isinstance(self.semantic_configuration, Mapping):
+            raise CognitionValidationError(
+                "semantic_configuration must be a mapping"
+            )
+        semantic_configuration = dict(self.semantic_configuration)
+        expected_configuration_fields = {
+            "model_id",
+            "max_tokens",
+            "temperature",
+            "prompt_template_version",
+        }
+        if self.semantic_job is not None:
+            if set(semantic_configuration) != expected_configuration_fields:
+                raise CognitionValidationError(
+                    "model proposal capability requires exact semantic configuration"
+                )
+            _identifier(
+                semantic_configuration["model_id"],
+                "semantic configuration model_id",
+            )
+            _positive_int(
+                semantic_configuration["max_tokens"],
+                "semantic configuration max_tokens",
+                4096,
+            )
+            temperature = semantic_configuration["temperature"]
+            if (
+                isinstance(temperature, bool)
+                or not isinstance(temperature, (int, float))
+                or not 0.0 <= float(temperature) <= 2.0
+            ):
+                raise CognitionValidationError(
+                    "semantic configuration temperature must be from 0 through 2"
+                )
+            semantic_configuration["temperature"] = float(temperature)
+            _identifier(
+                semantic_configuration["prompt_template_version"],
+                "semantic configuration prompt_template_version",
+            )
+        elif semantic_configuration:
+            raise CognitionValidationError(
+                "non-model capability cannot carry semantic configuration"
+            )
+        object.__setattr__(
+            self,
+            "semantic_configuration",
+            _freeze(semantic_configuration),
+        )
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -1098,6 +1147,7 @@ class ProcessingCapability:
             "priority": self.priority,
             "min_route_weight": self.min_route_weight,
             "semantic_job": self.semantic_job.value if self.semantic_job else None,
+            "semantic_configuration": _jsonable(self.semantic_configuration),
         }
 
 
@@ -1280,6 +1330,7 @@ class OperationRequest:
     allowed_output_material_ids: tuple[str, ...]
     allowed_satisfaction_ids: tuple[str, ...]
     semantic_job: SemanticJob | None
+    semantic_configuration: Mapping[str, Any]
     focused_context: Mapping[str, Any]
     input_hash: str
     budget_cost: int
@@ -1325,6 +1376,35 @@ class OperationRequest:
             raise CognitionValidationError(
                 "non-model requests cannot carry a semantic job"
             )
+        if not isinstance(self.semantic_configuration, Mapping):
+            raise CognitionValidationError(
+                "semantic_configuration must be a mapping"
+            )
+        semantic_configuration = dict(self.semantic_configuration)
+        if self.semantic_job is not None:
+            if set(semantic_configuration) != {
+                "model_id",
+                "max_tokens",
+                "temperature",
+                "prompt_template_version",
+            }:
+                raise CognitionValidationError(
+                    "semantic request configuration is incomplete"
+                )
+        elif semantic_configuration:
+            raise CognitionValidationError(
+                "non-model request cannot carry semantic configuration"
+            )
+        object.__setattr__(
+            self,
+            "semantic_configuration",
+            _freeze(
+                _bounded_payload(
+                    semantic_configuration,
+                    "semantic configuration",
+                )
+            ),
+        )
         object.__setattr__(
             self,
             "focused_context",
@@ -1344,6 +1424,7 @@ class OperationRequest:
             "allowed_output_material_ids": list(self.allowed_output_material_ids),
             "allowed_satisfaction_ids": list(self.allowed_satisfaction_ids),
             "semantic_job": self.semantic_job.value if self.semantic_job else None,
+            "semantic_configuration": _jsonable(self.semantic_configuration),
             "focused_context": _jsonable(self.focused_context),
             "input_hash": self.input_hash,
             "budget_cost": self.budget_cost,
@@ -1591,6 +1672,9 @@ def _focused_context_values(
                     f"{capability.semantic_job.value}_candidate"
                     if capability.semantic_job is not None
                     else "candidate_processing"
+                ),
+                "model_configuration": _jsonable(
+                    capability.semantic_configuration
                 ),
                 "focus_ids": list(capability.declared_input_ids),
                 "focused_items": focused_items,
@@ -1882,6 +1966,8 @@ class ProcessingTrace:
                 or self.request.allowed_satisfaction_ids
                 != selected.declared_satisfaction_ids
                 or self.request.semantic_job != selected.semantic_job
+                or self.request.semantic_configuration
+                != selected.semantic_configuration
                 or self.request.focused_context
                 != _focused_context_values(
                     self.problem, selected, self.projection
@@ -2193,6 +2279,7 @@ def run_connected_processing(
         selected.declared_output_material_ids,
         selected.declared_satisfaction_ids,
         selected.semantic_job,
+        selected.semantic_configuration,
         focused_context,
         input_hash,
         selected.cost,
@@ -2449,6 +2536,7 @@ def _capability_from_dict(value: Mapping[str, Any]) -> ProcessingCapability:
         value["priority"],
         value["min_route_weight"],
         value.get("semantic_job"),
+        value.get("semantic_configuration", {}),
     )
 
 
@@ -2502,6 +2590,7 @@ def _processing_trace_from_dict(value: Mapping[str, Any]) -> ProcessingTrace:
             tuple(request_value["allowed_output_material_ids"]),
             tuple(request_value["allowed_satisfaction_ids"]),
             request_value.get("semantic_job"),
+            request_value.get("semantic_configuration", {}),
             request_value.get("focused_context", {}),
             request_value["input_hash"],
             request_value["budget_cost"],

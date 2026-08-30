@@ -1047,7 +1047,7 @@
       "disposition": "keep",
       "source_refs": ["docs/kraken_r/CONSTITUTION.md", "docs/kraken_r/README.md"],
       "planned": false,
-      "notes": "Uses ModelAdapter as the sole provider boundary. Outputs are typed candidate cognition with hash-bound provenance and no evidence, settlement, execution, or adaptive-credit authority."
+      "notes": "Uses ModelAdapter as the sole provider boundary. Each semantic job has a distinct bounded payload and verification obligations; live ingestion and structural replay enforce identical schema, source-lineage, deterministic identity, and request-envelope bindings. Outputs have no evidence, settlement, execution, or adaptive-credit authority."
     },
     {
       "mechanism_id": "metaplasticity",

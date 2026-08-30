@@ -575,7 +575,17 @@ Adaptive topology selects among those declared capabilities and changes the
 focused request projection: only the selected branch, declared input material,
 source lineage, route, tactic, and job/use class are sent.
 
-The provider must return the exact bounded semantic JSON contract. Kraken adds
+The provider must return the exact bounded semantic JSON contract. Each job
+has a distinct required payload and verification obligations: recall carries
+recollections and relevance; mechanisms carry components, causal steps, and
+assumptions; competing explanations carry alternatives and discriminators;
+correspondence carries mappings and scope limits; equation extraction carries
+variables, units, equations, and assumptions; source interpretation carries
+cited passages and limitations; falsification carries discriminating tests and
+opposed predictions; missing-information detection carries blocking items and
+questions. A payload shaped for another job is rejected.
+
+Kraken adds
 problem, branch, operation, context, topology, provider, model, output, and
 source-lineage provenance itself. Unknown fields, wrong job/use-class binding,
 undeclared source references, authority fields, malformed JSON, provider
@@ -583,8 +593,12 @@ identity mismatch, timeout, and size/count overflow fail closed. Model-reported
 confidence is retained only as a non-authoritative self-report. Typed semantic
 candidates cannot create downstream material, satisfy requirements, mint
 evidence or settlement, report execution truth, or receive adaptive credit.
-Structural replay reparses and rebinds the stored semantic result without
-calling the provider.
+The semantic invocation envelope binds the exact prompt hash, prompt-template
+version, model, token limit, temperature, configuration hash, provider request
+identity, and operation request. Structural replay reconstructs the prompt from
+the focused context, verifies that envelope, reparses the exact live schema,
+rechecks source lineage and deterministic candidate identities, and rebinds the
+stored semantic result without calling the provider.
 
 Authoritative mechanistic synthesis, source-independence inference, identifiability search,
 ontology migration/versioning, cognitive compilation, graph-wide invalidation,
