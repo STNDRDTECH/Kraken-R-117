@@ -44,16 +44,31 @@ from kraken_r.plastic_routing import CandidateRoute, RouteTopology
 from kraken_r.task_integrity import OriginalTask
 
 
+def _canonical_hash(value) -> str:
+    return hashlib.sha256(
+        json.dumps(
+            value,
+            sort_keys=True,
+            separators=(",", ":"),
+            ensure_ascii=True,
+        ).encode("utf-8")
+    ).hexdigest()
+
+
 _SIGNED_FIXTURES = {
-    "feeac0f44c9349beb6fdfa2feb7183b157ad50309d12309a40107d4757dfde20": "9PIFIxroS4l5sbt9XaA9qqTW0G7ws7irmaykWtVlv2p5De/aTgSp3Q6z70f7fIz5uDS8XQVZ2YOU7V+6PvHCAg==",
-    "1f8546ee80b6c65fd4332e4eb9e5522a662c6e069e1866d4deca287f71e8f1d5": "4Zlpwi3TJzsGAwhYvuduO/B7VMrTCThgw/iIS1kF+DPbZxNCM9L2iEMZqcOfsb5cW8DKF8oZHNmTzBMAMqDIAg==",
-    "1cf4e8e78409735accd0d48b0311437f7cd48feb6434236e6f1c83c74917d956": "FoCCn3heKRECD47AYVKpYYyhEuINxnmcscRnq3gZZVoRvR6z6i2e3som/Wa8wU/x2wK7TS6U+OX6aemp8YnoAw==",
-    "209819cc9624079ec81b75fe9a8254b8f4b319fbb44ce08cad27037d1b8f3e3f": "fiRdIjaHRAJd7/k+FQxzitr77klYmWHQ+2A7CaU7SU0eyt+n++WBWer7VXXQ5KcxaCpERnEci532/iWbnFY9Bg==",
-    "560288fb362793c8c082db2d0f7f4a8d9d5b35105a173a4a66ddad8aeac56c5e": "O0edc/Y4zMOWylr7GlwZjR8tr/KFhI9XbWfR5ca6stBQqWOCqex0z5KYj7F8KKoxN4WnlWwoUjm7xAJw1FkwDQ==",
-    "6e085a8e76022fc75e490cacb56c8f833996c25bf37ba68365829e6a464f52c2": "2MdcIoa4Ny9gAgOp15hH22kMrz/1Wn7mQqygwbKpgvCrqxQ3daQ1qXRMM8T140qP+5wxvMDEWwDg8OE6jtVuCw==",
-    "ce04f6fa4045a56b2e181c19e65b6e5a6eb708b1ad2fe9ff49d7841eeccbb9d0": "/tC9ATnS7NgL7Qf8EICH3VE9ZHKMtOVUqTv7sXK6a+kUkkdN9u3vC8p2azrijhTWQjQN1AneNbjimIjZKCV8BQ==",
-    "f4a450ac4d0f1265cdff8b7c77d8ead2f3e417b8a08f8abda0f156a857da7edb": "mMbi5NNOlxPcxL6Ael7omjaHv/p6Ru/OWG3g+kut+Ag6pFOSsl+Z+6/FgHjPoVbo2GOvzD93vESrmiYEZknYDg==",
-    "85194f8e418aaa71bf974665de9eafa4dcac221974f81892843c34372bd1d257": "twRiaOvSzjkMSSh78fMf1NzvEDiX7hzyah5ZSf+3l2kjK+UAfNySuMuA+7ygT7kje6VWfLc7E7pVZOU3aSDCAA==",
+    "07766756dd737b0bfdd6bc8153bca2872f0a2ec79b746bdf8bb99963004fde6d": "HOsdgp60UZpsCVtb4KB8EbIVcKvu6/WsDS5GRMMh+Cvy3pRrc5UxYmHziQmAOvKf97x4dMUKXe55wpRFUeqwAg==",
+    "b3b70e93cc481e0e2083a9002c4f3b17d022381b0e1ddf2eca6e64a15388ed42": "QpvLQn7hHwwa8saKRRqqrIDuRUs6TPP3sKi18I5+G3O9g/r9dhnO0krkSGjJeaJZ8C5DFXS3oPheH7wQtBq0Bw==",
+    "e034dc78acdbb501472a0ccd17a515d3358f90c0386448c3718e86e4cfddf4b8": "5LB1U2xxqnPbtQTKP7FxQtAfe1lVckvKHV+dXjbNlkeFfj5iw8dEbHq1cUZxuCfm99QBGi3nGqXqTUc7jbHRCQ==",
+    "69c31223ac6612d31a7acb567674fcd0f6effa86af8baa39a15c702ddae3d399": "FkCdC1KwJjuAQVZZBy1W+GaOBHenscvBkQHfLGT7chPZoXhOniNCFKIXe+RGv20w7a3ucDKmUDe88bOTgjGlCw==",
+    "5a1776a925caf77f711e62826b29864e0dd43cafa6da7551e31fb42255b3654a": "xj26YvqjuSy8+4+NLMeEHQalSuRTTAuo0Q6rHZvNZlGLI8EZDVTebStj+A2o91SI72f2DcFgkaNVRNEgTtLzBA==",
+    "b2b83f1ac35df6b18b691324711b6c4f40fd725225633bc8b32220cf6444a22f": "U29u3uxhXHO8LlqGAmUItabkihlS8Xj5YBb+Q6mk3D7GWZB7p1bqwHK9aTUnWH00ulZ2xaMBnjWBUoEDm5BbCg==",
+    "296ea0f6c85d596bf2f692ad1456f85787a3a25fd601be2badb4b1105c86c23b": "N81y5EDgm5CoGeNHMyLuveba/0GDkcTha22AnfoVWvIVzCQYqc/AsXZPJwFIIBydpZctnTKUApl/3uWW1HcHAA==",
+    "60d7702abe405e82e5591ef41abc727a658c9d3bf5b65fc6a24ffb192defc012": "rdhq4E5chTjxLKHlQdloIx3PIhDRkeH1dkEA6XF54PFZoIg57ONcpjQmMDaduBT3637gF36yHzsx/ydBx4RoBw==",
+    "2fb48e00baec378dd97a2e110379876a48498390c248276c29f1c4a933e47a63": "1uz77JfmeQEq6g991Wyn7SDOSWXzcEFmzeIAtlQoPbSww2/2KRGNSrip8oT5c39oMxnOEMfhzDzLM8C7sdqPCg==",
+    "be1e8a9654cf0020c2244667f99cf387c2ad8cdccee2ee4a8f006a68eacc063e": "n1NiwaVO4jqm//01NlTyA6n6s6+fTo1VLYqYg12JKJXp3zihGKOHbQb8l+l8p6Ud371pSVNVuXCg61+K5XiCCQ==",
+    "d391bad6b93a361ae2ecf79d6593a724d01064ae074b5bb62051d30c54d30547": "BhEzwal6RBtfF7UIBV5BiI4YX2mRMRov/XRsTcLHsSY40bzJWwrDZYJYX4BwJ5QTSKCxg0/b9tA7YBmDAOlaCg==",
+    "43b9e693865d0867b15f426edb6c62046fbaf613ec9cdcaa731aff42a964e71b": "Naa7yfZNnD0ChM61e+kgiVVFvw819zxJ8Qj1Vpir/GEAClqBAiSXFuft23M4kGY9UUrCfcKO83TXuKwYeRCLCQ==",
+    "2ddbb998acf62ba366c3e97edb898aa17d2464e4c5c682501a700f1cf6e7ad8f": "0VpzAsnZ/5NjAfGu53wGke31+WElRXlo+F1cEHS3kWmlxrHhPeUB+GXm/qLKEAASID6wvaNZABOzI++XRC4GAg==",
 }
 
 
@@ -163,6 +178,7 @@ def _source(
 ) -> SourceArtifact:
     source_id = source_id or f"{artifact_id}-identity"
     root_artifact_id = root or artifact_id
+    source_provenance = provenance or {"retrieval": "fixture"}
     content_hash = hashlib.sha256(
         json.dumps(
             content,
@@ -189,6 +205,7 @@ def _source(
             regimes=regimes,
             method=method,
             content_hash=content_hash,
+            provenance=source_provenance,
         )
         payload_hash = hashlib.sha256(payload).hexdigest()
         signature = _SIGNED_FIXTURES.get(payload_hash, "invalid-signature")
@@ -210,7 +227,7 @@ def _source(
         content=content,
         verifier_id=verifier_id,
         attestation_signature=signature,
-        provenance=provenance or {"retrieval": "fixture"},
+        provenance=source_provenance,
     )
 
 
@@ -239,6 +256,7 @@ def _observation(
                 relation,
                 source.content,
                 "The quoted primary text is bound to this exact candidate claim.",
+                source=source,
             )
             for index, (source, relation) in enumerate(zip(sources, relations))
         ),
@@ -371,6 +389,7 @@ def test_discovery_results_cannot_promote_themselves_or_support_claims():
         ClaimRelation.ENTAILS,
         discovery.content,
         "A search result is only a discovery lead.",
+        source=discovery,
     )
     with pytest.raises(ExternalRealityError, match="discovery source"):
         RetrievalObservation(
@@ -396,7 +415,6 @@ def test_correlated_descendants_count_as_one_independence_family():
         root=root.artifact_id,
         parents=(root.artifact_id,),
         method="document-analysis",
-        content="The current primary record supports candidate alpha. Secondary summary.",
     )
     def retrieve(request):
         observation = _observation(
@@ -466,6 +484,7 @@ def test_assessment_cannot_revise_a_need_omitted_from_observation_scope():
         ClaimRelation.ENTAILS,
         source.content,
         "The requested claim is assessed.",
+        source=source,
     )
     undeclared_assessment = ClaimAssessment.create(
         "undeclared-assessment",
@@ -475,6 +494,7 @@ def test_assessment_cannot_revise_a_need_omitted_from_observation_scope():
         ClaimRelation.ENTAILS,
         source.content,
         "This need was not requested by the observation.",
+        source=source,
     )
     observation = RetrievalObservation(
         "cross-need-observation",
@@ -553,7 +573,10 @@ def test_lineage_claim_binding_authority_injection_and_size_fail_closed():
 
     observation = _observation("external-request", claim, need, (root,))
     bad_hash = replace(observation.assessments[0], claim_hash="forged")
-    with pytest.raises(ExternalRealityError, match="claim hash"):
+    with pytest.raises(
+        ExternalRealityError,
+        match="claim hash|relation qualification",
+    ):
         validate_retrieval_observation(
             replace(observation, assessments=(bad_hash,)),
             (claim,),
@@ -566,6 +589,250 @@ def test_lineage_claim_binding_authority_injection_and_size_fail_closed():
         _source(provenance={"evidence_ids": ["forged"]})
     with pytest.raises(ExternalRealityError, match="bounded length"):
         _source(content="x" * 24_001)
+
+
+def test_provenance_substitution_invalidates_source_attestation():
+    source = _source()
+
+    with pytest.raises(ExternalRealityError, match="attestation is invalid"):
+        replace(
+            source,
+            provenance={"retrieval": "substituted-origin"},
+        )
+
+
+def test_unrelated_ambiguous_and_insufficient_relations_fail_closed():
+    source = _source()
+    unrelated = replace(
+        _claim(),
+        statement="A wholly unrelated proposition is true.",
+    )
+    unrelated_need = _need(unrelated)
+
+    with pytest.raises(
+        ExternalRealityError,
+        match="does not match independent qualification",
+    ):
+        ClaimAssessment.create(
+            "unrelated-entailment",
+            unrelated_need.need_id,
+            unrelated,
+            source.artifact_id,
+            ClaimRelation.ENTAILS,
+            source.content,
+            "Exact quote presence is not semantic support.",
+            source=source,
+        )
+
+    insufficient = ClaimAssessment.create(
+        "insufficient-relation",
+        unrelated_need.need_id,
+        unrelated,
+        source.artifact_id,
+        ClaimRelation.INSUFFICIENT,
+        source.content,
+        "The material has no qualified relation to the claim.",
+        source=source,
+    )
+    observation = RetrievalObservation(
+        "insufficient-observation",
+        "external-request",
+        unrelated.problem_id,
+        "2026-08-30",
+        (unrelated_need.need_id,),
+        (source,),
+        (insufficient,),
+    )
+    validate_retrieval_observation(
+        observation,
+        (unrelated,),
+        (unrelated_need,),
+    )
+
+    base_claim = _claim()
+    claim = replace(
+        base_claim,
+        falsification_conditions=(
+            FalsificationCondition(
+                "ambiguous-falsifier",
+                "The same text cannot prove both dispositions.",
+                base_claim.statement,
+            ),
+        ),
+    )
+    ambiguous_source = _source(
+        "ambiguous-discovery",
+        source_kind="search_result",
+        role=SourceRole.DISCOVERY,
+        method="document-analysis",
+        content=claim.statement,
+    )
+    with pytest.raises(ExternalRealityError, match="ambiguous"):
+        ClaimAssessment.create(
+            "ambiguous-relation",
+            _need(claim).need_id,
+            claim,
+            ambiguous_source.artifact_id,
+            ClaimRelation.INSUFFICIENT,
+            ambiguous_source.content,
+            "Both claim and falsifier are present.",
+            source=ambiguous_source,
+        )
+
+
+@pytest.mark.parametrize(
+    ("artifact_id", "content", "quoted_text"),
+    (
+        (
+            "negated-source",
+            "It is false that The current primary record supports candidate alpha.",
+            "The current primary record supports candidate alpha.",
+        ),
+        (
+            "quoted-source",
+            "The witness quoted: The current primary record supports candidate alpha.",
+            "The current primary record supports candidate alpha.",
+        ),
+        (
+            "modal-source",
+            "The current primary record might support candidate alpha.",
+            "The current primary record might support candidate alpha.",
+        ),
+        (
+            "mixed-source",
+            "The current primary record supports candidate alpha. "
+            "This statement is disputed and not adopted.",
+            "The current primary record supports candidate alpha.",
+        ),
+    ),
+)
+def test_contextualized_signed_material_cannot_qualify_support(
+    artifact_id,
+    content,
+    quoted_text,
+):
+    claim = _claim()
+    need = _need(claim)
+    source = _source(artifact_id, content=content)
+
+    with pytest.raises(
+        ExternalRealityError,
+        match="does not match independent qualification",
+    ):
+        ClaimAssessment.create(
+            f"{artifact_id}-assessment",
+            need.need_id,
+            claim,
+            source.artifact_id,
+            ClaimRelation.ENTAILS,
+            quoted_text,
+            "Contextualized material cannot prove the bare claim.",
+            source=source,
+        )
+
+
+def test_declared_falsifier_material_qualifies_contradiction():
+    source = _source()
+    claim = replace(
+        _claim(),
+        statement="A different proposition remains unresolved.",
+        falsification_conditions=(
+            FalsificationCondition(
+                "source-text-falsifier",
+                "The source states the opposite primary fact.",
+                source.content,
+            ),
+        ),
+    )
+    need = _need(claim)
+    assessment = ClaimAssessment.create(
+        "qualified-contradiction",
+        need.need_id,
+        claim,
+        source.artifact_id,
+        ClaimRelation.CONTRADICTS,
+        source.content,
+        "The exact declared falsifier is present.",
+        source=source,
+    )
+    observation = RetrievalObservation(
+        "contradiction-observation",
+        "external-request",
+        claim.problem_id,
+        "2026-08-30",
+        (need.need_id,),
+        (source,),
+        (assessment,),
+    )
+
+    validate_retrieval_observation(observation, (claim,), (need,))
+    assert assessment.qualification.relation is ClaimRelation.CONTRADICTS
+
+
+def test_relation_tampering_and_duplicate_metadata_conflicts_fail_closed():
+    claim = _claim()
+    need = _need(claim)
+    source = _source()
+    observation = _observation(
+        "external-request",
+        claim,
+        need,
+        (source,),
+    )
+    tampered_assessment = replace(
+        observation.assessments[0],
+        relation=ClaimRelation.CONTRADICTS,
+    )
+    with pytest.raises(
+        ExternalRealityError,
+        match="relation qualification binding",
+    ):
+        replace(observation, assessments=(tampered_assessment,))
+
+    first = _source(
+        "duplicate-discovery-one",
+        source_id="duplicate-discovery-identity",
+        source_kind="search_result",
+        role=SourceRole.DISCOVERY,
+        method="document-analysis",
+    )
+    second = _source(
+        "duplicate-discovery-two",
+        source_id="duplicate-discovery-identity",
+        source_kind="search_result",
+        role=SourceRole.DISCOVERY,
+        method="document-analysis",
+        jurisdiction=("elsewhere",),
+    )
+    with pytest.raises(
+        ExternalRealityError,
+        match="security or qualification metadata",
+    ):
+        RetrievalObservation(
+            "duplicate-metadata-observation",
+            "external-request",
+            claim.problem_id,
+            "2026-08-30",
+            (need.need_id,),
+            (first, second),
+            (),
+            (first.artifact_id, second.artifact_id),
+        )
+
+    duplicated = replace(
+        observation.assessments[0],
+        assessment_id="duplicate-assessment",
+        qualification=replace(
+            observation.assessments[0].qualification,
+            qualification_id="duplicate-assessment-qualification",
+            assessment_id="duplicate-assessment",
+        ),
+    )
+    with pytest.raises(ExternalRealityError, match="cannot be reused"):
+        replace(
+            observation,
+            assessments=(observation.assessments[0], duplicated),
+        )
 
 
 def test_retrieval_revises_candidate_reasoning_changes_next_selection_and_replays():
@@ -620,6 +887,71 @@ def test_retrieval_revises_candidate_reasoning_changes_next_selection_and_replay
     tampered = deepcopy(first.to_dict())
     tampered["retrieval_observation"]["sources"][0]["content"] = "forged content"
     with pytest.raises(CognitionValidationError):
+        replay_processing_trace(tampered)
+
+
+def test_relation_rehash_attack_fails_deterministic_replay():
+    problem = _problem()
+    claim = _claim()
+    need = _need(claim)
+
+    def retrieve(request):
+        observation = _observation(
+            request.request_id,
+            claim,
+            need,
+            (_source(),),
+        )
+        return OperationResult(
+            f"{request.request_id}-result",
+            request.request_id,
+            output={"candidate_revision": "source-bound"},
+            retrieval_observation=observation,
+        )
+
+    trace = run_connected_processing(
+        problem,
+        _capabilities(),
+        _adaptive(),
+        claims=(claim,),
+        evidence_needs=(need,),
+        operation_callbacks={ProcessingOperation.RETRIEVE: retrieve},
+    )
+    tampered = deepcopy(trace.to_dict())
+    assessment = tampered["retrieval_observation"]["assessments"][0]
+    assessment["relation"] = ClaimRelation.CONTRADICTS.value
+    assessment["qualification"]["relation"] = ClaimRelation.CONTRADICTS.value
+    assessment["qualification"][
+        "basis"
+    ] = "normalized-falsification-discriminator"
+    observation_without_hash = {
+        key: value
+        for key, value in tampered["retrieval_observation"].items()
+        if key != "retrieval_hash"
+    }
+    tampered["retrieval_observation"]["retrieval_hash"] = _canonical_hash(
+        observation_without_hash
+    )
+    tampered["result"]["retrieval_observation"] = deepcopy(
+        tampered["retrieval_observation"]
+    )
+    result_without_hash = {
+        key: value
+        for key, value in tampered["result"].items()
+        if key != "output_hash"
+    }
+    tampered["result"]["output_hash"] = _canonical_hash(result_without_hash)
+    trace_without_hash = {
+        key: value
+        for key, value in tampered.items()
+        if key != "structural_hash"
+    }
+    tampered["structural_hash"] = _canonical_hash(trace_without_hash)
+
+    with pytest.raises(
+        CognitionValidationError,
+        match="relation qualification|independently qualified",
+    ):
         replay_processing_trace(tampered)
 
 

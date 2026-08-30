@@ -684,14 +684,19 @@ persistence path.
 Unresolved load-bearing claims derive explicit `EvidenceNeed` records. Only a
 topology-selected `ProcessingOperation.RETRIEVE` callback may return a typed
 `RetrievalObservation`; callers supply the data, and Kraken-R performs no
-network access. Artifacts preserve content hashes, source identity, ancestry,
-root lineage, independence family, dates, jurisdiction, scope, regime, method,
-and exact claim-level assessments.
+network access. Artifact signatures bind content hashes, complete canonical
+provenance, source identity, ancestry, root lineage, independence family,
+dates, jurisdiction, scope, regime, and method. Duplicate source identities
+must match across every signed qualification field.
 
-Valid observations may revise candidate claim status and therefore the next
-selected candidate computation. They never satisfy requirements or mint
+Claim support and contradiction require deterministic bounded relation proofs
+bound to the exact claim, quote, signed source, provenance, method, and rule
+version. Exact quote presence alone is insufficient; unrelated, ambiguous, and
+insufficient material fails closed. Valid observations may revise candidate
+claim status and therefore the next selected candidate computation. They never
+satisfy requirements or mint
 `Evidence`, `Settlement`, execution truth, adaptive credit, authority, or
 writes. Search results remain discovery-only, correlated descendants count
 once, and malformed, stale, inapplicable, forged, or authority-bearing records
-fail closed. Trace replay reconstructs the complete proof without calling the
-retriever or a network.
+fail closed. Trace replay reconstructs source attestations and relation
+qualifications without calling the retriever, a provider, or a network.

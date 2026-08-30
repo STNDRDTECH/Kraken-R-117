@@ -1,7 +1,7 @@
 # Kraken-R Constitution
 
 **Status:** candidate-only foundation  
-**Version:** 1.12.0
+**Version:** 1.12.1
 **Effective boundary:** documentation, standalone validation, deterministic fixture
 execution, and independently verified bounded candidate execution observations
 
@@ -62,9 +62,15 @@ stores, or change `.rogal/` runtime state.
   persistence path, or runtime.
 - **Search result ≠ evidence.** Discovery artifacts cannot assess claims or
   promote themselves into evidentiary sources.
-- Evidentiary artifacts retain content hashes, source identity, ancestry/root
-  lineage, independence family, retrieval and effective dates, jurisdiction,
-  scope, regime, method, and exact claim-level quoted assessments.
+- Evidentiary signatures bind content hashes, complete canonical provenance,
+  source identity, ancestry/root lineage, independence family, retrieval and
+  effective dates, jurisdiction, scope, regime, and method. Repeated source
+  identities must agree across every signed security and qualification field.
+- Claim support and contradiction require deterministic, bounded,
+  candidate-only relation qualifications bound to the exact claim, quoted
+  span, signed source, provenance, method, and rule version. Exact quote
+  presence alone is not support; unrelated, ambiguous, and insufficient
+  material cannot revise a claim.
 - Stale, inapplicable, correlated, malformed, forged, oversized, or
   authority-injecting observations fail closed. Correlated descendants count
   as one independence family.
@@ -72,9 +78,10 @@ stores, or change `.rogal/` runtime state.
   selection. **Epistemic revision ≠ adaptive learning.** It cannot create
   constitutional evidence, truth, requirement satisfaction, settlement,
   execution truth, adaptive credit, authority, or writes.
-- Complete retrieval proofs live in processing traces and replay without
-  provider or network calls. The internet therefore feeds the epistemic graph,
-  rather than bypassing it.
+- Complete source and relation-qualification proofs live in processing traces
+  and replay by deterministic reconstruction without provider or network
+  calls. The internet therefore feeds the epistemic graph, rather than
+  bypassing it.
 
 ## Canonical lifecycle
 

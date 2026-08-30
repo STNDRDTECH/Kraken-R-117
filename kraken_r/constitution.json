@@ -1,6 +1,6 @@
 {
   "constitution_kind": "kraken_r_constitution",
-  "version": "1.12.0",
+  "version": "1.12.1",
   "mission": "Define and deterministically validate a candidate-only, domain-agnostic constitutional lifecycle, including bounded external-reality metabolism that routes caller-supplied retrieval through topology-selected RETRIEVE capability and revises only candidate epistemic reasoning, without allowing search results or retrieval records to become evidence, truth, settlement, requirement satisfaction, execution truth, adaptive credit, writes, providers, workers, stores, or a second runtime.",
   "authority_boundary": {
     "legacy_reference": "ROGALDaemon and AutonomousCycle remain the deployed reference authority.",

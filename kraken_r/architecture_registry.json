@@ -1,7 +1,7 @@
 {
   "registry_kind": "kraken_r_architecture",
   "registry_id": "kraken-r-foundation",
-  "version": "1.12.0",
+  "version": "1.12.1",
   "last_reviewed": "2026-08-30",
   "authority_boundary": {
     "legacy_reference": "rogal_core.daemon.ROGALDaemon and rogal_core.autonomous_cycle.AutonomousCycle remain the deployed reference runtime.",
@@ -1069,7 +1069,7 @@
       "mechanism_id": "bounded_external_reality_metabolism",
       "category": "core_execution",
       "name": "Bounded external-reality evidence metabolism",
-      "intended_role": "Derive verification needs for unresolved load-bearing claims and metabolize caller-supplied, provenance-bound retrieval observations into candidate epistemic revisions.",
+      "intended_role": "Derive verification needs for unresolved load-bearing claims and metabolize attested-provenance retrieval observations with deterministic relation qualifications into candidate epistemic revisions.",
       "current_status": "infrastructure",
       "dependencies": ["proof_carrying_cognition_kernel", "candidate_recognition_memory"],
       "authority": "kraken_candidate",
@@ -1079,7 +1079,7 @@
       "disposition": "keep",
       "source_refs": ["docs/kraken_r/CONSTITUTION.md", "docs/kraken_r/README.md"],
       "planned": false,
-      "notes": "Uses only topology-selected RETRIEVE callbacks. Search results remain discovery-only; immutable source lineage, independence, applicability, claim binding, and replay are checked. Revisions cannot create constitutional evidence, settlement, execution truth, requirement satisfaction, adaptive credit, writes, providers, or runtimes."
+      "notes": "Uses only topology-selected RETRIEVE callbacks. Search results remain discovery-only; signatures bind canonical provenance and all source qualification metadata; deterministic candidate-only relation proofs reject unrelated, ambiguous, and insufficient material; complete identity, independence, applicability, claim binding, and replay are checked. Revisions cannot create constitutional evidence, settlement, execution truth, requirement satisfaction, adaptive credit, writes, providers, or runtimes."
     },
     {
       "mechanism_id": "metaplasticity",

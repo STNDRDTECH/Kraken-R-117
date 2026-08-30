@@ -59,6 +59,7 @@ from .recognition_memory import (
     MemoryState,
 )
 from .external_reality import (
+    RelationQualificationOutcome,
     RetrievalObservation,
     legal_currentness_fixture,
     scientific_regime_fixture,
@@ -520,6 +521,25 @@ def validate_external_reality() -> tuple[str, ...]:
             errors.append("legal verification need omitted currentness")
         if science_need.required_regimes != ("regime-a",):
             errors.append("scientific verification need omitted its regime")
+        for observation in (legal, science):
+            if any(
+                assessment.qualification.outcome
+                is not RelationQualificationOutcome.QUALIFIED
+                or assessment.qualification.relation
+                is not assessment.relation
+                for assessment in observation.assessments
+            ):
+                errors.append(
+                    "external relation qualification is not deterministic"
+                )
+            if any(
+                not source.provenance
+                or not source.attestation_signature
+                for source in observation.sources
+            ):
+                errors.append(
+                    "external source provenance is not attestation-bound"
+                )
     except Exception as exc:
         errors.append(f"external-reality validation failed: {exc}")
     return tuple(errors)

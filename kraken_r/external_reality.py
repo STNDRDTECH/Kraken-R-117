@@ -43,7 +43,7 @@ MAX_EXTERNAL_PAYLOAD_BYTES = 64_000
 _TRUSTED_SOURCE_VERIFIERS = MappingProxyType(
     {
         "kraken-r-qualification-verifier": (
-            "1ZdCfds/dYv7JQYaz6/jm5O1wu/4QrZZZOGcBR7C5t4="
+            "sh4rwFhV9DNbklYCNxjXnN7uz+/vXqJ1ww2wSszQO0w="
         ),
     }
 )
@@ -61,6 +61,12 @@ class SourceRole(str, Enum):
 class ClaimRelation(str, Enum):
     ENTAILS = "entails"
     CONTRADICTS = "contradicts"
+    INSUFFICIENT = "insufficient"
+
+
+class RelationQualificationOutcome(str, Enum):
+    QUALIFIED = "qualified"
+    AMBIGUOUS = "ambiguous"
     INSUFFICIENT = "insufficient"
 
 
@@ -121,6 +127,7 @@ def source_attestation_payload(
     regimes: Iterable[str],
     method: str,
     content_hash: str,
+    provenance: Mapping[str, Any],
 ) -> bytes:
     value = {
         "artifact_id": artifact_id,
@@ -137,10 +144,61 @@ def source_attestation_payload(
         "regimes": list(regimes),
         "method": method,
         "content_hash": content_hash,
+        "provenance": _jsonable(provenance),
     }
     return json.dumps(
         value, sort_keys=True, separators=(",", ":"), ensure_ascii=False
     ).encode("utf-8")
+
+
+def _normalized_relation_text(value: str) -> str:
+    return " ".join(value.casefold().split())
+
+
+def _relation_outcome(
+    claim: EpistemicClaim,
+    source: "SourceArtifact",
+    quoted_text: str,
+) -> tuple[RelationQualificationOutcome, ClaimRelation, str]:
+    normalized_quote = _normalized_relation_text(quoted_text)
+    normalized_source = _normalized_relation_text(source.content)
+    normalized_claim = _normalized_relation_text(claim.statement)
+    if not normalized_quote or normalized_quote != normalized_source:
+        return (
+            RelationQualificationOutcome.INSUFFICIENT,
+            ClaimRelation.INSUFFICIENT,
+            "partial-or-contextualized-material",
+        )
+    supports = normalized_quote == normalized_claim
+    contradiction_matches = tuple(
+        item.condition_id
+        for item in claim.falsification_conditions
+        if _normalized_relation_text(item.discriminator)
+        and _normalized_relation_text(item.discriminator) == normalized_quote
+    )
+    if supports and contradiction_matches:
+        return (
+            RelationQualificationOutcome.AMBIGUOUS,
+            ClaimRelation.INSUFFICIENT,
+            "claim-and-falsifier-both-present",
+        )
+    if supports:
+        return (
+            RelationQualificationOutcome.QUALIFIED,
+            ClaimRelation.ENTAILS,
+            "normalized-exact-claim",
+        )
+    if contradiction_matches:
+        return (
+            RelationQualificationOutcome.QUALIFIED,
+            ClaimRelation.CONTRADICTS,
+            "normalized-falsification-discriminator",
+        )
+    return (
+        RelationQualificationOutcome.INSUFFICIENT,
+        ClaimRelation.INSUFFICIENT,
+        "no-qualified-claim-relation",
+    )
 
 
 def _identifier(value: Any, name: str) -> str:
@@ -444,6 +502,16 @@ class SourceArtifact:
             raise ExternalRealityError("source content hash is invalid")
         if self.source_kind.lower() in {"search_result", "search_snippet", "snippet", "index", "discovery"} and self.role is SourceRole.EVIDENTIARY:
             raise ExternalRealityError("discovery source cannot be promoted to evidentiary")
+        provenance = _bounded_payload(self.provenance, "source provenance")
+        if (
+            not provenance
+            or not isinstance(provenance.get("retrieval"), str)
+            or not provenance["retrieval"].strip()
+        ):
+            raise ExternalRealityError(
+                "source provenance requires a retrieval method record"
+            )
+        object.__setattr__(self, "provenance", _freeze(provenance))
         if self.role is SourceRole.EVIDENTIARY:
             if (
                 self.verifier_id not in _TRUSTED_SOURCE_VERIFIERS
@@ -467,6 +535,7 @@ class SourceArtifact:
                 regimes=self.regimes,
                 method=self.method,
                 content_hash=self.content_hash,
+                provenance=self.provenance,
             )
             try:
                 public_key = base64.b64decode(
@@ -489,16 +558,6 @@ class SourceArtifact:
             )
         if not self.candidate_only:
             raise ExternalRealityError("source artifacts must remain candidate-only")
-        provenance = _bounded_payload(self.provenance, "source provenance")
-        if (
-            not provenance
-            or not isinstance(provenance.get("retrieval"), str)
-            or not provenance["retrieval"].strip()
-        ):
-            raise ExternalRealityError(
-                "source provenance requires a retrieval method record"
-            )
-        object.__setattr__(self, "provenance", _freeze(provenance))
 
     def applicable_to(self, need: EvidenceNeed, as_of: str) -> tuple[bool, str]:
         as_of = _date(as_of, "as_of")
@@ -521,6 +580,30 @@ class SourceArtifact:
             if age < 0 or (need.max_age_days is not None and age > need.max_age_days):
                 return False, "source is stale for the required currentness"
         return True, "source is applicable"
+
+    @property
+    def identity_qualification_hash(self) -> str:
+        return _digest(
+            {
+                "source_id": self.source_id,
+                "source_kind": self.source_kind,
+                "role": self.role.value,
+                "independence_family": self.independence_family,
+                "root_artifact_id": self.root_artifact_id,
+                "parent_artifact_ids": self.parent_artifact_ids,
+                "retrieved_on": self.retrieved_on,
+                "effective_from": self.effective_from,
+                "effective_until": self.effective_until,
+                "jurisdiction": self.jurisdiction,
+                "scopes": self.scopes,
+                "regimes": self.regimes,
+                "method": self.method,
+                "content_hash": self.content_hash,
+                "verifier_id": self.verifier_id,
+                "attestation_signature": self.attestation_signature,
+                "provenance": self.provenance,
+            }
+        )
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -628,8 +711,153 @@ class SourceArtifact:
 
 
 @dataclass(frozen=True)
+class RelationQualification:
+    """Deterministic candidate-only proof of one claim/source relation."""
+
+    qualification_id: str
+    assessment_id: str
+    claim_id: str
+    artifact_id: str
+    claim_hash: str
+    source_content_hash: str
+    source_attestation_hash: str
+    provenance_hash: str
+    quoted_text_hash: str
+    relation: ClaimRelation
+    outcome: RelationQualificationOutcome
+    basis: str
+    method: str
+    rule_version: str = "bounded-relation-v1"
+    candidate_only: bool = True
+
+    def __post_init__(self) -> None:
+        for value, name in (
+            (self.qualification_id, "qualification_id"),
+            (self.assessment_id, "assessment_id"),
+            (self.claim_id, "claim_id"),
+            (self.artifact_id, "artifact_id"),
+            (self.claim_hash, "claim_hash"),
+            (self.source_content_hash, "source_content_hash"),
+            (self.source_attestation_hash, "source_attestation_hash"),
+            (self.provenance_hash, "provenance_hash"),
+            (self.quoted_text_hash, "quoted_text_hash"),
+            (self.basis, "qualification basis"),
+            (self.method, "qualification method"),
+            (self.rule_version, "qualification rule_version"),
+        ):
+            _identifier(value, name)
+        object.__setattr__(self, "relation", ClaimRelation(self.relation))
+        object.__setattr__(
+            self, "outcome", RelationQualificationOutcome(self.outcome)
+        )
+        if not self.candidate_only:
+            raise ExternalRealityError(
+                "relation qualifications must remain candidate-only"
+            )
+
+    @classmethod
+    def create(
+        cls,
+        qualification_id: str,
+        assessment_id: str,
+        claim: EpistemicClaim,
+        source: SourceArtifact,
+        quoted_text: str,
+    ) -> "RelationQualification":
+        if not isinstance(claim, EpistemicClaim) or not isinstance(
+            source, SourceArtifact
+        ):
+            raise ExternalRealityError(
+                "relation qualification requires a claim and source"
+            )
+        outcome, relation, basis = _relation_outcome(
+            claim,
+            source,
+            quoted_text,
+        )
+        return cls(
+            qualification_id,
+            assessment_id,
+            claim.claim_id,
+            source.artifact_id,
+            _digest(claim.statement),
+            source.content_hash,
+            _digest(
+                {
+                    "verifier_id": source.verifier_id,
+                    "attestation_signature": source.attestation_signature,
+                }
+            ),
+            _digest(source.provenance),
+            _digest(quoted_text),
+            relation,
+            outcome,
+            basis,
+            source.method,
+        )
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "qualification_id": self.qualification_id,
+            "assessment_id": self.assessment_id,
+            "claim_id": self.claim_id,
+            "artifact_id": self.artifact_id,
+            "claim_hash": self.claim_hash,
+            "source_content_hash": self.source_content_hash,
+            "source_attestation_hash": self.source_attestation_hash,
+            "provenance_hash": self.provenance_hash,
+            "quoted_text_hash": self.quoted_text_hash,
+            "relation": self.relation.value,
+            "outcome": self.outcome.value,
+            "basis": self.basis,
+            "method": self.method,
+            "rule_version": self.rule_version,
+            "candidate_only": True,
+        }
+
+    @classmethod
+    def from_dict(cls, value: Mapping[str, Any]) -> "RelationQualification":
+        expected = {
+            "qualification_id",
+            "assessment_id",
+            "claim_id",
+            "artifact_id",
+            "claim_hash",
+            "source_content_hash",
+            "source_attestation_hash",
+            "provenance_hash",
+            "quoted_text_hash",
+            "relation",
+            "outcome",
+            "basis",
+            "method",
+            "rule_version",
+            "candidate_only",
+        }
+        if set(value) != expected:
+            raise ExternalRealityError("relation qualification schema is invalid")
+        return cls(
+            value["qualification_id"],
+            value["assessment_id"],
+            value["claim_id"],
+            value["artifact_id"],
+            value["claim_hash"],
+            value["source_content_hash"],
+            value["source_attestation_hash"],
+            value["provenance_hash"],
+            value["quoted_text_hash"],
+            value["relation"],
+            value["outcome"],
+            value["basis"],
+            value["method"],
+            value["rule_version"],
+            value["candidate_only"],
+        )
+
+
+@dataclass(frozen=True)
 class ClaimAssessment:
-    """One exact claim/source relation, bound to a quote in the artifact."""
+    """One exact claim/source relation with an independently derived proof."""
 
     assessment_id: str
     need_id: str
@@ -639,6 +867,7 @@ class ClaimAssessment:
     claim_hash: str
     quoted_text: str
     rationale: str
+    qualification: RelationQualification
     candidate_only: bool = True
 
     def __post_init__(self) -> None:
@@ -656,6 +885,13 @@ class ClaimAssessment:
         else:
             _text(self.quoted_text, "quoted_text", 8_192)
         _text(self.rationale, "assessment rationale", 2_048)
+        if (
+            not isinstance(self.qualification, RelationQualification)
+            or self.qualification.assessment_id != self.assessment_id
+        ):
+            raise ExternalRealityError(
+                "claim assessment requires its relation qualification"
+            )
         if not self.candidate_only:
             raise ExternalRealityError("claim assessments must remain candidate-only")
 
@@ -669,6 +905,7 @@ class ClaimAssessment:
             "claim_hash": self.claim_hash,
             "quoted_text": self.quoted_text,
             "rationale": self.rationale,
+            "qualification": self.qualification.to_dict(),
             "candidate_only": True,
         }
 
@@ -682,16 +919,37 @@ class ClaimAssessment:
         relation: ClaimRelation | str,
         quoted_text: str,
         rationale: str,
+        *,
+        source: SourceArtifact,
     ) -> "ClaimAssessment":
+        if source.artifact_id != artifact_id:
+            raise ExternalRealityError(
+                "claim assessment source does not match its artifact"
+            )
+        qualification = RelationQualification.create(
+            f"{assessment_id}-qualification",
+            assessment_id,
+            claim,
+            source,
+            quoted_text,
+        )
+        requested_relation = ClaimRelation(relation)
+        if qualification.outcome is RelationQualificationOutcome.AMBIGUOUS:
+            raise ExternalRealityError("claim relation qualification is ambiguous")
+        if requested_relation is not qualification.relation:
+            raise ExternalRealityError(
+                "caller relation does not match independent qualification"
+            )
         return cls(
             assessment_id,
             need_id,
             claim.claim_id,
             artifact_id,
-            ClaimRelation(relation),
+            requested_relation,
             _digest(claim.statement),
             quoted_text,
             rationale,
+            qualification,
         )
 
     @classmethod
@@ -699,7 +957,7 @@ class ClaimAssessment:
         expected = {
             "assessment_id", "need_id", "claim_id", "artifact_id",
             "relation", "claim_hash", "quoted_text", "rationale",
-            "candidate_only",
+            "qualification", "candidate_only",
         }
         if set(value) != expected:
             raise ExternalRealityError("claim assessment schema is invalid")
@@ -712,6 +970,7 @@ class ClaimAssessment:
             value["claim_hash"],
             value["quoted_text"],
             value["rationale"],
+            RelationQualification.from_dict(value["qualification"]),
             value["candidate_only"],
         )
 
@@ -751,19 +1010,24 @@ class RetrievalObservation:
             raise ExternalRealityError("retrieval artifact identities must be unique")
         if len({item.assessment_id for item in assessments}) != len(assessments):
             raise ExternalRealityError("retrieval assessment identities must be unique")
-        identity_bindings: dict[str, tuple[str, str]] = {}
-        for source in sources:
-            binding = (
-                source.independence_family,
-                source.root_artifact_id,
+        assessment_bindings = tuple(
+            (item.need_id, item.claim_id, item.artifact_id)
+            for item in assessments
+        )
+        if len(set(assessment_bindings)) != len(assessment_bindings):
+            raise ExternalRealityError(
+                "one source cannot be reused for the same claim disposition"
             )
+        identity_bindings: dict[str, str] = {}
+        for source in sources:
+            binding = source.identity_qualification_hash
             prior_binding = identity_bindings.setdefault(
                 source.source_id, binding
             )
             if prior_binding != binding:
                 raise ExternalRealityError(
-                    "one source identity cannot claim conflicting "
-                    "independence families or root lineages"
+                    "one source identity cannot carry conflicting "
+                    "security or qualification metadata"
                 )
         source_by_id = {item.artifact_id: item for item in sources}
         for source in sources:
@@ -800,6 +1064,40 @@ class RetrievalObservation:
                 raise ExternalRealityError("discovery source cannot support a claim assessment")
             if assessment.relation is not ClaimRelation.INSUFFICIENT and assessment.quoted_text not in source.content:
                 raise ExternalRealityError("claim assessment quote is not present in source content")
+            qualification = assessment.qualification
+            if (
+                qualification.assessment_id != assessment.assessment_id
+                or qualification.claim_id != assessment.claim_id
+                or qualification.artifact_id != source.artifact_id
+                or qualification.claim_hash != assessment.claim_hash
+                or qualification.source_content_hash != source.content_hash
+                or qualification.source_attestation_hash
+                != _digest(
+                    {
+                        "verifier_id": source.verifier_id,
+                        "attestation_signature": source.attestation_signature,
+                    }
+                )
+                or qualification.provenance_hash != _digest(source.provenance)
+                or qualification.quoted_text_hash != _digest(assessment.quoted_text)
+                or qualification.relation is not assessment.relation
+                or qualification.method != source.method
+                or qualification.rule_version != "bounded-relation-v1"
+            ):
+                raise ExternalRealityError(
+                    "claim relation qualification binding is invalid"
+                )
+            if qualification.outcome is RelationQualificationOutcome.AMBIGUOUS:
+                raise ExternalRealityError(
+                    "claim relation qualification is ambiguous"
+                )
+            if (
+                qualification.outcome
+                is RelationQualificationOutcome.INSUFFICIENT
+            ) != (assessment.relation is ClaimRelation.INSUFFICIENT):
+                raise ExternalRealityError(
+                    "claim relation qualification outcome is invalid"
+                )
         if not self.candidate_only:
             raise ExternalRealityError("retrieval observations must remain candidate-only")
         object.__setattr__(self, "sources", sources)
@@ -1053,6 +1351,28 @@ def validate_retrieval_observation(
             raise ExternalRealityError("retrieval assessment claim binding is invalid")
         if assessment.claim_hash != _digest(claim.statement):
             raise ExternalRealityError("retrieval assessment claim hash is invalid")
+        expected_qualification = RelationQualification.create(
+            assessment.qualification.qualification_id,
+            assessment.assessment_id,
+            claim,
+            source,
+            assessment.quoted_text,
+        )
+        if (
+            expected_qualification.outcome
+            is RelationQualificationOutcome.AMBIGUOUS
+        ):
+            raise ExternalRealityError(
+                "retrieval claim relation is semantically ambiguous"
+            )
+        if assessment.qualification != expected_qualification:
+            raise ExternalRealityError(
+                "retrieval claim relation qualification is invalid"
+            )
+        if assessment.relation is not expected_qualification.relation:
+            raise ExternalRealityError(
+                "retrieval claim relation is not independently qualified"
+            )
         applicable, reason = source.applicable_to(need, observation.as_of)
         if not applicable and assessment.relation is not ClaimRelation.INSUFFICIENT:
             raise ExternalRealityError(f"retrieval source is inapplicable: {reason}")
@@ -1259,8 +1579,8 @@ def legal_currentness_fixture() -> tuple[EvidenceNeed, RetrievalObservation]:
         scopes=("operation-x",),
         effective_from="2026-01-01",
         attestation_signature=(
-            "4+tOPEA+un+H8InYwh/fpb4j6xUDosNpXwPD2frXaZfRuVbwkQbHg2DWMH0zX"
-            "kR9gqbKoRz1ZOKZaylrIUnzCA=="
+            "ef+s1n8UPFfT5gJ0xdutV21BvfcY+FUwze3w2Tvj7DDH+5ScTXQYg65nGh3db"
+            "qyK8w/jYoAxUTj0z7zKw6HGAg=="
         ),
     )
     observation = RetrievalObservation(
@@ -1271,15 +1591,15 @@ def legal_currentness_fixture() -> tuple[EvidenceNeed, RetrievalObservation]:
         (need.need_id,),
         (source,),
         (
-            ClaimAssessment(
+            ClaimAssessment.create(
                 "legal-fixture-assessment",
                 need.need_id,
-                claim.claim_id,
+                claim,
                 source.artifact_id,
                 ClaimRelation.ENTAILS,
-                _digest(claim.statement),
                 claim.statement,
                 "The effective official text states the claim.",
+                source=source,
             ),
         ),
     )
@@ -1316,8 +1636,8 @@ def scientific_regime_fixture() -> tuple[EvidenceNeed, RetrievalObservation]:
         regimes=("regime-a",),
         method="controlled-study",
         attestation_signature=(
-            "Jx0Jv/cOd4DlsF3Fxb2F6Nfe6S3dYzdYdEfa+U8xZlsdsz27xNWkcZxlKnu+X"
-            "Bik2HuWd9HoKgK4KdlbA9YBAw=="
+            "oO76PUupv5TL07+C4F3CydKzvJk32wVA014GIVwy2Jh2JGmNXdaXgCR6bzkKda"
+            "OztOJulsnD6iKgkuGcKmBdDg=="
         ),
     )
     observation = RetrievalObservation(
@@ -1328,15 +1648,15 @@ def scientific_regime_fixture() -> tuple[EvidenceNeed, RetrievalObservation]:
         (need.need_id,),
         (source,),
         (
-            ClaimAssessment(
+            ClaimAssessment.create(
                 "science-fixture-assessment",
                 need.need_id,
-                claim.claim_id,
+                claim,
                 source.artifact_id,
                 ClaimRelation.ENTAILS,
-                _digest(claim.statement),
                 claim.statement,
                 "The study's declared regime matches the claim.",
+                source=source,
             ),
         ),
     )
@@ -1352,6 +1672,8 @@ __all__ = [
     "MAX_CLAIM_ASSESSMENTS",
     "MAX_EVIDENCE_NEEDS",
     "MAX_EXTERNAL_SOURCES",
+    "RelationQualification",
+    "RelationQualificationOutcome",
     "RetrievalObservation",
     "SourceArtifact",
     "SourceRole",
