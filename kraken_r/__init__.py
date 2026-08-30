@@ -316,6 +316,22 @@ from .semantic_capability import (
     semantic_result_from_dict,
     validate_semantic_operation_result,
 )
+from .recognition_memory import (
+    CognitionEpisode,
+    CompressedMemory,
+    ExpansionReference,
+    MemoryState,
+    RecognitionCue,
+    RecognitionMatch,
+    RecognitionMemoryError,
+    RecognitionMemorySet,
+    RecognitionProjection,
+    RecognitionResult,
+    compress_episodes,
+    reactivate,
+    recognize,
+    validate_recognition_context,
+)
 
 __all__ = [
     "ADAPTIVE_FIELD_CONSUMERS",

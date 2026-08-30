@@ -25,3 +25,4 @@
 - [Kraken-R longevity soak findings](kraken-r-longevity-soak-findings.md) — soak test design, cross-file bound relationships (MAX_EVENT_COUNTER=MAX_TICKS*MAX_TICK_EVENTS, generation-vs-updates_applied gating), a crash-on-capacity-exhaustion gap, and never bare `git stash` in this repo (auto-generated `orzhaal_bubble_*` stashes).
 - [Causal adaptation integrity](causal-adaptation-integrity.md) — durable learning requires grounded execution; invalidation replays valid suffixes; connection retirement needs proven dormancy.
 - [Kraken-R test-proof boundary](kraken-r-test-proof-boundary.md) — subsystem tests do not establish real-repository causal learning or a sustained whole-loop runtime.
+- [Recognition replay proof placement](recognition-replay-proof-placement.md) — keep full recognition proofs in trace records; focused model context gets only a compact hash-bound envelope.

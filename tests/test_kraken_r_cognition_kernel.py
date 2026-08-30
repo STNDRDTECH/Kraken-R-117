@@ -27,6 +27,7 @@ from kraken_r.cognition_kernel import (
     ProblemRequirement,
     ProblemSubtask,
     SatisfactionState,
+    SemanticJob,
     SourceLineage,
     TypedReasoningEdge,
     assess_synthesis,
@@ -37,6 +38,14 @@ from kraken_r.contracts import Objective
 from kraken_r.cycle import run_constitutional_cycle
 from kraken_r.plastic_routing import CandidateRoute, RouteTopology
 from kraken_r.task_integrity import OriginalTask
+from kraken_r.recognition_memory import (
+    CognitionEpisode,
+    MemoryState,
+    RecognitionCue,
+    RecognitionMemorySet,
+    compress_episodes,
+    recognize,
+)
 
 
 def _problem() -> ProblemGraph:
@@ -210,6 +219,141 @@ def _result_for(request):
         questions=("What independent observation can falsify this branch?",),
         investigative_needs=("Obtain an independent grounded check.",),
     )
+
+
+def test_recognition_changes_selection_and_replays_without_proof_in_model_context():
+    episode = CognitionEpisode(
+        "episode-beta", "problem-cognition", "branch-beta", "beta-pattern", 1,
+        SemanticJob.MECHANISM_GENERATION, "candidate-beta",
+        "Weak delayed cues recover the beta mechanism.",
+        "Relational routing distinguishes beta from alpha.",
+        {f"detail-{index}": f"value-{index}" for index in range(20)},
+        ("weak", "beta", "routing"), ("delayed",), ("many_to_one",), (),
+        ("candidate",), ("material-dormant",), ("lineage-alpha",),
+        {"candidate_only": True},
+    )
+    memory = compress_episodes(
+        (episode,), concept_id="beta-pattern", concept_version=1,
+        summary="Weak cues recover beta routing.",
+        discriminative_features=("weak", "beta", "routing"),
+        supporting_features=("delayed",), structural_features=("many_to_one",),
+        applicability_scope=("candidate",), capability_ids=("capability-beta",),
+        state=MemoryState.DORMANT,
+    )
+    memory_set = RecognitionMemorySet((episode,), (memory,))
+    result = recognize(
+        memory_set,
+        RecognitionCue.from_text("cue-beta", "weak beta routing"),
+    )
+    trace = run_connected_processing(
+        _problem(), _capabilities(), _adaptive(0.65, 0.40, 1),
+        operation_callbacks={
+            ProcessingOperation.CHECK_LOGIC: _result_for,
+            ProcessingOperation.CHECK_QUANTITATIVE: _result_for,
+        },
+        recognition=result.projection,
+    )
+    assert trace.decision.selected_capability_id == "capability-beta"
+    assert "material-dormant" in trace.request.focused_context["focus_ids"]
+    assert "proof" not in trace.request.focused_context["recognition"]
+    assert trace.recognition_proof
+    assert replay_processing_trace(trace.to_dict()).structural_hash == trace.structural_hash
+
+    topology_noop = run_connected_processing(
+        _problem(), _capabilities(), _adaptive(0.55, 0.40, 2),
+        operation_callbacks={
+            ProcessingOperation.CHECK_LOGIC: _result_for,
+            ProcessingOperation.CHECK_QUANTITATIVE: _result_for,
+        },
+        prior_trace=trace,
+        recognition=result.projection,
+    )
+    assert topology_noop.causal_noop is True
+    assert topology_noop.events[-1].causal_links == (
+        trace.projection.projection_id,
+        topology_noop.projection.projection_id,
+    )
+
+    changed_result = recognize(
+        memory_set,
+        RecognitionCue.from_text("cue-beta-later", "delayed weak beta routing"),
+    )
+    recognition_noop = run_connected_processing(
+        _problem(), _capabilities(), _adaptive(0.65, 0.40, 1),
+        operation_callbacks={
+            ProcessingOperation.CHECK_LOGIC: _result_for,
+            ProcessingOperation.CHECK_QUANTITATIVE: _result_for,
+        },
+        prior_trace=trace,
+        recognition=changed_result.projection,
+    )
+    assert recognition_noop.causal_noop is True
+    assert recognition_noop.events[-1].causal_links == (
+        result.projection.projection_id,
+        changed_result.projection.projection_id,
+    )
+    assert replay_processing_trace(recognition_noop.to_dict()).structural_hash == recognition_noop.structural_hash
+
+    blocked_memory = replace(
+        memory,
+        memory_id="memory-blocked-recognition",
+        capability_ids=("capability-unavailable",),
+        compression_hash="",
+    )
+    blocked_result = recognize(
+        RecognitionMemorySet((episode,), (blocked_memory,)),
+        RecognitionCue.from_text("cue-blocked-beta", "weak beta routing"),
+    )
+    blocked = run_connected_processing(
+        _problem(), _capabilities(), _adaptive(0.65, 0.40, 1),
+        recognition=blocked_result.projection,
+    )
+    assert blocked.request is None
+    assert blocked.decision.selected_capability_id is None
+    assert blocked.recognition_envelope
+    assert replay_processing_trace(blocked.to_dict()).structural_hash == blocked.structural_hash
+
+    tampered = deepcopy(blocked.to_dict())
+    tampered["recognition_proof"]["episodes"][0]["detail"]["detail-0"] = "altered"
+    with pytest.raises(CognitionValidationError):
+        replay_processing_trace(tampered)
+
+    unrecognized_blocked = run_connected_processing(
+        _problem(), _capabilities(), _adaptive(0.25, 0.25, 3)
+    )
+    recognized_after_block = run_connected_processing(
+        _problem(), _capabilities(), _adaptive(0.25, 0.25, 3),
+        prior_trace=unrecognized_blocked,
+        recognition=blocked_result.projection,
+    )
+    assert recognized_after_block.causal_noop is True
+    assert recognized_after_block.events[-1].causal_links == (
+        "recognition:none",
+        blocked_result.projection.projection_id,
+    )
+    assert replay_processing_trace(
+        recognized_after_block.to_dict()
+    ).structural_hash == recognized_after_block.structural_hash
+
+    changed_blocked_result = recognize(
+        RecognitionMemorySet((episode,), (blocked_memory,)),
+        RecognitionCue.from_text(
+            "cue-blocked-beta-later", "delayed weak beta routing"
+        ),
+    )
+    changed_blocked = run_connected_processing(
+        _problem(), _capabilities(), _adaptive(0.65, 0.40, 1),
+        prior_trace=blocked,
+        recognition=changed_blocked_result.projection,
+    )
+    assert changed_blocked.causal_noop is True
+    assert changed_blocked.events[-1].causal_links == (
+        blocked_result.projection.projection_id,
+        changed_blocked_result.projection.projection_id,
+    )
+    assert replay_processing_trace(
+        changed_blocked.to_dict()
+    ).structural_hash == changed_blocked.structural_hash
 
 
 def test_topology_changes_effective_processing_and_structural_replay_is_identical():

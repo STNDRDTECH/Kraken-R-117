@@ -53,6 +53,11 @@ from .llm_adapter import (
 )
 from .cognition_kernel import SemanticJob
 from .semantic_capability import SemanticModelCapability
+from .recognition_memory import (
+    MAX_EPISODES as MAX_RECOGNITION_EPISODES,
+    MAX_MEMORIES as MAX_RECOGNITION_MEMORIES,
+    MemoryState,
+)
 from .controlled_evaluation import (
     ControlledEvaluationHarness,
     EvaluationMode,
@@ -456,6 +461,42 @@ def validate_contract_catalog() -> tuple[str, ...]:
         errors.append("Event must be an alias of Signal, not a second event authority")
     if contracts.GroundTruth is not contracts.Evidence:
         errors.append("GroundTruth must be an alias of Evidence, not a second store")
+    return tuple(errors)
+
+
+def validate_recognition_memory() -> tuple[str, ...]:
+    """Check that Round 2 remains bounded, isolated, and candidate-only."""
+
+    errors: list[str] = []
+    path = Path(__file__).with_name("recognition_memory.py")
+    source = path.read_text(encoding="utf-8")
+    tree = ast.parse(source, filename=str(path))
+    forbidden = {
+        "threading", "multiprocessing", "sub" + "process", "sqlite3",
+        "requests", "httpx", "sock" + "et", "rogal_core",
+    }
+    imported = {
+        alias.name.split(".")[0]
+        for node in ast.walk(tree)
+        if isinstance(node, ast.Import)
+        for alias in node.names
+    } | {
+        (node.module or "").split(".")[0]
+        for node in ast.walk(tree)
+        if isinstance(node, ast.ImportFrom) and node.level == 0
+    }
+    if imported & forbidden:
+        errors.append("recognition memory introduced runtime or persistence wiring")
+    if MAX_RECOGNITION_EPISODES > 32 or MAX_RECOGNITION_MEMORIES > 32:
+        errors.append("recognition memory bounds exceed the qualified limit")
+    if {state.value for state in MemoryState} != {"active", "deferred", "dormant"}:
+        errors.append("recognition memory state catalog is invalid")
+    required = (
+        "candidate_only", "recognition_only", "compression_hash",
+        "state_transition_hash", "validate_recognition_context",
+    )
+    if any(item not in source for item in required):
+        errors.append("recognition memory lacks replay or authority guards")
     return tuple(errors)
 
 
@@ -1789,6 +1830,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     metastability_errors = validate_metastability_experiments()
     cognition_kernel_errors = validate_cognition_kernel()
     semantic_capability_errors = validate_semantic_capability()
+    recognition_memory_errors = validate_recognition_memory()
     legacy_runtime_errors = validate_legacy_runtime_boundary()
     report = {
         "ok": (
@@ -1809,6 +1851,7 @@ def main(argv: Sequence[str] | None = None) -> int:
             and not metastability_errors
             and not cognition_kernel_errors
             and not semantic_capability_errors
+            and not recognition_memory_errors
             and not legacy_runtime_errors
         ),
         "contracts_ok": not contract_errors,
@@ -1890,6 +1933,11 @@ def main(argv: Sequence[str] | None = None) -> int:
             "errors": list(semantic_capability_errors),
             "authority": "typed_candidate_cognition_only",
             "jobs": [job.value for job in SemanticJob],
+        },
+        "recognition_memory": {
+            "ok": not recognition_memory_errors,
+            "errors": list(recognition_memory_errors),
+            "authority": "bounded_candidate_recognition_only",
         },
         "constitution": {
             "ok": True,

@@ -24,12 +24,34 @@ actuators remain unchanged and authoritative for their current behavior.
 The `kraken_r` package is candidate-only. Its deterministic cycle,
 recorded-execution replay, bounded signal propagation, bounded advisory
 physiology, settlement-grounded route-preference reducer, immutable replayable
-dynamical substrate, bounded metastability experiment observations, immutable task-integrity inspection, proposal-only LLM
+dynamical substrate, bounded metastability experiment observations, immutable
+recognition-memory projection, immutable task-integrity inspection, proposal-only LLM
 adapter, narrow verified execution observer, and static interaction validator
 have no daemon entrypoint, runtime writer, event subscription, general command
 surface, router, ledger, homeostasis controller, or mutation actuator. Loading,
 validating, or running them must not start ROGAL, contact an LLM, open live
 stores, or change `.rogal/` runtime state.
+
+## Recognition-memory boundary
+
+- Compression is a compact index over immutable detailed cognition episodes,
+  not deletion or replacement. Every compressed memory retains concept
+  identity/version, scope, exceptions, material/lineage provenance, and
+  hash-bound expansion references.
+- Expansion is deterministic and fails closed unless every referenced episode,
+  detail hash, material reference, and lineage reference is unchanged.
+- Active, deferred, and dormant are bounded candidate-memory states only.
+  Reactivation is an immutable state proposal; it is not persistence.
+- Partial, noisy, delayed, and cross-domain cues may produce a recognition
+  projection only when discriminative/structural coverage is sufficient and
+  concept, version, scope, branch, and exception guards remain compatible.
+- Ambiguous, stale, destructive, superficial, or over-broad recognition fails
+  closed. Recognition context is included in capability selection, focused
+  context, request hashes, and structural replay.
+- Recognition may change candidate material focus, branch, semantic context,
+  or capability selection. It can never establish truth, evidence, settlement,
+  requirement satisfaction, execution, adaptive credit, durable authority, or
+  self-promotion.
 
 ## Canonical lifecycle
 

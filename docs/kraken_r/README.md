@@ -35,6 +35,9 @@ second runtime.
 - `kraken_r/metastability.py` — bounded, deterministic full-versus-ablation
   measurements over caller-owned dynamical ticks; reports are disposable
   observations, never evidence, credit, promotion, or runtime authority.
+- `kraken_r/recognition_memory.py` — immutable bounded episode compression,
+  exact reference-based expansion, guarded cue recognition, and candidate-only
+  reactivation projections included in cognition selection and replay hashes.
 - `kraken_r/constitution.json` — machine-readable constitution metadata
   validated alongside the registry.
 - `kraken_r/architecture_registry.schema.json` — machine-readable JSON schema.
@@ -64,7 +67,8 @@ pytest -q \
    tests/test_kraken_r_adaptive_substrate.py \
      tests/test_kraken_r_task_integrity.py \
      tests/test_kraken_r_dynamical_substrate.py \
-     tests/test_kraken_r_metastability.py
+      tests/test_kraken_r_metastability.py \
+      tests/test_kraken_r_recognition_memory.py
 ```
 
 The command reads the bundled JSON, imports the isolated package, and executes

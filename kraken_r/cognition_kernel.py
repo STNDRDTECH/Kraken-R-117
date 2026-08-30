@@ -1607,7 +1607,9 @@ def _focused_context_values(
     problem: ProblemGraph,
     capability: ProcessingCapability,
     projection: AdaptiveProcessingProjection,
+    recognition_context: Mapping[str, Any] | None = None,
 ) -> Mapping[str, Any]:
+    recognition_context = dict(recognition_context or {})
     requirements = {item.requirement_id: item for item in problem.requirements}
     subtasks = {item.subtask_id: item for item in problem.subtasks}
     materials = {item.material_id: item for item in problem.materials}
@@ -1615,7 +1617,15 @@ def _focused_context_values(
         item for item in problem.branches if item.branch_id == capability.branch_id
     )
     focused_items: list[dict[str, Any]] = []
-    for item_id in capability.declared_input_ids:
+    focus_ids = tuple(
+        dict.fromkeys(
+            capability.declared_input_ids
+            + tuple(recognition_context.get("relevant_material_ids", ()))
+        )
+    )
+    if len(focus_ids) > MAX_CONTEXT_ITEMS:
+        raise CognitionValidationError("recognition focus exceeds context bound")
+    for item_id in focus_ids:
         if item_id in requirements:
             item = requirements[item_id]
             focused_items.append(
@@ -1639,7 +1649,18 @@ def _focused_context_values(
                 }
             )
         else:
+            if item_id not in materials:
+                raise CognitionValidationError(
+                    "recognition focus references an undeclared material"
+                )
             item = materials[item_id]
+            if (
+                item_id in recognition_context.get("relevant_material_ids", ())
+                and item.environment_id != branch.environment_id
+            ):
+                raise CognitionValidationError(
+                    "recognition focus crosses the selected branch environment"
+                )
             focused_items.append(
                 {
                     "item_id": item.material_id,
@@ -1676,7 +1697,7 @@ def _focused_context_values(
                 "model_configuration": _jsonable(
                     capability.semantic_configuration
                 ),
-                "focus_ids": list(capability.declared_input_ids),
+                "focus_ids": list(focus_ids),
                 "focused_items": focused_items,
                 "topology": {
                     "projection_id": projection.projection_id,
@@ -1686,6 +1707,9 @@ def _focused_context_values(
                     "route_weight": _route_weight(projection, capability.route_id),
                 },
                 "candidate_only": True,
+                "recognition": recognition_context.get(
+                    "_serialized_context", recognition_context
+                ),
             },
             "focused context",
         )
@@ -1754,6 +1778,8 @@ class ProcessingTrace:
     capabilities: tuple[ProcessingCapability, ...] = ()
     budget: ProcessingBudget = field(default_factory=ProcessingBudget)
     causal_noop: bool = False
+    recognition_envelope: Mapping[str, Any] = field(default_factory=dict)
+    recognition_proof: Mapping[str, Any] = field(default_factory=dict)
     candidate_only: bool = True
 
     def __post_init__(self) -> None:
@@ -1917,8 +1943,35 @@ class ProcessingTrace:
             if self.decision.selected_capability_id is not None
             else None
         )
+        if not isinstance(self.recognition_envelope, Mapping) or not isinstance(
+            self.recognition_proof, Mapping
+        ):
+            raise CognitionValidationError("trace recognition records are invalid")
+        if self.recognition_proof and not self.recognition_envelope:
+            raise CognitionValidationError(
+                "trace recognition proof requires its envelope"
+            )
+        recognition_context: Mapping[str, Any] = {}
+        if self.recognition_envelope:
+            from .recognition_memory import validate_recognition_context
+
+            recognition_context = validate_recognition_context(
+                self.recognition_envelope, self.recognition_proof
+            )
+        object.__setattr__(
+            self, "recognition_envelope", _freeze(self.recognition_envelope)
+        )
+        object.__setattr__(
+            self, "recognition_proof", _freeze(self.recognition_proof)
+        )
+        if self.request is not None and self.request.focused_context.get(
+            "recognition", {}
+        ) != self.recognition_envelope:
+            raise CognitionValidationError(
+                "request recognition envelope does not match its trace"
+            )
         canonical_selected = _select_capability(
-            capabilities, self.projection, self.budget
+            capabilities, self.projection, self.budget, recognition_context
         )
         if (
             canonical_selected.capability_id
@@ -1951,7 +2004,10 @@ class ProcessingTrace:
                 "topology_read": self.projection.topology_read_hash,
                 "focused_context": _jsonable(
                     _focused_context_values(
-                        self.problem, selected, self.projection
+                        self.problem,
+                        selected,
+                        self.projection,
+                        recognition_context,
                     )
                 ),
             })
@@ -1970,7 +2026,10 @@ class ProcessingTrace:
                 != selected.semantic_configuration
                 or self.request.focused_context
                 != _focused_context_values(
-                    self.problem, selected, self.projection
+                    self.problem,
+                    selected,
+                    self.projection,
+                    recognition_context,
                 )
                 or self.request.input_hash != expected_input_hash
                 or self.request.budget_cost != selected.cost
@@ -2060,7 +2119,13 @@ class ProcessingTrace:
             inhibition_events = [
                 item for item in events if item.kind is ProcessingEventKind.INHIBITION
             ]
-            if len(events) != 1 or len(inhibition_events) != 1:
+            if len(inhibition_events) != 1 or any(
+                item.kind not in (
+                    ProcessingEventKind.INHIBITION,
+                    ProcessingEventKind.NOOP,
+                )
+                for item in events
+            ):
                 raise CognitionValidationError(
                     "blocked trace requires exactly one inhibition event"
                 )
@@ -2079,20 +2144,48 @@ class ProcessingTrace:
             raise CognitionValidationError("causal no-op event cannot repeat")
         if noop_events:
             noop = noop_events[0]
+            current_recognition = self.recognition_envelope
+            topology_noop = noop.payload.get("topology_changed") is True
+            recognition_noop = noop.payload.get("recognition_changed") is True
+            expected_causal_links = (
+                (
+                    noop.payload.get("prior_topology_projection_id"),
+                    self.projection.projection_id,
+                )
+                if topology_noop
+                else (
+                    noop.payload.get("prior_recognition_projection_id"),
+                    _recognition_projection_id(current_recognition),
+                )
+            )
             if (
                 noop.subject_id != self.decision.decision_id
-                or noop.causal_links[-1:] != (self.projection.projection_id,)
                 or len(noop.causal_links) != 2
                 or noop.causal_links[0] == noop.causal_links[1]
+                or noop.causal_links != expected_causal_links
                 or noop.input_hash != noop.output_hash
                 or noop.input_hash != self.effective_computation_hash
-                or noop.payload.get("topology_changed") is not True
+                or not (topology_noop or recognition_noop)
                 or noop.payload.get("current_topology_read_hash")
                 != self.projection.topology_read_hash
-                or noop.payload.get("prior_topology_read_hash")
-                == self.projection.topology_read_hash
                 or noop.payload.get("prior_effective_computation_hash")
                 != noop.input_hash
+                or (
+                    topology_noop
+                    and noop.payload.get("prior_topology_read_hash")
+                    == self.projection.topology_read_hash
+                )
+                or (
+                    recognition_noop
+                    and (
+                        noop.payload.get("current_recognition_hash")
+                        != _hash(current_recognition)
+                        or noop.payload.get("prior_recognition_hash")
+                        == noop.payload.get("current_recognition_hash")
+                        or noop.payload.get("current_recognition_projection_id")
+                        != _recognition_projection_id(current_recognition)
+                    )
+                )
             ):
                 raise CognitionValidationError("causal no-op proof is invalid")
 
@@ -2148,6 +2241,8 @@ class ProcessingTrace:
             "capabilities": [item.to_dict() for item in self.capabilities],
             "budget": self.budget.to_dict(),
             "causal_noop": self.causal_noop,
+            "recognition_envelope": _jsonable(self.recognition_envelope),
+            "recognition_proof": _jsonable(self.recognition_proof),
             "candidate_only": True,
         }
         if include_hash:
@@ -2163,9 +2258,23 @@ def _select_capability(
     capabilities: tuple[ProcessingCapability, ...],
     projection: AdaptiveProcessingProjection,
     budget: ProcessingBudget,
+    recognition_context: Mapping[str, Any] | None = None,
 ) -> ProcessingCapability | None:
     available = set(projection.available_capability_ids)
-    choices = [item for item in capabilities if item.capability_id in available and item.cost <= budget.max_cost]
+    recognition_context = recognition_context or {}
+    recognized_capabilities = set(recognition_context.get("capability_ids", ()))
+    recognized_branches = set(recognition_context.get("branch_ids", ()))
+    choices = [
+        item
+        for item in capabilities
+        if item.capability_id in available
+        and item.cost <= budget.max_cost
+        and (
+            not recognized_capabilities
+            or item.capability_id in recognized_capabilities
+        )
+        and (not recognized_branches or item.branch_id in recognized_branches)
+    ]
     return sorted(choices, key=lambda item: (-_route_weight(projection, item.route_id), -item.priority, item.capability_id))[0] if choices else None
 
 
@@ -2186,6 +2295,88 @@ def _default_result(request: OperationRequest) -> OperationResult:
     )
 
 
+def _recognition_projection_id(envelope: Mapping[str, Any]) -> str:
+    return str(envelope.get("projection_id") or "recognition:none")
+
+
+def _apply_causal_noop(
+    trace: ProcessingTrace,
+    prior_trace: ProcessingTrace | None,
+) -> ProcessingTrace:
+    if prior_trace is None:
+        return trace
+    if prior_trace.problem.graph_hash != trace.problem.graph_hash:
+        raise CognitionValidationError("prior trace must bind the same problem")
+    topology_changed = (
+        prior_trace.projection.topology_read_hash
+        != trace.projection.topology_read_hash
+    )
+    prior_recognition = prior_trace.recognition_envelope
+    current_recognition = trace.recognition_envelope
+    recognition_changed = prior_recognition != current_recognition
+    causal_noop = (
+        (topology_changed or recognition_changed)
+        and prior_trace.effective_computation_hash
+        == trace.effective_computation_hash
+    )
+    if not causal_noop:
+        return trace
+    causal_links = (
+        (
+            prior_trace.projection.projection_id,
+            trace.projection.projection_id,
+        )
+        if topology_changed
+        else (
+            _recognition_projection_id(prior_recognition),
+            _recognition_projection_id(current_recognition),
+        )
+    )
+    noop = ProcessingEvent(
+        f"{trace.decision.decision_id}-noop",
+        ProcessingEventKind.NOOP,
+        trace.decision.decision_id,
+        prior_trace.effective_computation_hash,
+        trace.effective_computation_hash,
+        causal_links=causal_links,
+        payload={
+            "topology_changed": topology_changed,
+            "recognition_changed": recognition_changed,
+            "prior_topology_read_hash": prior_trace.projection.topology_read_hash,
+            "current_topology_read_hash": trace.projection.topology_read_hash,
+            "prior_topology_projection_id": prior_trace.projection.projection_id,
+            "current_topology_projection_id": trace.projection.projection_id,
+            "prior_effective_computation_hash": prior_trace.effective_computation_hash,
+            "prior_recognition_hash": _hash(prior_recognition),
+            "current_recognition_hash": _hash(current_recognition),
+            "prior_recognition_projection_id": _recognition_projection_id(
+                prior_recognition
+            ),
+            "current_recognition_projection_id": _recognition_projection_id(
+                current_recognition
+            ),
+        },
+    )
+    return ProcessingTrace(
+        problem=trace.problem,
+        projection=trace.projection,
+        decision=trace.decision,
+        request=trace.request,
+        result=trace.result,
+        context=trace.context,
+        events=trace.events + (noop,),
+        claims=trace.claims,
+        reasoning_edges=trace.reasoning_edges,
+        obligations=trace.obligations,
+        blockers=trace.blockers,
+        capabilities=trace.capabilities,
+        budget=trace.budget,
+        causal_noop=True,
+        recognition_envelope=trace.recognition_envelope,
+        recognition_proof=trace.recognition_proof,
+    )
+
+
 def run_connected_processing(
     problem: ProblemGraph,
     capabilities: Iterable[ProcessingCapability],
@@ -2198,6 +2389,7 @@ def run_connected_processing(
     reasoning_edges: Iterable[TypedReasoningEdge] = (),
     obligations: Iterable[VerificationObligation] = (),
     blockers: Iterable[Blocker] = (),
+    recognition: Any = None,
 ) -> ProcessingTrace:
     """Select and run one declared candidate operation under a finite budget."""
 
@@ -2228,8 +2420,30 @@ def run_connected_processing(
             raise CognitionValidationError("obligation identity has conflicting records")
         obligations_by_id[item.obligation_id] = item
     obligations = tuple(obligations_by_id.values())
+    recognition_context: Mapping[str, Any] = {}
+    recognition_envelope: Mapping[str, Any] = {}
+    recognition_proof: Mapping[str, Any] = {}
+    if recognition is not None:
+        if not hasattr(recognition, "to_processing_context") or not hasattr(
+            recognition, "to_replay_proof"
+        ):
+            raise CognitionValidationError(
+                "recognition requires an immutable recognition projection"
+            )
+        raw_recognition = (
+            recognition.to_processing_context()
+        )
+        recognition_envelope = raw_recognition
+        recognition_proof = recognition.to_replay_proof()
+        from .recognition_memory import validate_recognition_context
+
+        recognition_context = validate_recognition_context(
+            raw_recognition, recognition_proof
+        )
     projection = project_adaptive_processing(problem, capabilities, adaptive_state)
-    selected = _select_capability(tuple(capabilities), projection, budget)
+    selected = _select_capability(
+        tuple(capabilities), projection, budget, recognition_context
+    )
     decision_id = f"{problem.problem_id}-processing-decision-{projection.topology_version}-{projection.topology_generation}"
     if selected is None:
         decision = ProcessingDecision(
@@ -2247,7 +2461,7 @@ def run_connected_processing(
             projection.topology_read_hash, context.output_hash,
             causal_links=(projection.projection_id,), payload={"reason": "no capability within budget"},
         )
-        return ProcessingTrace(
+        trace = ProcessingTrace(
             problem=problem,
             projection=projection,
             decision=decision,
@@ -2261,17 +2475,24 @@ def run_connected_processing(
             blockers=blockers,
             capabilities=capabilities,
             budget=budget,
+            recognition_envelope=recognition_envelope,
+            recognition_proof=recognition_proof,
         )
+        return _apply_causal_noop(trace, prior_trace)
     input_hash = _hash({
         "problem": problem.graph_hash,
         "capability": selected.to_dict(),
         "branch": selected.branch_id,
         "topology_read": projection.topology_read_hash,
         "focused_context": _jsonable(
-            _focused_context_values(problem, selected, projection)
+            _focused_context_values(
+                problem, selected, projection, recognition_context
+            )
         ),
     })
-    focused_context = _focused_context_values(problem, selected, projection)
+    focused_context = _focused_context_values(
+        problem, selected, projection, recognition_context
+    )
     request = OperationRequest(
         f"{problem.problem_id}-operation-{selected.capability_id}-{projection.topology_version}-{projection.topology_generation}",
         problem.problem_id, selected.operation, selected.capability_id, selected.branch_id,
@@ -2337,46 +2558,10 @@ def run_connected_processing(
         blockers=blockers,
         capabilities=capabilities,
         budget=budget,
+        recognition_envelope=recognition_envelope,
+        recognition_proof=recognition_proof,
     )
-    if prior_trace is not None:
-        if prior_trace.problem.graph_hash != problem.graph_hash:
-            raise CognitionValidationError("prior trace must bind the same problem")
-        topology_changed = (
-            prior_trace.projection.topology_read_hash
-            != projection.topology_read_hash
-        )
-        causal_noop = (
-            topology_changed
-            and prior_trace.effective_computation_hash
-            == trace.effective_computation_hash
-        )
-        trace = ProcessingTrace(
-            problem=problem,
-            projection=projection,
-            decision=decision,
-            request=request,
-            result=result,
-            context=context,
-            events=events + ((ProcessingEvent(
-                f"{decision_id}-noop", ProcessingEventKind.NOOP, decision_id,
-                prior_trace.effective_computation_hash, trace.effective_computation_hash,
-                causal_links=(prior_trace.projection.projection_id, projection.projection_id),
-                payload={
-                    "topology_changed": True,
-                    "prior_topology_read_hash": prior_trace.projection.topology_read_hash,
-                    "current_topology_read_hash": projection.topology_read_hash,
-                    "prior_effective_computation_hash": prior_trace.effective_computation_hash,
-                },
-            ),) if causal_noop else ()),
-            claims=claims,
-            reasoning_edges=reasoning_edges,
-            obligations=obligations,
-            blockers=blockers,
-            capabilities=capabilities,
-            budget=budget,
-            causal_noop=causal_noop,
-        )
-    return trace
+    return _apply_causal_noop(trace, prior_trace)
 
 
 def _problem_from_dict(value: Mapping[str, Any]) -> ProblemGraph:
@@ -2544,7 +2729,8 @@ def _processing_trace_from_dict(value: Mapping[str, Any]) -> ProcessingTrace:
     expected_fields = {
         "problem", "projection", "decision", "request", "result", "context",
         "events", "claims", "reasoning_edges", "obligations", "blockers",
-        "capabilities", "budget", "causal_noop", "candidate_only",
+        "capabilities", "budget", "causal_noop", "recognition_envelope",
+        "recognition_proof", "candidate_only",
         "structural_hash",
     }
     if set(value) != expected_fields:
@@ -2676,6 +2862,8 @@ def _processing_trace_from_dict(value: Mapping[str, Any]) -> ProcessingTrace:
             budget_value["max_events"],
         ),
         causal_noop=value["causal_noop"],
+        recognition_envelope=value["recognition_envelope"],
+        recognition_proof=value["recognition_proof"],
         candidate_only=value["candidate_only"],
     )
     if value["structural_hash"] != trace.structural_hash:
@@ -2706,6 +2894,8 @@ def replay_processing_trace(record: ProcessingTrace | Mapping[str, Any]) -> Proc
         capabilities=record.capabilities,
         budget=record.budget,
         causal_noop=record.causal_noop,
+        recognition_envelope=record.recognition_envelope,
+        recognition_proof=record.recognition_proof,
         candidate_only=record.candidate_only,
     )
     if reconstructed.structural_hash != expected:

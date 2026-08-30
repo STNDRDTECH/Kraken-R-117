@@ -1050,6 +1050,22 @@
       "notes": "Uses ModelAdapter as the sole provider boundary. Each semantic job has a distinct bounded payload and verification obligations; live ingestion and structural replay enforce identical schema, source-lineage, deterministic identity, and request-envelope bindings. Outputs have no evidence, settlement, execution, or adaptive-credit authority."
     },
     {
+      "mechanism_id": "candidate_recognition_memory",
+      "category": "core_execution",
+      "name": "Candidate recognition, compression, and reactivation",
+      "intended_role": "Compress detailed cognition episodes into bounded reversible references, recognize structurally related cues, and project reactivated candidate context into deterministic cognition selection.",
+      "current_status": "infrastructure",
+      "dependencies": ["proof_carrying_cognition_kernel", "typed_semantic_model_capability"],
+      "authority": "kraken_candidate",
+      "evidence_grade": "implemented",
+      "evidence_refs": ["kraken_r/recognition_memory.py", "tests/test_kraken_r_recognition_memory.py"],
+      "duplicates": [],
+      "disposition": "keep",
+      "source_refs": ["docs/kraken_r/CONSTITUTION.md", "docs/kraken_r/README.md"],
+      "planned": false,
+      "notes": "Immutable caller-owned memory sets only. Expansion verifies exact episode hashes and ancestry. Recognition is candidate-only and cannot create truth, evidence, settlement, execution, adaptive credit, persistence, or promotion."
+    },
+    {
       "mechanism_id": "metaplasticity",
       "category": "distinctive_concepts",
       "name": "Metaplasticity",
