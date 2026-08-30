@@ -1,8 +1,8 @@
 {
   "registry_kind": "kraken_r_architecture",
   "registry_id": "kraken-r-foundation",
-  "version": "1.11.2",
-  "last_reviewed": "2026-08-25",
+  "version": "1.12.0",
+  "last_reviewed": "2026-08-30",
   "authority_boundary": {
     "legacy_reference": "rogal_core.daemon.ROGALDaemon and rogal_core.autonomous_cycle.AutonomousCycle remain the deployed reference runtime.",
     "kraken_candidate": "The deterministic Kraken-R cycle, read-only recorded-execution replay, bounded in-memory signal propagation, advisory bounded physiology, settlement-grounded bounded route preference, grounded bounded adaptive reducers, immutable replayable dynamical ticks, immutable task-integrity inspection, proof-carrying cognition processing, disposable isolated Orzhaal experiments, proposal-only LLM adapter, verified bounded execution observer, and static interaction validation are executable candidate infrastructure only; they have no authority over the deployed runtime.",
@@ -1064,6 +1064,22 @@
       "source_refs": ["docs/kraken_r/CONSTITUTION.md", "docs/kraken_r/README.md"],
       "planned": false,
       "notes": "Immutable caller-owned memory sets only. Expansion verifies exact episode hashes and ancestry. Recognition is candidate-only and cannot create truth, evidence, settlement, execution, adaptive credit, persistence, or promotion."
+    },
+    {
+      "mechanism_id": "bounded_external_reality_metabolism",
+      "category": "core_execution",
+      "name": "Bounded external-reality evidence metabolism",
+      "intended_role": "Derive verification needs for unresolved load-bearing claims and metabolize caller-supplied, provenance-bound retrieval observations into candidate epistemic revisions.",
+      "current_status": "infrastructure",
+      "dependencies": ["proof_carrying_cognition_kernel", "candidate_recognition_memory"],
+      "authority": "kraken_candidate",
+      "evidence_grade": "implemented",
+      "evidence_refs": ["kraken_r/external_reality.py", "tests/test_kraken_r_external_reality.py"],
+      "duplicates": [],
+      "disposition": "keep",
+      "source_refs": ["docs/kraken_r/CONSTITUTION.md", "docs/kraken_r/README.md"],
+      "planned": false,
+      "notes": "Uses only topology-selected RETRIEVE callbacks. Search results remain discovery-only; immutable source lineage, independence, applicability, claim binding, and replay are checked. Revisions cannot create constitutional evidence, settlement, execution truth, requirement satisfaction, adaptive credit, writes, providers, or runtimes."
     },
     {
       "mechanism_id": "metaplasticity",

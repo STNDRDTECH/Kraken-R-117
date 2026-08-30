@@ -1,7 +1,7 @@
 # Kraken-R Constitution
 
 **Status:** candidate-only foundation  
-**Version:** 1.11.2
+**Version:** 1.12.0
 **Effective boundary:** documentation, standalone validation, deterministic fixture
 execution, and independently verified bounded candidate execution observations
 
@@ -52,6 +52,29 @@ stores, or change `.rogal/` runtime state.
   or capability selection. It can never establish truth, evidence, settlement,
   requirement satisfaction, execution, adaptive credit, durable authority, or
   self-promotion.
+
+## External-reality boundary
+
+- Verification needs arise only from unresolved, load-bearing candidate claims
+  and remain bounded, immutable, and hash-bound.
+- Retrieval uses only the existing topology-selected `RETRIEVE` capability.
+  This layer adds no browser, HTTP client, provider, worker, store, scheduler,
+  persistence path, or runtime.
+- **Search result ≠ evidence.** Discovery artifacts cannot assess claims or
+  promote themselves into evidentiary sources.
+- Evidentiary artifacts retain content hashes, source identity, ancestry/root
+  lineage, independence family, retrieval and effective dates, jurisdiction,
+  scope, regime, method, and exact claim-level quoted assessments.
+- Stale, inapplicable, correlated, malformed, forged, oversized, or
+  authority-injecting observations fail closed. Correlated descendants count
+  as one independence family.
+- Valid retrieval may revise candidate claim status and subsequent capability
+  selection. **Epistemic revision ≠ adaptive learning.** It cannot create
+  constitutional evidence, truth, requirement satisfaction, settlement,
+  execution truth, adaptive credit, authority, or writes.
+- Complete retrieval proofs live in processing traces and replay without
+  provider or network calls. The internet therefore feeds the epistemic graph,
+  rather than bypassing it.
 
 ## Canonical lifecycle
 

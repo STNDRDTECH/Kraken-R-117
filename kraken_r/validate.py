@@ -58,6 +58,11 @@ from .recognition_memory import (
     MAX_MEMORIES as MAX_RECOGNITION_MEMORIES,
     MemoryState,
 )
+from .external_reality import (
+    RetrievalObservation,
+    legal_currentness_fixture,
+    scientific_regime_fixture,
+)
 from .controlled_evaluation import (
     ControlledEvaluationHarness,
     EvaluationMode,
@@ -497,6 +502,26 @@ def validate_recognition_memory() -> tuple[str, ...]:
     )
     if any(item not in source for item in required):
         errors.append("recognition memory lacks replay or authority guards")
+    return tuple(errors)
+
+
+def validate_external_reality() -> tuple[str, ...]:
+    """Validate bounded legal/currentness and scientific/regime proof records."""
+
+    errors: list[str] = []
+    try:
+        legal_need, legal = legal_currentness_fixture()
+        science_need, science = scientific_regime_fixture()
+        if RetrievalObservation.from_dict(legal.to_dict()) != legal:
+            errors.append("legal retrieval proof did not replay exactly")
+        if RetrievalObservation.from_dict(science.to_dict()) != science:
+            errors.append("scientific retrieval proof did not replay exactly")
+        if not legal_need.currentness_required:
+            errors.append("legal verification need omitted currentness")
+        if science_need.required_regimes != ("regime-a",):
+            errors.append("scientific verification need omitted its regime")
+    except Exception as exc:
+        errors.append(f"external-reality validation failed: {exc}")
     return tuple(errors)
 
 
@@ -1831,6 +1856,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     cognition_kernel_errors = validate_cognition_kernel()
     semantic_capability_errors = validate_semantic_capability()
     recognition_memory_errors = validate_recognition_memory()
+    external_reality_errors = validate_external_reality()
     legacy_runtime_errors = validate_legacy_runtime_boundary()
     report = {
         "ok": (
@@ -1852,6 +1878,7 @@ def main(argv: Sequence[str] | None = None) -> int:
             and not cognition_kernel_errors
             and not semantic_capability_errors
             and not recognition_memory_errors
+            and not external_reality_errors
             and not legacy_runtime_errors
         ),
         "contracts_ok": not contract_errors,
@@ -1861,6 +1888,11 @@ def main(argv: Sequence[str] | None = None) -> int:
             "constitution": constitution["version"],
             "registry": registry.version,
             "errors": list(metadata_errors),
+        },
+        "external_reality": {
+            "ok": not external_reality_errors,
+            "errors": list(external_reality_errors),
+            "authority": "candidate_epistemic_only",
         },
         "cycle": {
             "ok": not cycle_errors,

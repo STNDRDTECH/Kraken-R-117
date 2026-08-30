@@ -8,7 +8,7 @@ read-only advisory input; only declared candidate operations may run.
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from enum import Enum
 import hashlib
 import json
@@ -1443,11 +1443,32 @@ class OperationResult:
     evidence_ids: tuple[str, ...] = ()
     settlement_ids: tuple[str, ...] = ()
     adaptive_update_ids: tuple[str, ...] = ()
+    retrieval_observation: Mapping[str, Any] | Any | None = None
 
     def __post_init__(self) -> None:
         _identifier(self.result_id, "result_id")
         _identifier(self.request_id, "request_id")
         object.__setattr__(self, "output", _freeze(_bounded_payload(self.output, "operation output")))
+        if self.retrieval_observation is not None:
+            observation = (
+                self.retrieval_observation.to_dict()
+                if hasattr(self.retrieval_observation, "to_dict")
+                else self.retrieval_observation
+            )
+            if not isinstance(observation, Mapping):
+                raise CognitionValidationError(
+                    "retrieval_observation must be a typed mapping"
+                )
+            from .external_reality import RetrievalObservation
+
+            normalized_observation = RetrievalObservation.from_dict(
+                observation
+            ).to_dict()
+            object.__setattr__(
+                self,
+                "retrieval_observation",
+                _freeze(normalized_observation),
+            )
         object.__setattr__(self, "downstream_material_ids", _ids(self.downstream_material_ids, "downstream_material_ids", MAX_CONTEXT_ITEMS))
         object.__setattr__(self, "downstream_satisfaction", _freeze({
             _identifier(key, "downstream satisfaction key"): SatisfactionState(value)
@@ -1477,6 +1498,11 @@ class OperationResult:
             "evidence_ids": [],
             "settlement_ids": [],
             "adaptive_update_ids": [],
+            "retrieval_observation": (
+                _jsonable(self.retrieval_observation)
+                if self.retrieval_observation is not None
+                else None
+            ),
         }
         if include_hash:
             result["output_hash"] = self.output_hash
@@ -1608,6 +1634,7 @@ def _focused_context_values(
     capability: ProcessingCapability,
     projection: AdaptiveProcessingProjection,
     recognition_context: Mapping[str, Any] | None = None,
+    evidence_needs: Iterable[Any] = (),
 ) -> Mapping[str, Any]:
     recognition_context = dict(recognition_context or {})
     requirements = {item.requirement_id: item for item in problem.requirements}
@@ -1710,6 +1737,16 @@ def _focused_context_values(
                 "recognition": recognition_context.get(
                     "_serialized_context", recognition_context
                 ),
+                "evidence_needs": [
+                    {
+                        "need_id": item.need_id,
+                        "claim_id": item.claim_id,
+                            "verification_pressure": item.verification_pressure.score,
+                        "required_precision": item.required_precision,
+                        "currentness_required": item.currentness_required,
+                    }
+                    for item in evidence_needs
+                ],
             },
             "focused context",
         )
@@ -1780,6 +1817,10 @@ class ProcessingTrace:
     causal_noop: bool = False
     recognition_envelope: Mapping[str, Any] = field(default_factory=dict)
     recognition_proof: Mapping[str, Any] = field(default_factory=dict)
+    evidence_needs: tuple[Any, ...] = ()
+    pre_retrieval_claims: tuple[EpistemicClaim, ...] = ()
+    retrieval_observation: Mapping[str, Any] = field(default_factory=dict)
+    candidate_revisions: tuple[Any, ...] = ()
     candidate_only: bool = True
 
     def __post_init__(self) -> None:
@@ -1964,6 +2005,118 @@ class ProcessingTrace:
         object.__setattr__(
             self, "recognition_proof", _freeze(self.recognition_proof)
         )
+        from .external_reality import (
+            CandidateEpistemicRevision,
+            EvidenceNeed,
+            RetrievalObservation,
+            _revise_candidate_claims,
+            validate_evidence_needs,
+            validate_retrieval_observation,
+        )
+
+        evidence_needs = _bounded_items(
+            self.evidence_needs, "trace evidence_needs", 16
+        )
+        if not all(isinstance(item, EvidenceNeed) for item in evidence_needs):
+            raise CognitionValidationError("trace evidence needs are invalid")
+        if any(item.problem_id != self.problem.problem_id for item in evidence_needs):
+            raise CognitionValidationError("trace evidence need does not bind the problem")
+        if len({item.need_id for item in evidence_needs}) != len(evidence_needs):
+            raise CognitionValidationError("trace evidence need identities must be unique")
+        object.__setattr__(self, "evidence_needs", evidence_needs)
+        pre_retrieval_claims = _bounded_items(
+            self.pre_retrieval_claims, "pre-retrieval claims", MAX_CLAIMS
+        )
+        if not all(isinstance(item, EpistemicClaim) for item in pre_retrieval_claims):
+            raise CognitionValidationError("pre-retrieval claims are invalid")
+        object.__setattr__(self, "pre_retrieval_claims", pre_retrieval_claims)
+        validate_evidence_needs(
+            self.problem.problem_id,
+            pre_retrieval_claims if pre_retrieval_claims else claims,
+            evidence_needs,
+        )
+        revisions = _bounded_items(
+            self.candidate_revisions, "candidate revisions", 24
+        )
+        if not all(isinstance(item, CandidateEpistemicRevision) for item in revisions):
+            raise CognitionValidationError("candidate revisions are invalid")
+        if len({item.revision_id for item in revisions}) != len(revisions):
+            raise CognitionValidationError("candidate revision identities must be unique")
+        claim_by_id = {item.claim_id: item for item in claims}
+        for revision in revisions:
+            claim = claim_by_id.get(revision.claim_id)
+            if (
+                claim is None
+                or revision.observation_id == ""
+                or revision.revised_status is not claim.status
+                or revision.revised_claim_hash != _hash(claim.to_dict())
+            ):
+                raise CognitionValidationError("candidate revision is not bound to its claim")
+        object.__setattr__(self, "candidate_revisions", revisions)
+        retrieval = self.retrieval_observation
+        if not isinstance(retrieval, Mapping):
+            raise CognitionValidationError("trace retrieval observation is invalid")
+        if retrieval:
+            observation = RetrievalObservation.from_dict(retrieval)
+            if self.request is None or self.request.operation is not ProcessingOperation.RETRIEVE:
+                raise CognitionValidationError(
+                    "retrieval observation requires a retrieve operation"
+                )
+            if observation.request_id != self.request.request_id:
+                raise CognitionValidationError(
+                    "retrieval observation does not bind its request"
+                )
+            if not pre_retrieval_claims:
+                raise CognitionValidationError(
+                    "retrieval proof requires its pre-retrieval claim state"
+                )
+            validate_retrieval_observation(
+                observation, pre_retrieval_claims, evidence_needs
+            )
+            expected_claims, expected_revisions = _revise_candidate_claims(
+                pre_retrieval_claims,
+                evidence_needs,
+                observation,
+                self.request,
+                selected,
+                self.projection,
+                self.decision,
+            )
+            if claims != expected_claims or revisions != expected_revisions:
+                raise CognitionValidationError(
+                    "retrieval candidate revision does not replay from its pre-state"
+                )
+            if (
+                self.result is None
+                or _jsonable(self.result.retrieval_observation)
+                != _jsonable(retrieval)
+            ):
+                raise CognitionValidationError(
+                    "retrieval observation does not bind its operation result"
+                )
+        elif self.request is not None and self.request.operation is ProcessingOperation.RETRIEVE:
+            raise CognitionValidationError("retrieve operation requires retrieval proof")
+        elif pre_retrieval_claims or revisions:
+            raise CognitionValidationError(
+                "non-retrieve trace cannot carry retrieval revision state"
+            )
+        if self.request is not None and self.result is not None:
+            result_observation = self.result.retrieval_observation
+            if self.request.operation is not ProcessingOperation.RETRIEVE and result_observation is not None:
+                raise CognitionValidationError(
+                    "non-retrieve operation cannot carry retrieval observation"
+                )
+            if self.request.operation is ProcessingOperation.RETRIEVE and (
+                selected is None
+                or selected.declared_output_material_ids
+                or selected.declared_satisfaction_ids
+                or self.result.downstream_material_ids
+                or self.result.downstream_satisfaction
+            ):
+                raise CognitionValidationError(
+                    "retrieve operation cannot change material or requirement state"
+                )
+        object.__setattr__(self, "retrieval_observation", _freeze(retrieval))
         if self.request is not None and self.request.focused_context.get(
             "recognition", {}
         ) != self.recognition_envelope:
@@ -1971,7 +2124,11 @@ class ProcessingTrace:
                 "request recognition envelope does not match its trace"
             )
         canonical_selected = _select_capability(
-            capabilities, self.projection, self.budget, recognition_context
+            capabilities,
+            self.projection,
+            self.budget,
+            recognition_context,
+            evidence_needs,
         )
         if (
             canonical_selected.capability_id
@@ -2008,6 +2165,7 @@ class ProcessingTrace:
                         selected,
                         self.projection,
                         recognition_context,
+                        evidence_needs,
                     )
                 ),
             })
@@ -2030,6 +2188,7 @@ class ProcessingTrace:
                     selected,
                     self.projection,
                     recognition_context,
+                    evidence_needs,
                 )
                 or self.request.input_hash != expected_input_hash
                 or self.request.budget_cost != selected.cost
@@ -2243,6 +2402,14 @@ class ProcessingTrace:
             "causal_noop": self.causal_noop,
             "recognition_envelope": _jsonable(self.recognition_envelope),
             "recognition_proof": _jsonable(self.recognition_proof),
+            "evidence_needs": [item.to_dict() for item in self.evidence_needs],
+            "pre_retrieval_claims": [
+                item.to_dict() for item in self.pre_retrieval_claims
+            ],
+            "retrieval_observation": _jsonable(self.retrieval_observation),
+            "candidate_revisions": [
+                item.to_dict() for item in self.candidate_revisions
+            ],
             "candidate_only": True,
         }
         if include_hash:
@@ -2259,16 +2426,19 @@ def _select_capability(
     projection: AdaptiveProcessingProjection,
     budget: ProcessingBudget,
     recognition_context: Mapping[str, Any] | None = None,
+    evidence_needs: Iterable[Any] = (),
 ) -> ProcessingCapability | None:
     available = set(projection.available_capability_ids)
     recognition_context = recognition_context or {}
     recognized_capabilities = set(recognition_context.get("capability_ids", ()))
     recognized_branches = set(recognition_context.get("branch_ids", ()))
+    needs = tuple(evidence_needs)
     choices = [
         item
         for item in capabilities
         if item.capability_id in available
         and item.cost <= budget.max_cost
+        and (item.operation is not ProcessingOperation.RETRIEVE or bool(needs))
         and (
             not recognized_capabilities
             or item.capability_id in recognized_capabilities
@@ -2374,6 +2544,10 @@ def _apply_causal_noop(
         causal_noop=True,
         recognition_envelope=trace.recognition_envelope,
         recognition_proof=trace.recognition_proof,
+        evidence_needs=trace.evidence_needs,
+        pre_retrieval_claims=trace.pre_retrieval_claims,
+        retrieval_observation=trace.retrieval_observation,
+        candidate_revisions=trace.candidate_revisions,
     )
 
 
@@ -2390,6 +2564,7 @@ def run_connected_processing(
     obligations: Iterable[VerificationObligation] = (),
     blockers: Iterable[Blocker] = (),
     recognition: Any = None,
+    evidence_needs: Iterable[Any] = (),
 ) -> ProcessingTrace:
     """Select and run one declared candidate operation under a finite budget."""
 
@@ -2407,6 +2582,8 @@ def run_connected_processing(
         raise CognitionValidationError("processing event budget is insufficient")
     _validate_capability_scope(problem, tuple(capabilities))
     claims = _bounded_items(claims, "claims", MAX_CLAIMS)
+    if not claims and prior_trace is not None and prior_trace.claims:
+        claims = prior_trace.claims
     reasoning_edges = _bounded_items(reasoning_edges, "reasoning_edges", MAX_EDGES)
     explicit_obligations = _bounded_items(obligations, "obligations", MAX_OBLIGATIONS)
     blockers = _bounded_items(blockers, "blockers", MAX_BLOCKERS)
@@ -2420,6 +2597,27 @@ def run_connected_processing(
             raise CognitionValidationError("obligation identity has conflicting records")
         obligations_by_id[item.obligation_id] = item
     obligations = tuple(obligations_by_id.values())
+    from .external_reality import (
+        EvidenceNeed,
+        RetrievalObservation,
+        derive_evidence_needs,
+        _revise_candidate_claims,
+        validate_evidence_needs,
+        validate_retrieval_observation,
+    )
+
+    supplied_needs = _bounded_items(
+        evidence_needs, "evidence_needs", 16
+    )
+    if supplied_needs and not all(isinstance(item, EvidenceNeed) for item in supplied_needs):
+        raise CognitionValidationError("evidence_needs are invalid")
+    if supplied_needs:
+        validate_evidence_needs(problem.problem_id, claims, supplied_needs)
+    needs = (
+        supplied_needs
+        if supplied_needs
+        else derive_evidence_needs(problem.problem_id, claims, obligations)
+    )
     recognition_context: Mapping[str, Any] = {}
     recognition_envelope: Mapping[str, Any] = {}
     recognition_proof: Mapping[str, Any] = {}
@@ -2442,7 +2640,7 @@ def run_connected_processing(
         )
     projection = project_adaptive_processing(problem, capabilities, adaptive_state)
     selected = _select_capability(
-        tuple(capabilities), projection, budget, recognition_context
+        tuple(capabilities), projection, budget, recognition_context, needs
     )
     decision_id = f"{problem.problem_id}-processing-decision-{projection.topology_version}-{projection.topology_generation}"
     if selected is None:
@@ -2477,6 +2675,7 @@ def run_connected_processing(
             budget=budget,
             recognition_envelope=recognition_envelope,
             recognition_proof=recognition_proof,
+            evidence_needs=needs,
         )
         return _apply_causal_noop(trace, prior_trace)
     input_hash = _hash({
@@ -2486,12 +2685,12 @@ def run_connected_processing(
         "topology_read": projection.topology_read_hash,
         "focused_context": _jsonable(
             _focused_context_values(
-                problem, selected, projection, recognition_context
+                problem, selected, projection, recognition_context, needs
             )
         ),
     })
     focused_context = _focused_context_values(
-        problem, selected, projection, recognition_context
+        problem, selected, projection, recognition_context, needs
     )
     request = OperationRequest(
         f"{problem.problem_id}-operation-{selected.capability_id}-{projection.topology_version}-{projection.topology_generation}",
@@ -2505,12 +2704,81 @@ def run_connected_processing(
         input_hash,
         selected.cost,
     )
+    decision = ProcessingDecision(
+        decision_id,
+        projection.projection_id,
+        selected.capability_id,
+        selected.operation,
+        selected.branch_id,
+        selected.declared_input_ids,
+        projection.available_capability_ids,
+        projection.inhibited_capability_ids,
+        projection.topology_read_hash,
+        budget.max_cost,
+        selected.cost,
+        (
+            projection.projection_id,
+            f"capability:{selected.capability_id}",
+            f"operation:{selected.operation.value}",
+            f"branch:{selected.branch_id}",
+            f"context:{request.request_id}-context",
+        ),
+    )
     callback = None
     if operation_callbacks:
         callback = operation_callbacks.get(selected.operation) or operation_callbacks.get(selected.operation.value)
     result = callback(request) if callback is not None else _default_result(request)
     if not isinstance(result, OperationResult) or result.request_id != request.request_id:
         raise CognitionValidationError("operation callback must return a bound OperationResult")
+    revised_claims = claims
+    revisions = ()
+    retrieval_observation: Mapping[str, Any] = {}
+    if selected.operation is ProcessingOperation.RETRIEVE:
+        if (
+            selected.declared_output_material_ids
+            or selected.declared_satisfaction_ids
+            or result.downstream_material_ids
+            or result.downstream_satisfaction
+        ):
+            raise CognitionValidationError(
+                "retrieve operation cannot change material or requirement state"
+            )
+        raw_observation = result.retrieval_observation
+        if raw_observation is None and isinstance(result.output, Mapping):
+            raw_observation = result.output.get("retrieval_observation")
+        if raw_observation is None:
+            raise CognitionValidationError(
+                "retrieve callback must return a retrieval observation"
+            )
+        observation = (
+            RetrievalObservation.from_dict(raw_observation)
+            if isinstance(raw_observation, Mapping)
+            else raw_observation
+        )
+        if not isinstance(observation, RetrievalObservation):
+            raise CognitionValidationError("retrieve callback returned an invalid observation")
+        if observation.request_id != request.request_id:
+            raise CognitionValidationError(
+                "retrieval observation must bind the operation request"
+            )
+        validate_retrieval_observation(observation, claims, needs)
+        result = replace(
+            result, retrieval_observation=observation.to_dict()
+        )
+        revised_claims, revisions = _revise_candidate_claims(
+            claims,
+            needs,
+            observation,
+            request,
+            selected,
+            projection,
+            decision,
+        )
+        retrieval_observation = observation.to_dict()
+    elif result.retrieval_observation is not None:
+        raise CognitionValidationError(
+            "non-retrieve operation cannot return retrieval observation"
+        )
     (
         after_materials,
         satisfaction,
@@ -2520,12 +2788,6 @@ def run_connected_processing(
     context = ContextSnapshot(
         f"{request.request_id}-context", problem.graph_hash, selected.branch_id,
         after_materials, satisfaction, context_output_hash, context_changed,
-    )
-    decision = ProcessingDecision(
-        decision_id, projection.projection_id, selected.capability_id, selected.operation, selected.branch_id,
-        selected.declared_input_ids, projection.available_capability_ids, projection.inhibited_capability_ids,
-        projection.topology_read_hash, budget.max_cost, selected.cost,
-        (projection.projection_id, f"capability:{selected.capability_id}", f"operation:{selected.operation.value}", f"branch:{selected.branch_id}", f"context:{context.context_id}"),
     )
     events = (
         ProcessingEvent(
@@ -2552,7 +2814,7 @@ def run_connected_processing(
         result=result,
         context=context,
         events=events,
-        claims=claims,
+        claims=revised_claims,
         reasoning_edges=reasoning_edges,
         obligations=obligations,
         blockers=blockers,
@@ -2560,6 +2822,14 @@ def run_connected_processing(
         budget=budget,
         recognition_envelope=recognition_envelope,
         recognition_proof=recognition_proof,
+            evidence_needs=needs,
+            pre_retrieval_claims=(
+                claims
+                if selected.operation is ProcessingOperation.RETRIEVE
+                else ()
+            ),
+            retrieval_observation=retrieval_observation,
+            candidate_revisions=revisions,
     )
     return _apply_causal_noop(trace, prior_trace)
 
@@ -2730,7 +3000,9 @@ def _processing_trace_from_dict(value: Mapping[str, Any]) -> ProcessingTrace:
         "problem", "projection", "decision", "request", "result", "context",
         "events", "claims", "reasoning_edges", "obligations", "blockers",
         "capabilities", "budget", "causal_noop", "recognition_envelope",
-        "recognition_proof", "candidate_only",
+        "recognition_proof", "evidence_needs", "pre_retrieval_claims",
+        "retrieval_observation",
+        "candidate_revisions", "candidate_only",
         "structural_hash",
     }
     if set(value) != expected_fields:
@@ -2797,6 +3069,7 @@ def _processing_trace_from_dict(value: Mapping[str, Any]) -> ProcessingTrace:
             tuple(result_value["evidence_ids"]),
             tuple(result_value["settlement_ids"]),
             tuple(result_value["adaptive_update_ids"]),
+            result_value.get("retrieval_observation"),
         )
         if result_value is not None
         else None
@@ -2837,6 +3110,8 @@ def _processing_trace_from_dict(value: Mapping[str, Any]) -> ProcessingTrace:
         for item in value["blockers"]
     )
     budget_value = value["budget"]
+    from .external_reality import CandidateEpistemicRevision, EvidenceNeed
+
     trace = ProcessingTrace(
         problem=problem,
         projection=projection,
@@ -2864,6 +3139,17 @@ def _processing_trace_from_dict(value: Mapping[str, Any]) -> ProcessingTrace:
         causal_noop=value["causal_noop"],
         recognition_envelope=value["recognition_envelope"],
         recognition_proof=value["recognition_proof"],
+        evidence_needs=tuple(
+            EvidenceNeed.from_dict(item) for item in value["evidence_needs"]
+        ),
+        pre_retrieval_claims=tuple(
+            _claim_from_dict(item) for item in value["pre_retrieval_claims"]
+        ),
+        retrieval_observation=value["retrieval_observation"],
+        candidate_revisions=tuple(
+            CandidateEpistemicRevision.from_dict(item)
+            for item in value["candidate_revisions"]
+        ),
         candidate_only=value["candidate_only"],
     )
     if value["structural_hash"] != trace.structural_hash:
@@ -2896,6 +3182,10 @@ def replay_processing_trace(record: ProcessingTrace | Mapping[str, Any]) -> Proc
         causal_noop=record.causal_noop,
         recognition_envelope=record.recognition_envelope,
         recognition_proof=record.recognition_proof,
+        evidence_needs=record.evidence_needs,
+        pre_retrieval_claims=record.pre_retrieval_claims,
+        retrieval_observation=record.retrieval_observation,
+        candidate_revisions=record.candidate_revisions,
         candidate_only=record.candidate_only,
     )
     if reconstructed.structural_hash != expected:

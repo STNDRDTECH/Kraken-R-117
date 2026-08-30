@@ -38,6 +38,9 @@ second runtime.
 - `kraken_r/recognition_memory.py` — immutable bounded episode compression,
   exact reference-based expansion, guarded cue recognition, and candidate-only
   reactivation projections included in cognition selection and replay hashes.
+- `kraken_r/external_reality.py` — bounded verification-need derivation,
+  provenance and applicability validation, independence-family collapse,
+  candidate epistemic revision, and network-free replay.
 - `kraken_r/constitution.json` — machine-readable constitution metadata
   validated alongside the registry.
 - `kraken_r/architecture_registry.schema.json` — machine-readable JSON schema.
@@ -68,7 +71,8 @@ pytest -q \
      tests/test_kraken_r_task_integrity.py \
      tests/test_kraken_r_dynamical_substrate.py \
       tests/test_kraken_r_metastability.py \
-      tests/test_kraken_r_recognition_memory.py
+      tests/test_kraken_r_recognition_memory.py \
+      tests/test_kraken_r_external_reality.py
 ```
 
 The command reads the bundled JSON, imports the isolated package, and executes
@@ -674,3 +678,20 @@ Use `FixtureModelProvider` for deterministic qualification. Production callers
 may inject `OpenAICompatibleProvider` into the same `ModelAdapter`; the semantic
 module owns no second provider, credential, network, retry, scheduler, or
 persistence path.
+
+## Bounded external-reality metabolism
+
+Unresolved load-bearing claims derive explicit `EvidenceNeed` records. Only a
+topology-selected `ProcessingOperation.RETRIEVE` callback may return a typed
+`RetrievalObservation`; callers supply the data, and Kraken-R performs no
+network access. Artifacts preserve content hashes, source identity, ancestry,
+root lineage, independence family, dates, jurisdiction, scope, regime, method,
+and exact claim-level assessments.
+
+Valid observations may revise candidate claim status and therefore the next
+selected candidate computation. They never satisfy requirements or mint
+`Evidence`, `Settlement`, execution truth, adaptive credit, authority, or
+writes. Search results remain discovery-only, correlated descendants count
+once, and malformed, stale, inapplicable, forged, or authority-bearing records
+fail closed. Trace replay reconstructs the complete proof without calling the
+retriever or a network.
