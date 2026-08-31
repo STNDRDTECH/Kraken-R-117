@@ -1,7 +1,7 @@
 # Kraken-R Constitution
 
 **Status:** candidate-only foundation  
-**Version:** 1.12.1
+**Version:** 1.13.0
 **Effective boundary:** documentation, standalone validation, deterministic fixture
 execution, and independently verified bounded candidate execution observations
 
@@ -82,6 +82,26 @@ stores, or change `.rogal/` runtime state.
   and replay by deterministic reconstruction without provider or network
   calls. The internet therefore feeds the epistemic graph, rather than
   bypassing it.
+
+## Grounded outcome-learning boundary
+
+- Expected results are immutable pre-outcome commitments bound to the exact
+  replayable cognition trace, authorized task state, route, ordered
+  contribution lineage, and explicit success criteria.
+- Later outcomes are accepted only as signed grounded-execution records that
+  independently reverify against the sealed request and authorized state.
+- Semantic/model reasoning, recognition memory, retrieval, deterministic
+  tools/calculations, and human input remain distinct hash-bound contribution
+  classes. Caller labels cannot grant them credit.
+- Retrieval, deterministic tools, human input, corrections, irrelevant
+  information, partial success, contradictions, insufficient observations, and
+  unsupported causality withhold adaptive credit.
+- Eligible episodes do not create a new settlement or learner. They may only be
+  delegated to the existing constitutional settlement and bounded
+  settlement-grounded route reducer.
+- Replay reconstructs commitments, outcomes, comparisons, attribution, and any
+  delegated result from immutable records without providers, retrieval, tools,
+  workers, or repeated execution.
 
 ## Canonical lifecycle
 

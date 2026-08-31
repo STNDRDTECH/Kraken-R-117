@@ -64,6 +64,12 @@ from .external_reality import (
     legal_currentness_fixture,
     scientific_regime_fixture,
 )
+from .outcome_learning import (
+    ContributionKind,
+    ContributionRecord,
+    OutcomeLearningError,
+    make_contribution,
+)
 from .controlled_evaluation import (
     ControlledEvaluationHarness,
     EvaluationMode,
@@ -1824,6 +1830,32 @@ def validate_metastability_experiments() -> tuple[str, ...]:
     return tuple(errors)
 
 
+def validate_outcome_learning() -> tuple[str, ...]:
+    """Validate the sealed contribution boundary without executing real work."""
+
+    errors: list[str] = []
+    contribution = make_contribution(
+        "validator-human-input",
+        ContributionKind.HUMAN_INPUT,
+        {"answer": "candidate-only"},
+        correction=True,
+        provenance={"source": "standalone-validator"},
+    )
+    if contribution.kind is not ContributionKind.HUMAN_INPUT:
+        errors.append("outcome-learning contribution kind changed")
+    if ContributionRecord.from_dict(contribution.to_dict()) != contribution:
+        errors.append("outcome-learning contribution replay changed")
+    tampered = contribution.to_dict()
+    tampered["relevant"] = not tampered["relevant"]
+    try:
+        ContributionRecord.from_dict(tampered)
+    except OutcomeLearningError:
+        pass
+    else:
+        errors.append("outcome-learning attribution tamper did not fail closed")
+    return tuple(errors)
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         description="Validate the isolated, candidate-only Kraken-R foundation."
@@ -1877,6 +1909,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     semantic_capability_errors = validate_semantic_capability()
     recognition_memory_errors = validate_recognition_memory()
     external_reality_errors = validate_external_reality()
+    outcome_learning_errors = validate_outcome_learning()
     legacy_runtime_errors = validate_legacy_runtime_boundary()
     report = {
         "ok": (
@@ -1899,6 +1932,7 @@ def main(argv: Sequence[str] | None = None) -> int:
             and not semantic_capability_errors
             and not recognition_memory_errors
             and not external_reality_errors
+            and not outcome_learning_errors
             and not legacy_runtime_errors
         ),
         "contracts_ok": not contract_errors,
@@ -1913,6 +1947,11 @@ def main(argv: Sequence[str] | None = None) -> int:
             "ok": not external_reality_errors,
             "errors": list(external_reality_errors),
             "authority": "candidate_epistemic_only",
+        },
+        "outcome_learning": {
+            "ok": not outcome_learning_errors,
+            "errors": list(outcome_learning_errors),
+            "authority": "sealed_grounded_candidate_composition_only",
         },
         "cycle": {
             "ok": not cycle_errors,

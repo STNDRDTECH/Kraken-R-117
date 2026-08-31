@@ -1,7 +1,7 @@
 {
   "constitution_kind": "kraken_r_constitution",
-  "version": "1.12.1",
-  "mission": "Define and deterministically validate a candidate-only, domain-agnostic constitutional lifecycle, including bounded external-reality metabolism that routes caller-supplied retrieval through topology-selected RETRIEVE capability and revises only candidate epistemic reasoning, without allowing search results or retrieval records to become evidence, truth, settlement, requirement satisfaction, execution truth, adaptive credit, writes, providers, workers, stores, or a second runtime.",
+  "version": "1.13.0",
+  "mission": "Define and deterministically validate a candidate-only, domain-agnostic constitutional lifecycle, including sealed pre-outcome predictions bound to exact cognition inputs and independently verified real-work outcomes, while withholding adaptive credit for retrieval, tools, human input, correction, irrelevant information, partial outcomes, contradiction, insufficient grounding, or unsupported causality.",
   "authority_boundary": {
     "legacy_reference": "ROGALDaemon and AutonomousCycle remain the deployed reference authority.",
     "kraken_candidate": "Kraken-R contracts and external-reality retrieval records are candidate infrastructure only. Search result is not evidence; epistemic revision is not adaptive learning; the internet therefore feeds the epistemic graph rather than bypassing it. Retrieval cannot create evidence, truth, requirement satisfaction, settlement, execution truth, adaptive credit, writes, or authority.",

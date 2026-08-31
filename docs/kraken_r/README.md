@@ -41,6 +41,10 @@ second runtime.
 - `kraken_r/external_reality.py` — bounded verification-need derivation,
   provenance and applicability validation, independence-family collapse,
   candidate epistemic revision, and network-free replay.
+- `kraken_r/outcome_learning.py` — sealed expected-result commitments over exact
+  cognition inputs, independently grounded later outcomes, causal contribution
+  attribution, deterministic discrepancy localization, and fail-closed
+  delegation to the existing settlement-grounded learning reducer.
 - `kraken_r/constitution.json` — machine-readable constitution metadata
   validated alongside the registry.
 - `kraken_r/architecture_registry.schema.json` — machine-readable JSON schema.
@@ -72,7 +76,8 @@ pytest -q \
      tests/test_kraken_r_dynamical_substrate.py \
       tests/test_kraken_r_metastability.py \
       tests/test_kraken_r_recognition_memory.py \
-      tests/test_kraken_r_external_reality.py
+       tests/test_kraken_r_external_reality.py \
+       tests/test_kraken_r_outcome_learning.py
 ```
 
 The command reads the bundled JSON, imports the isolated package, and executes
