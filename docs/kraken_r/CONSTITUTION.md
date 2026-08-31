@@ -104,6 +104,27 @@ stores, or change `.rogal/` runtime state.
   workers, or repeated execution.
 
 ## Round 5 full-system causal path
+- Counterfactual shadows are optional zero-authority precommitments, never
+  alternate execution paths. No more than three may be sealed for one primary,
+  and each must remove or alter exactly one declared contributor while holding
+  objective, authorized task state/version, planned work, request lineage,
+  cognition-input boundary, success criteria, and every other contributor
+  fixed.
+- Caller-declared pre-outcome primary and shadow model calls, tokens, and
+  compute are separately recorded under strict per-shadow and aggregate bounds;
+  aggregate bounds include the primary and every shadow. These declarations are
+  not independently metered evidence. An altered shadow
+  carries a complete validated replacement contribution, while a removed
+  shadow retains the exact ordered hashes of every non-target contributor. A
+  shadow carries no executable request and has no execution, evidence,
+  settlement, routing, or adaptive authority.
+- Shadows must be sealed from the primary commitment before Round 5 invokes
+  grounded execution. An outcome-bound learning episode cannot create a
+  shadow. After independent grounding, deterministic comparison is candidate
+  diagnostic evidence only: it can preserve or withhold existing Round 4
+  eligibility, never grant eligibility or rewrite the primary prediction.
+- Shadow replay is structural and offline. It cannot invoke models, retrieval,
+  tools, network, execution, settlement, or adaptive reducers.
 
 - Round 5 is one bounded composition over existing authorities, not a daemon,
   scheduler, controller, store, provider, retriever, tool runner, executor,

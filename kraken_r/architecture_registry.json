@@ -1,7 +1,7 @@
 {
   "registry_kind": "kraken_r_architecture",
   "registry_id": "kraken-r-foundation",
-  "version": "1.14.0",
+  "version": "1.15.0",
   "last_reviewed": "2026-08-31",
   "authority_boundary": {
     "legacy_reference": "rogal_core.daemon.ROGALDaemon and rogal_core.autonomous_cycle.AutonomousCycle remain the deployed reference runtime.",
@@ -9,6 +9,22 @@
     "preservation": "Legacy, alternate, dormant, and forgotten mechanisms are classified and preserved, never deleted by this foundation."
   },
   "mechanisms": [
+    {
+      "mechanism_id": "kraken_r_counterfactual_shadow_precommitments",
+      "category": "memory_learning",
+      "name": "Bounded counterfactual shadow precommitments",
+      "intended_role": "Seal up to three zero-authority single-contributor counterfactual predictions before real work and compare them deterministically with the same later independently grounded outcome as candidate diagnostic evidence.",
+      "current_status": "infrastructure",
+      "dependencies": ["kraken_r_round_five_full_system_integration", "kraken_r_grounded_outcome_learning"],
+      "authority": "kraken_candidate",
+      "evidence_grade": "implemented",
+      "evidence_refs": ["kraken_r/counterfactual_shadows.py", "tests/test_kraken_r_counterfactual_shadows.py", "kraken_r/validate.py"],
+      "duplicates": [],
+      "disposition": "keep",
+      "source_refs": ["docs/kraken_r/CONSTITUTION.md"],
+      "planned": false,
+      "notes": "Diagnostic-only immutable composition. Shadows contain no executable request and cannot execute, create evidence, settle claims, grant credit, write adaptive state, or affect the live path. A diagnostic can only preserve or withhold eligibility already established by Round 4."
+    },
     {
       "mechanism_id": "kraken_r_round_five_full_system_integration",
       "category": "core_execution",

@@ -27,3 +27,4 @@
 - [Kraken-R test-proof boundary](kraken-r-test-proof-boundary.md) — subsystem tests do not establish real-repository causal learning or a sustained whole-loop runtime.
 - [Recognition replay proof placement](recognition-replay-proof-placement.md) — keep full recognition proofs in trace records; focused model context gets only a compact hash-bound envelope.
 - [External relation qualification](external-relation-qualification.md) — claim revision requires whole-source exact assertion/falsifier matching; never substring or extracted-span matching.
+- [Counterfactual shadow boundary](counterfactual-shadow-boundary.md) — shadows are pre-execution Round 5 diagnostics; they may only withhold existing grounded eligibility.

@@ -80,6 +80,13 @@ from .round_five import (
     assess_information_sufficiency,
     consumer_atlas,
 )
+from .counterfactual_shadows import (
+    MAX_SHADOWS,
+    CounterfactualShadowError,
+    ShadowIntervention,
+    ShadowResourceUsage,
+    ShadowSpecification,
+)
 from .controlled_evaluation import (
     ControlledEvaluationHarness,
     EvaluationMode,
@@ -1910,6 +1917,54 @@ def validate_round_five() -> tuple[str, ...]:
     return tuple(errors)
 
 
+def validate_counterfactual_shadows() -> tuple[str, ...]:
+    """Validate the bounded zero-authority shadow surface without live work."""
+
+    errors: list[str] = []
+    if MAX_SHADOWS != 3:
+        errors.append("counterfactual shadow count is not fixed at three")
+    usage = ShadowResourceUsage(1, 100, 20, 5)
+    specification = ShadowSpecification(
+        "validator-shadow",
+        "validator-contributor",
+        ShadowIntervention.REMOVE,
+        "failure",
+        usage,
+    )
+    if specification.resources != usage:
+        errors.append("counterfactual shadow resource accounting changed")
+    try:
+        ShadowResourceUsage(input_tokens=12_001)
+    except CounterfactualShadowError:
+        pass
+    else:
+        errors.append("counterfactual shadow resource overflow did not fail closed")
+    path = Path(__file__).with_name("counterfactual_shadows.py")
+    tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
+    forbidden = {
+        "sub" + "process",
+        "sock" + "et",
+        "requests",
+        "httpx",
+        "sqlite3",
+        "threading",
+    }
+    imports = {
+        name.split(".", 1)[0]
+        for node in ast.walk(tree)
+        for name in (
+            [alias.name for alias in node.names]
+            if isinstance(node, ast.Import)
+            else [node.module or ""]
+            if isinstance(node, ast.ImportFrom)
+            else []
+        )
+    }
+    if imports & forbidden:
+        errors.append("counterfactual shadows introduced a live authority dependency")
+    return tuple(errors)
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         description="Validate the isolated, candidate-only Kraken-R foundation."
@@ -1965,6 +2020,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     external_reality_errors = validate_external_reality()
     outcome_learning_errors = validate_outcome_learning()
     round_five_errors = validate_round_five()
+    counterfactual_shadow_errors = validate_counterfactual_shadows()
     legacy_runtime_errors = validate_legacy_runtime_boundary()
     report = {
         "ok": (
@@ -1989,6 +2045,7 @@ def main(argv: Sequence[str] | None = None) -> int:
             and not external_reality_errors
             and not outcome_learning_errors
             and not round_five_errors
+            and not counterfactual_shadow_errors
             and not legacy_runtime_errors
         ),
         "contracts_ok": not contract_errors,
@@ -2013,6 +2070,11 @@ def main(argv: Sequence[str] | None = None) -> int:
             "ok": not round_five_errors,
             "errors": list(round_five_errors),
             "authority": "bounded_existing-authority_composition_only",
+        },
+        "counterfactual_shadows": {
+            "ok": not counterfactual_shadow_errors,
+            "errors": list(counterfactual_shadow_errors),
+            "authority": "zero_authority_candidate_diagnostic_only",
         },
         "cycle": {
             "ok": not cycle_errors,

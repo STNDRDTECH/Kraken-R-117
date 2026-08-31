@@ -51,6 +51,15 @@ from .outcome_learning import (
     seal_prediction_request,
 )
 from .plastic_routing import RouteTopology, SettlementRouteRecord, select_candidate_route
+from .counterfactual_shadows import (
+    ShadowBundle,
+    ShadowDiagnostic,
+    ShadowResourceUsage,
+    ShadowSpecification,
+    evaluate_shadow_diagnostic,
+    replay_shadow_diagnostic,
+    _seal_shadow_bundle,
+)
 
 
 MAX_HUMAN_INPUTS = 8
@@ -595,6 +604,8 @@ class RoundFiveTrace:
     topology_before: RouteTopology
     topology_after: RouteTopology
     atlas_audit: tuple[ConsumerNoOp, ...]
+    shadow_bundle: ShadowBundle | None = None
+    shadow_diagnostic: ShadowDiagnostic | None = None
     candidate_only: bool = True
     trace_hash: str = ""
 
@@ -620,6 +631,21 @@ class RoundFiveTrace:
             raise RoundFiveError("round-five settlement record is invalid")
         if not isinstance(self.topology_before, RouteTopology) or not isinstance(self.topology_after, RouteTopology):
             raise RoundFiveError("round-five topology records are invalid")
+        if (self.shadow_bundle is None) != (self.shadow_diagnostic is None):
+            raise RoundFiveError("round-five shadow bundle and diagnostic must be paired")
+        if self.shadow_bundle is not None:
+            raw_episode = evaluate_grounded_outcome(
+                self.commitment, self.learning_episode.outcome
+            )
+            if (
+                not isinstance(self.shadow_bundle, ShadowBundle)
+                or not isinstance(self.shadow_diagnostic, ShadowDiagnostic)
+                or self.shadow_bundle.primary != self.commitment
+                or self.shadow_diagnostic.bundle != self.shadow_bundle
+                or self.shadow_diagnostic
+                != evaluate_shadow_diagnostic(self.shadow_bundle, raw_episode)
+            ):
+                raise RoundFiveError("round-five shadow diagnostic binding is invalid")
         commitment = self.learning_episode.commitment
         comparison = self.learning_episode.comparison
         selection = self.settlement_record.selection
@@ -639,7 +665,10 @@ class RoundFiveTrace:
             != self.learning_episode.outcome.record_hash
         ):
             raise RoundFiveError("round-five causal bindings are inconsistent")
-        if self.learning_episode.attribution.eligible:
+        effective_eligible = self.learning_episode.attribution.eligible and (
+            self.shadow_diagnostic is None or self.shadow_diagnostic.eligible
+        )
+        if effective_eligible:
             if self.adaptive_audit is None or not self.learning_episode.adaptive_learning:
                 raise RoundFiveError("eligible round-five trace lacks delegated learning")
             if self.topology_before == self.topology_after:
@@ -697,6 +726,8 @@ class RoundFiveTrace:
             "topology_before": _topology_dict(self.topology_before),
             "topology_after": _topology_dict(self.topology_after),
             "atlas_audit": [item.to_dict() for item in self.atlas_audit],
+            "shadow_bundle": self.shadow_bundle.to_dict() if self.shadow_bundle is not None else None,
+            "shadow_diagnostic": self.shadow_diagnostic.to_dict() if self.shadow_diagnostic is not None else None,
             "candidate_only": self.candidate_only,
         }
         if include_hash:
@@ -758,6 +789,9 @@ def run_round_five(
     sufficiency: InformationSufficiency | None = None,
     human_inputs: Iterable[HumanInput] = (),
     contributions: Iterable[ContributionRecord] = (),
+    shadow_specifications: Iterable[ShadowSpecification] = (),
+    shadow_bundle_id: str | None = None,
+    primary_resources: ShadowResourceUsage | None = None,
 ) -> RoundFiveTrace:
     """Run the one canonical Round 5 path through existing authorities.
 
@@ -889,6 +923,18 @@ def run_round_five(
         raise
     except Exception as exc:
         raise RoundFiveError("round-five prediction precommitment failed") from exc
+    shadow_specs = tuple(shadow_specifications)
+    shadow_bundle: ShadowBundle | None = None
+    if shadow_specs:
+        try:
+            shadow_bundle = _seal_shadow_bundle(
+                commitment,
+                shadow_specs,
+                bundle_id=shadow_bundle_id or f"{commitment_id}-shadows",
+                primary_resources=primary_resources,
+            )
+        except Exception as exc:
+            raise RoundFiveError("round-five shadow precommitment failed") from exc
     try:
         record = executor.execute(sealed_request, authorized_state=authorized_state)
         verifier = executor.verifier()
@@ -914,6 +960,11 @@ def run_round_five(
             trusted_executor=executor.trusted_executor(),
         )
         episode = evaluate_grounded_outcome(commitment, outcome)
+        shadow_diagnostic = (
+            evaluate_shadow_diagnostic(shadow_bundle, episode)
+            if shadow_bundle is not None
+            else None
+        )
         settlement_record = SettlementRouteRecord(
             f"{commitment_id}-settlement-route",
             selection,
@@ -940,7 +991,10 @@ def run_round_five(
     topology_before = adaptive_state.route_topology
     adaptive_after = adaptive_state
     audit: AdaptiveAudit | None = None
-    if episode.attribution.eligible:
+    effective_eligible = episode.attribution.eligible and (
+        shadow_diagnostic is None or shadow_diagnostic.eligible
+    )
+    if effective_eligible:
         try:
             _, episode = apply_outcome_learning(
                 topology_before, episode, settlement_record
@@ -965,6 +1019,8 @@ def run_round_five(
         topology_before,
         adaptive_after.route_topology,
         atlas,
+        shadow_bundle,
+        shadow_diagnostic,
     )
     if len(json.dumps(trace.to_dict(), sort_keys=True).encode("utf-8")) > MAX_TRACE_BYTES:
         raise RoundFiveError("round-five trace exceeds its byte bound")
@@ -988,11 +1044,26 @@ def replay_round_five(
         raise RoundFiveError("replay initial topology does not match the trace")
     try:
         replayed_processing = replay_processing_trace(trace.processing_trace)
-        replayed_episode, replayed_topology = replay_outcome_learning(
-            trace.learning_episode,
-            topology=adaptive_state.route_topology,
-            settlement_record=trace.settlement_record,
-        )
+        if trace.shadow_diagnostic is not None:
+            raw_episode = evaluate_grounded_outcome(
+                trace.learning_episode.commitment, trace.learning_episode.outcome
+            )
+            replay_shadow_diagnostic(
+                trace.shadow_bundle,
+                raw_episode,
+                trace.shadow_diagnostic,
+            )
+        if trace.shadow_diagnostic is not None and not trace.shadow_diagnostic.eligible:
+            replayed_episode = evaluate_grounded_outcome(
+                trace.learning_episode.commitment, trace.learning_episode.outcome
+            )
+            replayed_topology = adaptive_state.route_topology
+        else:
+            replayed_episode, replayed_topology = replay_outcome_learning(
+                trace.learning_episode,
+                topology=adaptive_state.route_topology,
+                settlement_record=trace.settlement_record,
+            )
         verifier = GroundedExecutionVerifier(trace.outcome.trusted_executor)
         replayed_grounded = replay_grounded_execution(
             trace.outcome.verified_execution.record,
