@@ -70,6 +70,16 @@ from .outcome_learning import (
     OutcomeLearningError,
     make_contribution,
 )
+from .round_five import (
+    HumanAuthority,
+    HumanInput,
+    HumanInputRole,
+    InformationSufficiency,
+    RoundFiveError,
+    SufficiencyDecision,
+    assess_information_sufficiency,
+    consumer_atlas,
+)
 from .controlled_evaluation import (
     ControlledEvaluationHarness,
     EvaluationMode,
@@ -1856,6 +1866,50 @@ def validate_outcome_learning() -> tuple[str, ...]:
     return tuple(errors)
 
 
+def validate_round_five() -> tuple[str, ...]:
+    """Validate the bounded cross-layer control plane without live execution."""
+
+    errors: list[str] = []
+    sufficient = assess_information_sufficiency(
+        known_facts=("the exact bounded work request is identified",)
+    )
+    if sufficient.decision is not SufficiencyDecision.SUFFICIENT:
+        errors.append("round-five sufficient information did not permit execution")
+    blocked = assess_information_sufficiency(non_identifiable=True)
+    if blocked.decision is not SufficiencyDecision.BLOCKED:
+        errors.append("round-five non-identifiability did not fail closed")
+    authorization = HumanInput(
+        "validator-continuation",
+        HumanInputRole.AUTHORIZATION,
+        {"instruction": "continue with bounded uncertainty"},
+        HumanAuthority.CONTINUE,
+    )
+    if authorization.to_contribution().kind is not ContributionKind.HUMAN_INPUT:
+        errors.append("round-five human input lost its distinct contribution class")
+    atlas = {entry.field: entry for entry in consumer_atlas()}
+    if "route_topology" not in atlas or not atlas["route_topology"].causal:
+        errors.append("round-five consumer atlas does not expose topology causality")
+    for field_name in (
+        "qualified_retrieval",
+        "human_input",
+        "deterministic_tool",
+        "declared_only_model_fields",
+    ):
+        if field_name not in atlas or atlas[field_name].causal:
+            errors.append(f"round-five {field_name} is not declared as a no-op")
+    try:
+        InformationSufficiency(
+            sufficient.decision,
+            sufficient.known_facts,
+            decision_hash="0" * 64,
+        )
+    except RoundFiveError:
+        pass
+    else:
+        errors.append("round-five sufficiency tamper did not fail closed")
+    return tuple(errors)
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         description="Validate the isolated, candidate-only Kraken-R foundation."
@@ -1910,6 +1964,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     recognition_memory_errors = validate_recognition_memory()
     external_reality_errors = validate_external_reality()
     outcome_learning_errors = validate_outcome_learning()
+    round_five_errors = validate_round_five()
     legacy_runtime_errors = validate_legacy_runtime_boundary()
     report = {
         "ok": (
@@ -1933,6 +1988,7 @@ def main(argv: Sequence[str] | None = None) -> int:
             and not recognition_memory_errors
             and not external_reality_errors
             and not outcome_learning_errors
+            and not round_five_errors
             and not legacy_runtime_errors
         ),
         "contracts_ok": not contract_errors,
@@ -1952,6 +2008,11 @@ def main(argv: Sequence[str] | None = None) -> int:
             "ok": not outcome_learning_errors,
             "errors": list(outcome_learning_errors),
             "authority": "sealed_grounded_candidate_composition_only",
+        },
+        "round_five": {
+            "ok": not round_five_errors,
+            "errors": list(round_five_errors),
+            "authority": "bounded_existing-authority_composition_only",
         },
         "cycle": {
             "ok": not cycle_errors,

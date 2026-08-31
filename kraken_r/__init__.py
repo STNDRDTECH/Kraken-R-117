@@ -373,6 +373,23 @@ from .outcome_learning import (
     replay_outcome_learning_history,
     seal_prediction_request,
 )
+from .round_five import (
+    ConsumerAtlasEntry,
+    ConsumerNoOp,
+    HumanAuthority,
+    HumanInput,
+    HumanInputRole,
+    InformationSufficiency,
+    RoundFiveError,
+    RoundFiveTrace,
+    SufficiencyDecision,
+    assess_information_sufficiency,
+    audit_consumer_atlas,
+    consumer_atlas,
+    replay_round_five,
+    run_round_five,
+    run_round_five_integration,
+)
 
 __all__ = [
     "ADAPTIVE_FIELD_CONSUMERS",
@@ -688,4 +705,19 @@ __all__ = [
     "replay_outcome_learning",
     "replay_outcome_learning_history",
     "seal_prediction_request",
+    "ConsumerAtlasEntry",
+    "ConsumerNoOp",
+    "HumanAuthority",
+    "HumanInput",
+    "HumanInputRole",
+    "InformationSufficiency",
+    "RoundFiveError",
+    "RoundFiveTrace",
+    "SufficiencyDecision",
+    "assess_information_sufficiency",
+    "audit_consumer_atlas",
+    "consumer_atlas",
+    "replay_round_five",
+    "run_round_five",
+    "run_round_five_integration",
 ]

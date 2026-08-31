@@ -1,7 +1,7 @@
 # Kraken-R Constitution
 
 **Status:** candidate-only foundation  
-**Version:** 1.13.0
+**Version:** 1.14.0
 **Effective boundary:** documentation, standalone validation, deterministic fixture
 execution, and independently verified bounded candidate execution observations
 
@@ -102,6 +102,35 @@ stores, or change `.rogal/` runtime state.
 - Replay reconstructs commitments, outcomes, comparisons, attribution, and any
   delegated result from immutable records without providers, retrieval, tools,
   workers, or repeated execution.
+
+## Round 5 full-system causal path
+
+- Round 5 is one bounded composition over existing authorities, not a daemon,
+  scheduler, controller, store, provider, retriever, tool runner, executor,
+  settlement engine, learner, or mutation path.
+- The canonical composed order is objective/problem state, replayable cognition,
+  explicit information sufficiency, immutable prediction commitment, grounded
+  execution and independent verification, constitutional settlement, causal
+  attribution, existing adaptive credit, and an observable later topology read.
+- Clarification, qualified retrieval, deterministic calculation,
+  non-identifiability, and explicit-assumption decisions stop before execution.
+  Continuing despite known uncertainty requires typed human authorization and
+  preserves every unresolved part in the immutable trace.
+- Human input has typed roles and explicit bounded authority. It may clarify,
+  authorize bounded continuation, constrain, correct, or supply information,
+  but it cannot establish execution truth, evidence, settlement, adaptive
+  eligibility, or mutation authority.
+- Retrieval, human input, corrections, and deterministic tools remain distinct
+  contribution classes. If decisive, they withhold adaptive credit even when
+  the independently grounded task succeeds.
+- The consumer atlas names each field's producer, consumers, effect, later
+  observable consequence, and no-op condition. Declared-only model fields,
+  non-decisive qualified retrieval, human input, and deterministic tools remain
+  explicit no-ops for adaptation.
+- Offline replay requires the immutable initial adaptive-state record and
+  validates cognition, outcome learning, constitutional settlement, and
+  adaptive reduction solely from immutable records; it does not rerun models,
+  providers, retrieval, tools, network access, or execution.
 
 ## Canonical lifecycle
 

@@ -1,10 +1,10 @@
 {
   "constitution_kind": "kraken_r_constitution",
-  "version": "1.13.0",
-  "mission": "Define and deterministically validate a candidate-only, domain-agnostic constitutional lifecycle, including sealed pre-outcome predictions bound to exact cognition inputs and independently verified real-work outcomes, while withholding adaptive credit for retrieval, tools, human input, correction, irrelevant information, partial outcomes, contradiction, insufficient grounding, or unsupported causality.",
+  "version": "1.14.0",
+  "mission": "Define and deterministically validate a candidate-only, domain-agnostic constitutional lifecycle, including one bounded full-system causal path from objective and replayable cognition through information sufficiency, sealed prediction, independently verified real-work outcome, attribution, settlement, adaptive credit, and observable changed future computation, while withholding credit for retrieval, tools, human input, correction, irrelevant information, partial outcomes, contradiction, insufficient grounding, or unsupported causality.",
   "authority_boundary": {
     "legacy_reference": "ROGALDaemon and AutonomousCycle remain the deployed reference authority.",
-    "kraken_candidate": "Kraken-R contracts and external-reality retrieval records are candidate infrastructure only. Search result is not evidence; epistemic revision is not adaptive learning; the internet therefore feeds the epistemic graph rather than bypassing it. Retrieval cannot create evidence, truth, requirement satisfaction, settlement, execution truth, adaptive credit, writes, or authority.",
+    "kraken_candidate": "Kraken-R contracts, external-reality records, and the bounded Round 5 composition are candidate infrastructure only. Round 5 delegates execution, settlement, and adaptation to existing authorities and creates no alternate runtime. Search result is not evidence; epistemic revision is not adaptive learning; retrieval, tools, and human input cannot create adaptive credit.",
     "allowed_effects": ["documentation", "standalone_validation", "candidate_cycle_execution"],
     "forbidden_effects": ["runtime_wiring", "live_store_write", "event_subscription", "mutation_actuation"]
   },

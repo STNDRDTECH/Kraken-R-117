@@ -1,7 +1,7 @@
 {
   "registry_kind": "kraken_r_architecture",
   "registry_id": "kraken-r-foundation",
-  "version": "1.13.0",
+  "version": "1.14.0",
   "last_reviewed": "2026-08-31",
   "authority_boundary": {
     "legacy_reference": "rogal_core.daemon.ROGALDaemon and rogal_core.autonomous_cycle.AutonomousCycle remain the deployed reference runtime.",
@@ -9,6 +9,22 @@
     "preservation": "Legacy, alternate, dormant, and forgotten mechanisms are classified and preserved, never deleted by this foundation."
   },
   "mechanisms": [
+    {
+      "mechanism_id": "kraken_r_round_five_full_system_integration",
+      "category": "core_execution",
+      "name": "Bounded full-system causal integration",
+      "intended_role": "Compose objective state, replayable cognition, information sufficiency, typed human authority, sealed prediction, independently grounded execution, constitutional settlement, causal attribution, and existing adaptive credit into one finite inspectable path.",
+      "current_status": "infrastructure",
+      "dependencies": ["proof_carrying_cognition_kernel", "kraken_r_grounded_outcome_learning", "kraken_r_bounded_adaptive_substrate"],
+      "authority": "kraken_candidate",
+      "evidence_grade": "implemented",
+      "evidence_refs": ["kraken_r/round_five.py", "tests/test_kraken_r_round_five.py", "kraken_r/validate.py"],
+      "duplicates": [],
+      "disposition": "keep",
+      "source_refs": ["docs/kraken_r/CONSTITUTION.md"],
+      "planned": false,
+      "notes": "Finite composition only: no daemon, scheduler, provider, retrieval client, tool runner, alternate executor, store, or mutation authority. Retrieval, human, correction, and deterministic-tool dependence remain distinct and withhold adaptive credit."
+    },
     {
       "mechanism_id": "kraken_r_grounded_outcome_learning",
       "category": "memory_learning",

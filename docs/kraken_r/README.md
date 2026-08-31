@@ -45,6 +45,10 @@ second runtime.
   cognition inputs, independently grounded later outcomes, causal contribution
   attribution, deterministic discrepancy localization, and fail-closed
   delegation to the existing settlement-grounded learning reducer.
+- `kraken_r/round_five.py` — one finite full-system composition from objective,
+  replayable cognition, and explicit information sufficiency through sealed
+  prediction, independently grounded execution, attribution, constitutional
+  settlement, existing adaptive credit, and observable later topology use.
 - `kraken_r/constitution.json` — machine-readable constitution metadata
   validated alongside the registry.
 - `kraken_r/architecture_registry.schema.json` — machine-readable JSON schema.
@@ -77,7 +81,8 @@ pytest -q \
       tests/test_kraken_r_metastability.py \
       tests/test_kraken_r_recognition_memory.py \
        tests/test_kraken_r_external_reality.py \
-       tests/test_kraken_r_outcome_learning.py
+       tests/test_kraken_r_outcome_learning.py \
+       tests/test_kraken_r_round_five.py
 ```
 
 The command reads the bundled JSON, imports the isolated package, and executes
@@ -88,6 +93,25 @@ plasticity coverage. It does not import `rogal_core`,
 start a workflow, contact an LLM, open a live store, or write runtime state.
 The Round 7 provider is deterministic fixture-only unless a caller explicitly
 injects a configured provider.
+
+## Round 5 full-system integration
+
+`run_round_five` is a finite composition boundary, not another runtime. It
+requires a replayable cognition trace, an explicit information-sufficiency
+decision, an exact authorized state, and a future grounded-execution request.
+It seals the prediction before execution, independently verifies the result,
+uses the existing constitutional cycle for settlement, and delegates eligible
+credit to `apply_grounded_adaptation`.
+
+Clarification, retrieval, deterministic calculation, blocked identification,
+and explicit-assumption decisions stop before execution. Continuing with
+known uncertainty requires a typed human authorization and preserves the
+unresolved parts in the trace. Decisive retrieval, tool, human, or correction
+inputs remain separate contribution classes and withhold adaptive credit.
+`replay_round_five` requires the immutable initial `AdaptiveState` and
+reconstructs the processing, outcome-learning, settlement, and adaptation
+results from those records without rerunning a model, provider, retrieval,
+tool, network request, or grounded execution.
 
 ## Bounded grounded execution
 
