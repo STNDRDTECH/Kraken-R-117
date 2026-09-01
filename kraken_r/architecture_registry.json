@@ -1,7 +1,7 @@
 {
   "registry_kind": "kraken_r_architecture",
   "registry_id": "kraken-r-foundation",
-  "version": "1.15.0",
+  "version": "1.16.0",
   "last_reviewed": "2026-08-31",
   "authority_boundary": {
     "legacy_reference": "rogal_core.daemon.ROGALDaemon and rogal_core.autonomous_cycle.AutonomousCycle remain the deployed reference runtime.",
@@ -13,7 +13,7 @@
       "mechanism_id": "kraken_r_counterfactual_shadow_precommitments",
       "category": "memory_learning",
       "name": "Bounded counterfactual shadow precommitments",
-      "intended_role": "Seal up to three zero-authority single-contributor counterfactual predictions before real work and compare them deterministically with the same later independently grounded outcome as candidate diagnostic evidence.",
+      "intended_role": "Anchor up to three exact zero-authority single-contributor shadow intents into the attested pre-execution grounded request, distinguish structural diagnostics from receipt-backed executed observations, and replay them offline.",
       "current_status": "infrastructure",
       "dependencies": ["kraken_r_round_five_full_system_integration", "kraken_r_grounded_outcome_learning"],
       "authority": "kraken_candidate",
@@ -23,7 +23,7 @@
       "disposition": "keep",
       "source_refs": ["docs/kraken_r/CONSTITUTION.md"],
       "planned": false,
-      "notes": "Diagnostic-only immutable composition. Shadows contain no executable request and cannot execute, create evidence, settle claims, grant credit, write adaptive state, or affect the live path. A diagnostic can only preserve or withhold eligibility already established by Round 4."
+      "notes": "Diagnostic-only immutable composition. A durable one-shot ledger claim and the primary execution attestation prevent post-outcome resealing or full-rehash history replacement. Structural shadows cannot claim measured work; executed shadows consume existing verified receipts for bounded-work and resource reporting but make no causal-effect claim without a transformation witness. Diagnostics never control grounded adaptive eligibility."
     },
     {
       "mechanism_id": "kraken_r_round_five_full_system_integration",

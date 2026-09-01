@@ -105,26 +105,37 @@ stores, or change `.rogal/` runtime state.
 
 ## Round 5 full-system causal path
 - Counterfactual shadows are optional zero-authority precommitments, never
-  alternate execution paths. No more than three may be sealed for one primary,
+  alternate execution paths. Their exact canonical intent is embedded in the
+  sealed grounded action, claimed once in the existing durable delivery ledger,
+  and covered by the later executor attestation. No more than three may be sealed for one primary,
   and each must remove or alter exactly one declared contributor while holding
   objective, authorized task state/version, planned work, request lineage,
   cognition-input boundary, success criteria, and every other contributor
   fixed.
-- Caller-declared pre-outcome primary and shadow model calls, tokens, and
+- Caller-declared pre-outcome primary and structural-shadow model calls, tokens, and
   compute are separately recorded under strict per-shadow and aggregate bounds;
   aggregate bounds include the primary and every shadow. These declarations are
-  not independently metered evidence. An altered shadow
+  not independently metered evidence and cannot support execution or causal
+  claims. An executed shadow is explicitly typed and may report bounded work
+  and measured resources only from
+  a compatible, independently verified existing grounded-execution receipt; it
+  does not create another executor or execution path. Existing receipts do not
+  prove that caller-authored files embody the semantic contributor
+  transformation, so executed-shadow comparisons still make no causal-effect
+  claim. An altered shadow
   carries a complete validated replacement contribution, while a removed
   shadow retains the exact ordered hashes of every non-target contributor. A
   shadow carries no executable request and has no execution, evidence,
   settlement, routing, or adaptive authority.
-- Shadows must be sealed from the primary commitment before Round 5 invokes
-  grounded execution. An outcome-bound learning episode cannot create a
-  shadow. After independent grounding, deterministic comparison is candidate
-  diagnostic evidence only: it can preserve or withhold existing Round 4
-  eligibility, never grant eligibility or rewrite the primary prediction.
-- Shadow replay is structural and offline. It cannot invoke models, retrieval,
-  tools, network, execution, settlement, or adaptive reducers.
+- Shadows must match the request-bound intent before Round 5 invokes grounded
+  execution. A second seal, substituted identity, or post-outcome fully rehashed
+  history fails closed against that ancestry. After independent grounding,
+  deterministic comparison is candidate diagnostic evidence only: it reports
+  effects but cannot grant or veto eligibility established by grounded outcome
+  learning.
+- Shadow and cold serialized Round Five replay are offline. They reconstruct
+  typed authority records and cannot invoke models, retrieval, tools, network,
+  execution, settlement, or adaptive reducers.
 
 - Round 5 is one bounded composition over existing authorities, not a daemon,
   scheduler, controller, store, provider, retriever, tool runner, executor,

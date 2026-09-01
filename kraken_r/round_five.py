@@ -58,6 +58,7 @@ from .counterfactual_shadows import (
     ShadowSpecification,
     evaluate_shadow_diagnostic,
     replay_shadow_diagnostic,
+    shadow_intent_hash,
     _seal_shadow_bundle,
 )
 
@@ -665,9 +666,7 @@ class RoundFiveTrace:
             != self.learning_episode.outcome.record_hash
         ):
             raise RoundFiveError("round-five causal bindings are inconsistent")
-        effective_eligible = self.learning_episode.attribution.eligible and (
-            self.shadow_diagnostic is None or self.shadow_diagnostic.eligible
-        )
+        effective_eligible = self.learning_episode.attribution.eligible
         if effective_eligible:
             if self.adaptive_audit is None or not self.learning_episode.adaptive_learning:
                 raise RoundFiveError("eligible round-five trace lacks delegated learning")
@@ -733,6 +732,140 @@ class RoundFiveTrace:
         if include_hash:
             value["trace_hash"] = self.trace_hash
         return value
+
+
+@dataclass(frozen=True)
+class ColdRoundFiveReplay:
+    """Typed, offline validation result reconstructed from persisted records."""
+
+    trace_hash: str
+    processing_trace: ProcessingTrace
+    learning_episode: GroundedLearningEpisode
+    shadow_bundle: ShadowBundle | None
+    shadow_diagnostic: ShadowDiagnostic | None
+    grounded_execution: VerifiedGroundedExecution
+    candidate_only: bool = True
+
+    def __post_init__(self) -> None:
+        if (
+            not isinstance(self.trace_hash, str)
+            or len(self.trace_hash) != 64
+            or self.candidate_only is not True
+        ):
+            raise RoundFiveError("cold replay result is invalid")
+
+
+def replay_round_five_serialized(
+    record: str | Mapping[str, Any],
+    *,
+    trusted_executor: TrustedExecutorIdentity,
+) -> ColdRoundFiveReplay:
+    """Cold-replay authority-bearing Round Five records without callbacks.
+
+    The outer presentation-only records that lack typed reconstructors are
+    checked by the full trace hash and explicit causal invariants.  Cognition,
+    outcome learning, grounded execution, and shadows are reconstructed and
+    independently replayed through their existing strict seams.
+    """
+
+    try:
+        if isinstance(record, str):
+            if len(record.encode("utf-8")) > MAX_TRACE_BYTES:
+                raise RoundFiveError("serialized round-five trace exceeds its byte bound")
+            payload = json.loads(record)
+        elif isinstance(record, Mapping):
+            payload = dict(record)
+            if len(json.dumps(payload, sort_keys=True).encode("utf-8")) > MAX_TRACE_BYTES:
+                raise RoundFiveError("serialized round-five trace exceeds its byte bound")
+        else:
+            raise RoundFiveError("cold replay requires serialized trace records")
+        expected_fields = {
+            "objective",
+            "problem_id",
+            "processing_trace",
+            "sufficiency",
+            "human_inputs",
+            "commitment",
+            "outcome",
+            "learning_episode",
+            "settlement_record",
+            "adaptive_audit",
+            "topology_before",
+            "topology_after",
+            "atlas_audit",
+            "shadow_bundle",
+            "shadow_diagnostic",
+            "candidate_only",
+            "trace_hash",
+        }
+        if set(payload) != expected_fields or payload["candidate_only"] is not True:
+            raise RoundFiveError("serialized round-five trace schema is invalid")
+        trace_hash = payload["trace_hash"]
+        if trace_hash != _digest(
+            {key: value for key, value in payload.items() if key != "trace_hash"}
+        ):
+            raise RoundFiveError("serialized round-five trace hash is invalid")
+        processing = replay_processing_trace(payload["processing_trace"])
+        episode = GroundedLearningEpisode.from_dict(payload["learning_episode"])
+        if (
+            payload["commitment"] != episode.commitment.to_dict()
+            or payload["outcome"] != episode.outcome.to_dict()
+            or processing.structural_hash != episode.commitment.cognitive_trace_hash
+        ):
+            raise RoundFiveError("serialized round-five causal records disagree")
+        bundle = (
+            ShadowBundle.from_dict(payload["shadow_bundle"])
+            if payload["shadow_bundle"] is not None
+            else None
+        )
+        diagnostic = (
+            ShadowDiagnostic.from_dict(payload["shadow_diagnostic"])
+            if payload["shadow_diagnostic"] is not None
+            else None
+        )
+        if (bundle is None) != (diagnostic is None):
+            raise RoundFiveError("serialized shadow records must be paired")
+        if bundle is not None:
+            raw_episode = evaluate_grounded_outcome(
+                episode.commitment,
+                episode.outcome,
+            )
+            if bundle.primary != episode.commitment:
+                raise RoundFiveError("serialized shadow primary changed")
+            replay_shadow_diagnostic(bundle, raw_episode, diagnostic)
+        if not isinstance(trusted_executor, TrustedExecutorIdentity):
+            raise RoundFiveError(
+                "cold replay requires an external trusted executor identity"
+            )
+        if episode.outcome.trusted_executor != trusted_executor:
+            raise RoundFiveError(
+                "serialized executor identity does not match the external trust anchor"
+            )
+        verifier = GroundedExecutionVerifier(trusted_executor)
+        grounded = replay_grounded_execution(
+            episode.outcome.verified_execution.record,
+            request=episode.outcome.request,
+            authorized_state=episode.outcome.authorized_state,
+            verifier=verifier,
+        )
+        adaptive_claimed = payload["adaptive_audit"] is not None
+        topology_changed = payload["topology_before"] != payload["topology_after"]
+        if episode.attribution.eligible != adaptive_claimed or adaptive_claimed != topology_changed:
+            raise RoundFiveError(
+                "serialized adaptive effect disagrees with grounded eligibility"
+            )
+    except RoundFiveError:
+        raise
+    except Exception as exc:
+        raise RoundFiveError("cold serialized round-five replay rejected the trace") from exc
+    return ColdRoundFiveReplay(
+        trace_hash,
+        processing,
+        episode,
+        bundle,
+        diagnostic,
+        grounded,
+    )
 
 
 def _validate_human_continuation(
@@ -875,6 +1008,35 @@ def run_round_five(
         commitment_id = f"{objective.objective_id}-round-five-commitment"
     if outcome_id is None:
         outcome_id = f"{commitment_id}-outcome"
+    shadow_specs = tuple(shadow_specifications)
+    shadow_bundle_id = shadow_bundle_id or f"{commitment_id}-shadows"
+    if shadow_specs:
+        try:
+            intent_hash = shadow_intent_hash(
+                bundle_id=shadow_bundle_id,
+                commitment_id=commitment_id,
+                transaction_id=grounded_request.transaction_id,
+                objective_id=objective.objective_id,
+                task_state_id=authorized_state.state_id,
+                task_state_version=authorized_state.version,
+                request_id=grounded_request.request_id,
+                specifications=shadow_specs,
+                primary_resources=primary_resources or ShadowResourceUsage(),
+            )
+            parameters = dict(grounded_request.action.parameters)
+            if "shadow_precommitment_intent_hash" in parameters:
+                raise RoundFiveError(
+                    "grounded request already carries a shadow intent"
+                )
+            parameters["shadow_precommitment_intent_hash"] = intent_hash
+            grounded_request = replace(
+                grounded_request,
+                action=replace(grounded_request.action, parameters=parameters),
+            )
+        except RoundFiveError:
+            raise
+        except Exception as exc:
+            raise RoundFiveError("round-five shadow lifecycle anchoring failed") from exc
     try:
         selection = select_candidate_route(
             adaptive_state.route_topology,
@@ -923,15 +1085,15 @@ def run_round_five(
         raise
     except Exception as exc:
         raise RoundFiveError("round-five prediction precommitment failed") from exc
-    shadow_specs = tuple(shadow_specifications)
     shadow_bundle: ShadowBundle | None = None
     if shadow_specs:
         try:
             shadow_bundle = _seal_shadow_bundle(
                 commitment,
                 shadow_specs,
-                bundle_id=shadow_bundle_id or f"{commitment_id}-shadows",
+                bundle_id=shadow_bundle_id,
                 primary_resources=primary_resources,
+                lifecycle_ledger=executor.delivery_ledger,
             )
         except Exception as exc:
             raise RoundFiveError("round-five shadow precommitment failed") from exc
@@ -991,9 +1153,9 @@ def run_round_five(
     topology_before = adaptive_state.route_topology
     adaptive_after = adaptive_state
     audit: AdaptiveAudit | None = None
-    effective_eligible = episode.attribution.eligible and (
-        shadow_diagnostic is None or shadow_diagnostic.eligible
-    )
+    # Shadow diagnostics report counterfactual effects but never grant or veto
+    # grounded adaptive credit.
+    effective_eligible = episode.attribution.eligible
     if effective_eligible:
         try:
             _, episode = apply_outcome_learning(
@@ -1053,17 +1215,11 @@ def replay_round_five(
                 raw_episode,
                 trace.shadow_diagnostic,
             )
-        if trace.shadow_diagnostic is not None and not trace.shadow_diagnostic.eligible:
-            replayed_episode = evaluate_grounded_outcome(
-                trace.learning_episode.commitment, trace.learning_episode.outcome
-            )
-            replayed_topology = adaptive_state.route_topology
-        else:
-            replayed_episode, replayed_topology = replay_outcome_learning(
-                trace.learning_episode,
-                topology=adaptive_state.route_topology,
-                settlement_record=trace.settlement_record,
-            )
+        replayed_episode, replayed_topology = replay_outcome_learning(
+            trace.learning_episode,
+            topology=adaptive_state.route_topology,
+            settlement_record=trace.settlement_record,
+        )
         verifier = GroundedExecutionVerifier(trace.outcome.trusted_executor)
         replayed_grounded = replay_grounded_execution(
             trace.outcome.verified_execution.record,
@@ -1104,6 +1260,7 @@ def run_round_five_integration(*args: Any, **kwargs: Any) -> RoundFiveTrace:
 __all__ = [
     "ConsumerAtlasEntry",
     "ConsumerNoOp",
+    "ColdRoundFiveReplay",
     "HumanAuthority",
     "HumanInput",
     "HumanInputRole",
@@ -1115,6 +1272,7 @@ __all__ = [
     "audit_consumer_atlas",
     "consumer_atlas",
     "replay_round_five",
+    "replay_round_five_serialized",
     "run_round_five",
     "run_round_five_integration",
 ]

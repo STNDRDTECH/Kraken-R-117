@@ -12,14 +12,18 @@ import pytest
 from kraken_r import (
     CounterfactualShadowError,
     ShadowBundle,
+    ShadowExecutionReceipt,
     ShadowIntervention,
+    ShadowMode,
     ShadowQualityEffect,
     ShadowResourceUsage,
     ShadowSpecification,
     RoundFiveError,
     replay_round_five,
+    replay_round_five_serialized,
     replay_shadow_diagnostic,
     run_round_five,
+    shadow_experiment_binding_hash,
     make_contribution,
 )
 
@@ -76,15 +80,15 @@ def test_degraded_shadow_preserves_existing_eligibility_and_replays_offline():
     assert replayed_state.route_topology == result.topology_after
 
 
-def test_unchanged_shadow_can_only_withhold_existing_credit():
+def test_unchanged_shadow_reports_without_vetoing_grounded_credit():
     adaptive, result = _run("shadow-unchanged", "success")
     assert result.learning_episode.attribution.eligible is True
     assert result.shadow_diagnostic.eligible is False
     assert result.shadow_diagnostic.comparisons[0].effect is ShadowQualityEffect.UNCHANGED
-    assert result.adaptive_audit is None
-    assert result.topology_after == result.topology_before
+    assert result.adaptive_audit is not None
+    assert result.topology_after != result.topology_before
     _, replayed_state = replay_round_five(result, adaptive_state=adaptive)
-    assert replayed_state == adaptive
+    assert replayed_state.route_topology == result.topology_after
 
 
 def test_no_public_post_outcome_constructor_and_forged_removal_fails_closed():
@@ -200,28 +204,11 @@ def test_resealed_forged_diagnostic_cannot_preserve_credit():
         expected_outcome="success",
         shadow_hash="",
     )
-    forged_bundle = replace(
-        result.shadow_bundle,
-        shadows=(forged_shadow,),
-        bundle_hash="",
-    )
-    forged_diagnostic = replace(
-        result.shadow_diagnostic,
-        bundle=forged_bundle,
-        diagnostic_hash="",
-    )
-    with pytest.raises(RoundFiveError, match="diagnostic binding"):
+    with pytest.raises(CounterfactualShadowError, match="pre-execution intent"):
         replace(
-            result,
-            shadow_bundle=forged_bundle,
-            shadow_diagnostic=forged_diagnostic,
-            trace_hash="",
-        )
-    with pytest.raises(CounterfactualShadowError, match="changed"):
-        replay_shadow_diagnostic(
-            forged_bundle,
-            result.learning_episode,
-            forged_diagnostic,
+            result.shadow_bundle,
+            shadows=(forged_shadow,),
+            bundle_hash="",
         )
 
 
@@ -257,3 +244,151 @@ def test_alteration_must_actually_change_one_declared_contributor():
         result.shadow_bundle.shadows[0].replacement_contribution.contribution_hash
         == replacement.contribution_hash
     )
+
+
+def test_full_post_outcome_rehash_and_new_post_outcome_seal_are_rejected():
+    _, result = _run("shadow-history-attack", "failure")
+    original = result.shadow_bundle.shadows[0]
+    post_hoc_rehash_rejected = False
+    try:
+        forged = replace(original, expected_outcome="success", shadow_hash="")
+        replace(result.shadow_bundle, shadows=(forged,), bundle_hash="")
+    except CounterfactualShadowError:
+        post_hoc_rehash_rejected = True
+
+    objective, problem, adaptive, trace, request, executor, state = ROUND_FIVE["_inputs"](
+        "shadow-late-seal"
+    )
+    completed = run_round_five(
+        objective,
+        problem,
+        adaptive,
+        trace,
+        request,
+        executor=executor,
+        authorized_state=state,
+        context_id="candidate",
+        shadow_specifications=(_spec(trace),),
+    )
+    from kraken_r.counterfactual_shadows import _seal_shadow_bundle
+
+    post_outcome_seal_rejected = False
+    try:
+        _seal_shadow_bundle(
+            completed.commitment,
+            (_spec(trace),),
+            bundle_id=completed.shadow_bundle.bundle_id,
+            lifecycle_ledger=executor.delivery_ledger,
+        )
+    except CounterfactualShadowError:
+        post_outcome_seal_rejected = True
+    assert post_hoc_rehash_rejected is True
+    assert post_outcome_seal_rejected is True
+
+
+def test_cold_serialized_round_five_replay_reconstructs_authority_records():
+    _, result = _run("shadow-cold-replay", "failure")
+    replayed = replay_round_five_serialized(
+        json.dumps(result.to_dict()),
+        trusted_executor=result.outcome.trusted_executor,
+    )
+    assert replayed.trace_hash == result.trace_hash
+    assert replayed.learning_episode.to_dict() == result.learning_episode.to_dict()
+    assert replayed.shadow_bundle == result.shadow_bundle
+    assert replayed.shadow_diagnostic == result.shadow_diagnostic
+    assert (
+        replayed.grounded_execution.record.to_dict()
+        == result.outcome.verified_execution.record.to_dict()
+    )
+    _, _, _, _, _, other_executor, _ = ROUND_FIVE["_inputs"](
+        "shadow-cold-replay-other-trust"
+    )
+    with pytest.raises(RoundFiveError, match="external trust anchor"):
+        replay_round_five_serialized(
+            json.dumps(result.to_dict()),
+            trusted_executor=other_executor.trusted_executor(),
+        )
+
+
+def test_structural_shadow_cannot_claim_measured_resources():
+    measured = ShadowResourceUsage(
+        compute_units=1,
+        accounting_basis="grounded_execution_receipt",
+    )
+    with pytest.raises(CounterfactualShadowError, match="measured resources"):
+        ShadowSpecification(
+            "structural-measured",
+            "contributor",
+            ShadowIntervention.REMOVE,
+            "failure",
+            measured,
+        )
+
+
+def test_executed_shadow_requires_exact_verified_receipt():
+    objective, problem, adaptive, trace, request, executor, state = ROUND_FIVE["_inputs"](
+        "executed-shadow"
+    )
+    contributor_id = f"{trace.request.request_id}-semantic-model"
+    experiment_binding = shadow_experiment_binding_hash(
+        shadow_id="executed-shadow-one",
+        contributor_id=contributor_id,
+        intervention=ShadowIntervention.REMOVE,
+        replacement_contribution_hash=None,
+    )
+    shadow_request = replace(
+        request,
+        request_id="executed-shadow-receipt-request",
+        action=replace(
+            request.action,
+            parameters={
+                **dict(request.action.parameters),
+                "shadow_experiment_binding_hash": experiment_binding,
+            },
+        ),
+    )
+    record = executor.execute(shadow_request, authorized_state=state)
+    receipt = ShadowExecutionReceipt(
+        "executed-shadow-receipt",
+        "executed-shadow-one",
+        contributor_id,
+        ShadowIntervention.REMOVE,
+        None,
+        shadow_request,
+        record,
+        state,
+        executor.trusted_executor(),
+    )
+    specification = ShadowSpecification(
+        "executed-shadow-one",
+        contributor_id,
+        ShadowIntervention.REMOVE,
+        receipt.observed_outcome,
+        receipt.resources,
+        mode=ShadowMode.EXECUTED,
+        execution_receipt=receipt,
+    )
+    result = run_round_five(
+        objective,
+        problem,
+        adaptive,
+        trace,
+        request,
+        executor=executor,
+        authorized_state=state,
+        context_id="candidate",
+        shadow_specifications=(specification,),
+    )
+    comparison = result.shadow_diagnostic.comparisons[0].to_dict()
+    assert comparison["claim_basis"] == "receipt_backed_execution_observation"
+    assert comparison["causal_effect_supported"] is False
+    with pytest.raises(CounterfactualShadowError, match="exact verified receipt"):
+        ShadowSpecification(
+            "executed-shadow-one",
+            "substituted-contributor",
+            ShadowIntervention.REMOVE,
+            receipt.observed_outcome,
+            receipt.resources,
+            mode=ShadowMode.EXECUTED,
+            execution_receipt=receipt,
+        )

@@ -84,6 +84,7 @@ from .counterfactual_shadows import (
     MAX_SHADOWS,
     CounterfactualShadowError,
     ShadowIntervention,
+    ShadowMode,
     ShadowResourceUsage,
     ShadowSpecification,
 )
@@ -1939,8 +1940,25 @@ def validate_counterfactual_shadows() -> tuple[str, ...]:
         pass
     else:
         errors.append("counterfactual shadow resource overflow did not fail closed")
+    try:
+        ShadowSpecification(
+            "validator-measured-structural-shadow",
+            "validator-contributor",
+            ShadowIntervention.REMOVE,
+            "failure",
+            ShadowResourceUsage(
+                compute_units=1,
+                accounting_basis="grounded_execution_receipt",
+            ),
+            mode=ShadowMode.STRUCTURAL,
+        )
+    except CounterfactualShadowError:
+        pass
+    else:
+        errors.append("structural shadow claimed measured execution resources")
     path = Path(__file__).with_name("counterfactual_shadows.py")
-    tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
+    source = path.read_text(encoding="utf-8")
+    tree = ast.parse(source, filename=str(path))
     forbidden = {
         "sub" + "process",
         "sock" + "et",
@@ -1962,6 +1980,17 @@ def validate_counterfactual_shadows() -> tuple[str, ...]:
     }
     if imports & forbidden:
         errors.append("counterfactual shadows introduced a live authority dependency")
+    for required in (
+        "shadow_precommitment_intent_hash",
+        "durable pre-execution lifecycle ledger",
+        "grounded_execution_receipt",
+        "replay_round_five_serialized",
+    ):
+        search_source = source if required != "replay_round_five_serialized" else Path(
+            __file__
+        ).with_name("round_five.py").read_text(encoding="utf-8")
+        if required not in search_source:
+            errors.append(f"counterfactual shadow lifecycle contract lacks {required}")
     return tuple(errors)
 
 

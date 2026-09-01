@@ -123,19 +123,28 @@ An eligible real-work path may precommit no more than three diagnostic shadows.
 Each shadow removes or alters exactly one hash-bound primary contributor while
 retaining the same objective, authorized task state/version, request and
 planned-work lineage, cognition-input boundary, success criteria, and all other
-contributors. Caller-declared pre-outcome primary and shadow model calls,
-tokens, and compute units are recorded separately under per-path and aggregate
-bounds. Aggregate limits include the primary and every shadow; the declarations
-are diagnostic accounting, not independently metered evidence.
+contributors. The exact shadow set is hashed before execution, embedded in the
+sealed grounded action, claimed once through the durable delivery ledger, and
+therefore covered by the primary execution attestation. Caller-declared
+pre-outcome primary and structural-shadow model calls, tokens, and compute
+units are recorded separately under per-path and aggregate bounds. These
+declarations are diagnostic accounting, not independently metered evidence.
+Executed shadows are a distinct type and require an existing independently
+verified grounded receipt whose identity, request lineage, outcome, and
+resource count match exactly. Such a receipt supports only the claim that
+bounded work ran with those measured resources; without an execution-side
+semantic transformation witness, it does not support a causal-effect claim.
 
 Shadows contain no executable request. They cannot run work, retrieve, create
 evidence, settle claims, choose the live action, or write adaptive state. After
 the primary outcome is independently grounded, deterministic comparison marks
 each shadow as degraded, improved, or unchanged. Alterations carry a complete
 validated replacement contribution rather than an unverifiable replacement
-digest. This diagnostic may only
-preserve or withhold eligibility already established by grounded outcome
-learning. Replay reconstructs the bundle and comparison without models,
+digest. This diagnostic reports quality effects but cannot grant or veto
+eligibility already established by grounded outcome learning. Rehashed
+post-outcome replacement and late resealing fail against the request-bound
+intent. Cold serialized replay reconstructs and verifies the authority-bearing
+cognition, outcome, execution, bundle, and diagnostic records without models,
 retrieval, tools, network access, or execution.
 
 ## Bounded grounded execution

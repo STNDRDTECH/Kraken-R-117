@@ -290,6 +290,10 @@ python_bin=$3
 chroot_bin=$4
 venv=$5
 shift 5
+ulimit -t "$KRAKEN_CPU_SECONDS"
+ulimit -d "$KRAKEN_MEMORY_KIB"
+ulimit -f "$KRAKEN_OUTPUT_BLOCKS"
+printf 'KRAKEN_LIMITS:%s:%s:%s\n' "$(ulimit -t)" "$(ulimit -d)" "$(ulimit -f)"
 mount --make-rprivate /
 mount -t tmpfs -o mode=755,size=64m tmpfs "$root"
  mkdir -p "$root/work" "$root/nix" "$root/usr" "$root/bin" "$root/lib" "$root/lib64" "$root/etc" "$root/tmp" "$root/dev" "$root/venv" "$root/runner"
@@ -316,10 +320,6 @@ for device in null zero urandom; do
     mount -o remount,bind,ro "$root/dev/$device"
   fi
 done
-ulimit -t "$KRAKEN_CPU_SECONDS"
-ulimit -d "$KRAKEN_MEMORY_KIB"
-ulimit -f "$KRAKEN_OUTPUT_BLOCKS"
-printf 'KRAKEN_LIMITS:%s:%s:%s\n' "$(ulimit -t)" "$(ulimit -d)" "$(ulimit -f)"
 exec "$chroot_bin" "$root" /bin/sh -ceu 'cd /work; exec "$@"' sh "$python_bin" -c '
 import json
 import platform

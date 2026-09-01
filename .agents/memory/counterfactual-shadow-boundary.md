@@ -3,17 +3,19 @@ name: Counterfactual shadow boundary
 description: Durable authority and lifecycle rules for Kraken-R counterfactual diagnostics.
 ---
 
-Counterfactual shadows are created only inside the canonical Round 5 ordering
-after primary commitment and before grounded execution. They are immutable
-diagnostic records, not alternate work paths or evidence.
+Counterfactual shadow intent is embedded in the exact grounded request before
+prediction sealing. The durable intent claim must occur before checking whether
+primary execution already exists; this ordering makes races fail conservatively
+and ensures every accepted execution follows the persisted intent.
 
-**Why:** Offline records cannot independently prove wall-clock ordering without
-adding a trusted clock, signer, or mutable ledger. Kraken-R deliberately avoids
-creating those new authorities, so temporal safety comes from the bounded
-orchestration boundary and hash-bound lineage.
+**Why:** A status-check-then-claim sequence is raceable. Claiming first turns the
+existing delivery ledger into a one-shot ancestry anchor, while the later
+execution attestation covers the exact request-bound intent. Exact historical
+reconstruction remains valid; substituted post-outcome history does not.
 
-**How to apply:** Keep shadows free of executable requests and authority. Bind
-every shadow to the primary task/request/cognition boundary, change exactly one
-validated contributor, replay without live calls, and allow the diagnostic only
-to preserve or withhold eligibility already established by grounded outcome
-learning.
+**How to apply:** Keep structural shadows diagnostic and unmeasured. Existing
+verified execution receipts may prove that bounded work ran and report measured
+resources, but cannot prove a semantic counterfactual effect without a
+verifier-checkable transformation witness. Cold replay must receive its trusted
+executor identity out of band, never from the serialized record itself. Shadow
+diagnostics never grant or veto grounded adaptive eligibility.

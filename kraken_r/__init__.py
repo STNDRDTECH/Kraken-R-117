@@ -374,6 +374,7 @@ from .outcome_learning import (
     seal_prediction_request,
 )
 from .round_five import (
+    ColdRoundFiveReplay,
     ConsumerAtlasEntry,
     ConsumerNoOp,
     HumanAuthority,
@@ -387,6 +388,7 @@ from .round_five import (
     audit_consumer_atlas,
     consumer_atlas,
     replay_round_five,
+    replay_round_five_serialized,
     run_round_five,
     run_round_five_integration,
 )
@@ -397,17 +399,21 @@ from .counterfactual_shadows import (
     ShadowComparison,
     ShadowDiagnostic,
     ShadowDiagnosticDisposition,
+    ShadowExecutionReceipt,
     ShadowIntervention,
+    ShadowMode,
     ShadowPrecommitment,
     ShadowQualityEffect,
     ShadowResourceUsage,
     ShadowSpecification,
     evaluate_shadow_diagnostic,
     replay_shadow_diagnostic,
+    shadow_experiment_binding_hash,
 )
 
 __all__ = [
     "CounterfactualShadowError",
+    "ColdRoundFiveReplay",
     "ADAPTIVE_FIELD_CONSUMERS",
     "Action",
     "ancestry_cycle_errors",
@@ -583,7 +589,9 @@ __all__ = [
     "ShadowComparison",
     "ShadowDiagnostic",
     "ShadowDiagnosticDisposition",
+    "ShadowExecutionReceipt",
     "ShadowIntervention",
+    "ShadowMode",
     "ShadowPrecommitment",
     "ShadowQualityEffect",
     "ShadowResourceUsage",
@@ -631,6 +639,7 @@ __all__ = [
     "replay_settlement_learning",
     "replay_signal_propagation",
     "replay_shadow_diagnostic",
+    "shadow_experiment_binding_hash",
     "replay_task_integrity",
     "reduce_dynamical_tick",
     "compare_metastability",
@@ -746,6 +755,7 @@ __all__ = [
     "audit_consumer_atlas",
     "consumer_atlas",
     "replay_round_five",
+    "replay_round_five_serialized",
     "run_round_five",
     "run_round_five_integration",
 ]

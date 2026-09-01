@@ -1,10 +1,10 @@
 {
   "constitution_kind": "kraken_r_constitution",
-  "version": "1.15.0",
-  "mission": "Define and deterministically validate a candidate-only, domain-agnostic constitutional lifecycle, including one bounded full-system causal path and up to three pre-outcome zero-authority single-contributor shadow predictions whose later deterministic comparisons may only withhold existing grounded credit eligibility.",
+  "version": "1.16.0",
+  "mission": "Define and deterministically validate a candidate-only, domain-agnostic constitutional lifecycle, including one bounded full-system causal path and up to three shadow intents cryptographically anchored into the exact pre-execution grounded request.",
   "authority_boundary": {
     "legacy_reference": "ROGALDaemon and AutonomousCycle remain the deployed reference authority.",
-    "kraken_candidate": "Kraken-R contracts, external-reality records, bounded Round 5 composition, and counterfactual shadows are candidate infrastructure only. Shadows are sealed before outcome, contain no executable request, and may only preserve or withhold eligibility already established by grounded outcome learning. They cannot execute, create evidence, settle, grant credit, or write adaptive state.",
+    "kraken_candidate": "Kraken-R contracts, external-reality records, bounded Round 5 composition, and counterfactual shadows are candidate infrastructure only. Structural shadows are unexecuted diagnostics; an executed shadow is only a typed view over an existing independently verified grounded receipt. Shadow diagnostics cannot grant or veto grounded adaptive eligibility, create evidence, settle, execute new work, or write adaptive state.",
     "allowed_effects": ["documentation", "standalone_validation", "candidate_cycle_execution"],
     "forbidden_effects": ["runtime_wiring", "live_store_write", "event_subscription", "mutation_actuation"]
   },
